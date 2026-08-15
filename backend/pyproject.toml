@@ -17,6 +17,7 @@ dependencies = [
   "numpy>=2.3,<3",
   "pandas>=2.3,<3",
   "scikit-learn>=1.7,<2",
+  "scipy>=1.16,<2",
   "hdbscan>=0.8,<0.9",
   "pymoo>=0.6,<0.7",
   "python-multipart>=0.0.20,<0.1",
