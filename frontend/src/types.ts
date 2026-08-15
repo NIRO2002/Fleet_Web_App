@@ -1,0 +1,154 @@
+export type UserRole = 'admin' | 'planner'
+
+export interface User {
+  id: string
+  name: string
+  email: string
+  role: UserRole
+  organization: string
+}
+
+// --- Parcels (mirrors backend app/schemas/parcel.py) ---------------------
+
+export interface ParcelInput {
+  parcel_id: string
+  latitude: number
+  longitude: number
+  weight_kg: number
+  volume_m3: number
+  time_window_start: string // "HH:MM"
+  time_window_end: string // "HH:MM"
+  fragile: boolean
+}
+
+export interface Parcel extends ParcelInput {
+  cluster_id: number | null
+  cluster_probability: number | null
+}
+
+/** String-valued mirror of ParcelInput used for controlled form fields. */
+export interface ParcelDraft {
+  parcel_id: string
+  latitude: string
+  longitude: string
+  weight_kg: string
+  volume_m3: string
+  time_window_start: string
+  time_window_end: string
+  fragile: boolean
+}
+
+export interface ClusterPrediction {
+  cluster_id: number | null
+  cluster_probability: number
+  status: 'ASSIGNED' | 'UNASSIGNED'
+}
+
+/** Keyed by cluster_id as a string ("-1" = noise/unassigned). */
+export type ClusterSummary = Record<string, number>
+
+export interface ClusteringTrainResult {
+  status: string
+  parcel_count: number
+  clusters: ClusterSummary
+}
+
+export interface CsvUploadResult {
+  inserted: number
+  skipped: number
+}
+
+// --- Optimization (mirrors backend app/schemas/optimization.py) ----------
+
+export type VehicleType = 'BIKE' | 'THREE_WHEEL' | 'VAN' | 'LORRY'
+
+export interface OptimizationRunRequest {
+  cluster_id?: number
+  parcel_ids?: string[]
+  depot_latitude?: number
+  depot_longitude?: number
+}
+
+export interface VehicleOption {
+  vehicle_type: VehicleType
+  capacity_kg: number
+  capacity_m3: number
+  load_weight_kg: number
+  load_volume_m3: number
+  utilization_weight: number
+  utilization_volume: number
+  estimated_distance_km: number
+  time_window_compliance: number
+  score: number
+}
+
+export interface OptimizationResult {
+  optimization_id: string
+  selected_vehicle: VehicleOption
+  parcel_ids: string[]
+  cluster_id: number | null
+  pareto_solutions: VehicleOption[]
+  virtual_vehicle_id: string
+}
+
+export interface VirtualVehicle {
+  id: number
+  virtual_vehicle_id: string
+  vehicle_type: VehicleType
+  capacity_kg: number
+  capacity_m3: number
+  used_weight_kg: number
+  used_volume_m3: number
+  cluster_id: number | null
+  destination_latitude: number | null
+  destination_longitude: number | null
+  created_at: string
+  updated_at: string
+}
+
+export interface InsertionResult {
+  virtual_vehicle_id: string
+  inserted: boolean
+  reason: string
+  remaining_weight_kg: number
+  remaining_volume_m3: number
+}
+
+// --- Vehicle Capabilities (mirrors backend app/schemas/vehicle_capability.py) ---
+// A capability/type definition (e.g. "Bajaj Three Wheeler") — not a physical,
+// registered vehicle. Registered Vehicles will reference these once that
+// feature exists.
+
+export type VehicleCapabilityStatus = 'ACTIVE' | 'INACTIVE'
+
+export interface VehicleCapabilityInput {
+  name: string
+  category: string
+  brand: string | null
+  model: string | null
+  max_weight_kg: number
+  max_length_cm: number
+  max_width_cm: number
+  max_height_cm: number
+  status: VehicleCapabilityStatus
+}
+
+export interface VehicleCapability extends VehicleCapabilityInput {
+  id: number
+  max_volume_m3: number
+  created_at: string
+  updated_at: string
+}
+
+/** String-valued mirror of VehicleCapabilityInput used for controlled form fields. */
+export interface VehicleCapabilityDraft {
+  name: string
+  category: string
+  brand: string
+  model: string
+  max_weight_kg: string
+  max_length_cm: string
+  max_width_cm: string
+  max_height_cm: string
+  status: VehicleCapabilityStatus
+}

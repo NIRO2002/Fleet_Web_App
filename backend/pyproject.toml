@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fleet-web-app-backend"
+version = "1.0.0"
+description = "Fleet Web App backend with HDBSCAN and NSGA-II parcel optimization"
+requires-python = ">=3.11"
+
+dependencies = [
+  "fastapi>=0.116,<0.117",
+  "uvicorn[standard]>=0.35,<0.36",
+  "pydantic>=2.11,<3",
+  "pydantic-settings>=2.10,<3",
+  "sqlalchemy>=2.0,<3",
+  "numpy>=2.3,<3",
+  "pandas>=2.3,<3",
+  "scikit-learn>=1.7,<2",
+  "hdbscan>=0.8,<0.9",
+  "pymoo>=0.6,<0.7",
+  "python-multipart>=0.0.20,<0.1",
+  "joblib>=1.5,<2",
+  "python-jose[cryptography]>=3.5,<4",
+  "passlib[bcrypt]>=1.7,<2",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.4,<9",
+  "httpx>=0.28,<0.29",
+  "alembic>=1.16,<2",
+]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["app/tests"]

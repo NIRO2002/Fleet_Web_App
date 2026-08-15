@@ -1,0 +1,6 @@
+parcel_id,latitude,longitude,weight_kg,volume_m3,time_window_start,time_window_end,fragile
+P001,6.9271,79.8612,2.5,0.015,10:00,13:00,false
+P002,6.9290,79.8640,3.2,0.020,10:00,13:00,false
+P003,6.9230,79.8580,5.0,0.030,11:00,14:00,true
+P004,6.9250,79.8680,1.2,0.010,10:00,12:00,false
+P005,6.9300,79.8600,4.4,0.025,11:00,14:00,false
