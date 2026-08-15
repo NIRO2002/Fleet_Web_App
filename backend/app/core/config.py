@@ -11,6 +11,13 @@ class Settings(BaseSettings):
     hdbscan_min_cluster_size: int = 8
     hdbscan_min_samples: int = 4
 
+    # Default import region bounds (Colombo). Phase 7 moves these into a
+    # nested config model; kept flat for now to unblock Phase 1's importer.
+    import_lat_min: float = 6.7
+    import_lat_max: float = 7.1
+    import_lng_min: float = 79.7
+    import_lng_max: float = 80.1
+
     nsga2_population: int = 80
     nsga2_generations: int = 80
 

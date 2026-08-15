@@ -5,6 +5,9 @@ from app.db.database import Base
 from app.models.parcel import Parcel
 from app.models.virtual_vehicle import VirtualVehicle
 from app.models.vehicle_capability import VehicleCapability
+from app.models.vehicle_type import VehicleTypeCatalog
+from app.models.load_plan import LoadPlan
+from app.models.parcel_assignment import ParcelAssignment
 
 config = context.config
 if config.config_file_name:

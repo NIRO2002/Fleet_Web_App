@@ -23,7 +23,7 @@ def list_parcels(db: Session = Depends(get_db)):
 async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)):
     if not file.filename.lower().endswith(".csv"):
         raise HTTPException(status_code=400, detail="CSV file required")
-    return dict(zip(("inserted", "skipped"), import_csv(db, await file.read())))
+    return import_csv(db, await file.read())
 
 @router.post("/clustering/train")
 def train_clustering(db: Session = Depends(get_db)):

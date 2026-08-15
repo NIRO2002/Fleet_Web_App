@@ -6,11 +6,14 @@ from app.db.database import Base, engine
 from app.models.parcel import Parcel
 from app.models.virtual_vehicle import VirtualVehicle
 from app.models.vehicle_capability import VehicleCapability
+from app.models.vehicle_type import VehicleTypeCatalog
+from app.models.load_plan import LoadPlan
+from app.models.parcel_assignment import ParcelAssignment
 
 from app.api.v1 import (
     auth, vehicles, maintenance, predictions, demand, deliveries,
     routes, trips, alerts, reports, parcels, optimization,
-    virtual_vehicles, vehicle_capabilities, health
+    virtual_vehicles, vehicle_capabilities, vehicle_types, health
 )
 
 Base.metadata.create_all(bind=engine)
@@ -26,7 +29,8 @@ for router in [
     auth.router, vehicles.router, maintenance.router, predictions.router,
     demand.router, deliveries.router, routes.router, trips.router,
     alerts.router, reports.router, parcels.router,
-    optimization.router, virtual_vehicles.router, vehicle_capabilities.router
+    optimization.router, virtual_vehicles.router, vehicle_capabilities.router,
+    vehicle_types.router,
 ]:
     app.include_router(router, prefix="/api/v1")
 
