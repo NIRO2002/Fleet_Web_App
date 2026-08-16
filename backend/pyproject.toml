@@ -38,3 +38,4 @@ include = ["app*"]
 
 [tool.pytest.ini_options]
 testpaths = ["app/tests"]
+filterwarnings = ["error::DeprecationWarning"]

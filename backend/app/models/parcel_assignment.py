@@ -5,9 +5,9 @@ and a parcel that carries the delivery sequence, the reverse (LIFO) load
 sequence, and the 3D placement produced by Phase 3's placement heuristic.
 This is the row-level detail the CSV/JSON export (Phase 4) is built from.
 """
-from datetime import datetime
 from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String
 from app.db.database import Base
+from app.utils_datetime import utcnow
 
 
 class ParcelAssignment(Base):
@@ -28,4 +28,4 @@ class ParcelAssignment(Base):
     load_position_y = Column(Float, nullable=False, default=0.0)
     load_position_z = Column(Float, nullable=False, default=0.0)
 
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utcnow, nullable=False)

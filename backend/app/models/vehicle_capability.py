@@ -1,6 +1,6 @@
-from datetime import datetime
 from sqlalchemy import Column, DateTime, Float, Integer, String
 from app.db.database import Base
+from app.utils_datetime import utcnow
 
 class VehicleCapability(Base):
     """A reusable vehicle *type* definition (e.g. "Bajaj Three Wheeler") describing
@@ -22,8 +22,8 @@ class VehicleCapability(Base):
 
     status = Column(String(16), nullable=False, default="ACTIVE")
 
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)
 
     @property
     def max_volume_m3(self) -> float:

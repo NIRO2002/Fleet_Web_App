@@ -9,7 +9,16 @@ disposable once this one exists)."""
 import random
 from datetime import date
 
-from app.optimization.assignment_problem import AssignmentConfig
+import numpy as np
+
+from app.optimization.assignment_problem import (
+    AssignmentConfig,
+    AssignmentProblem,
+    VehicleTypeSpec,
+    _dimension_fits,
+    schedule_time_window_compliance,
+    slot_budget,
+)
 from app.schemas.parcel import ParcelIn
 from app.schemas.vehicle_type import VehicleTypeCatalogIn
 from app.services import vehicle_catalog_service
@@ -20,7 +29,77 @@ DEPOT_ID = "DEPOT-1"
 DELIVERY_DATE = date(2026, 8, 20)
 DEPOT_LAT, DEPOT_LON = 6.9271, 79.8612
 
-FAST_CONFIG = AssignmentConfig(population=30, generations=25, min_parcels_per_vehicle=4, max_vehicle_slots=8)
+FAST_CONFIG = AssignmentConfig(population=30, generations=25, max_vehicle_slots=8)
+
+
+class _FakeParcel:
+    def __init__(self, lat, lon, tw_start, tw_end, two_person_lift=False):
+        self.latitude = lat
+        self.longitude = lon
+        self.time_window_start = tw_start
+        self.time_window_end = tw_end
+        self.two_person_lift = two_person_lift
+
+
+def _test_vehicle_spec(avg_speed_kmh=30.0):
+    return VehicleTypeSpec(
+        code="TEST", capacity_kg=1000.0, capacity_m3=10.0,
+        cargo_length_cm=300.0, cargo_width_cm=200.0, cargo_height_cm=200.0,
+        max_parcels=100, max_stack_layers=4, fixed_cost=0.0, cost_per_km=0.0,
+        avg_speed_kmh=avg_speed_kmh, is_refrigerated=False, temp_min_celsius=None,
+        temp_max_celsius=None, is_hazmat_certified=False, has_tail_lift=False,
+    )
+
+
+def test_early_arrival_waits_instead_of_failing_compliance():
+    """F1: a vehicle departing well before every window opens must score
+    fully compliant, not 0.0 — real vehicles wait at the stop."""
+    config = AssignmentConfig(depot_lat=DEPOT_LAT, depot_lon=DEPOT_LON, depot_departure_time="08:00")
+    vehicle = _test_vehicle_spec()
+    stops = [_FakeParcel(DEPOT_LAT + 0.001 * i, DEPOT_LON, "09:00", "17:00") for i in range(1, 4)]
+
+    compliance, flags, wait_minutes = schedule_time_window_compliance(stops, vehicle, config)
+
+    assert compliance == 1.0
+    assert flags == [True, True, True]
+    assert wait_minutes > 0
+
+
+def test_late_arrival_is_genuinely_non_compliant():
+    config = AssignmentConfig(depot_lat=DEPOT_LAT, depot_lon=DEPOT_LON, depot_departure_time="09:30")
+    vehicle = _test_vehicle_spec()
+    stops = [_FakeParcel(DEPOT_LAT, DEPOT_LON, "09:00", "17:00")]
+
+    compliance, flags, _wait_minutes = schedule_time_window_compliance(stops, vehicle, config)
+
+    assert compliance == 1.0  # sanity: co-located stop, departure already inside the window
+    late_stops = [_FakeParcel(DEPOT_LAT, DEPOT_LON, "09:00", "09:31")]  # window closes right after depot departure + travel
+    compliance, flags, _wait_minutes = schedule_time_window_compliance(late_stops, vehicle, config)
+    assert compliance == 1.0
+
+    # A window that has already closed by the time the (co-located, zero
+    # travel-time) vehicle departs must fail compliance.
+    closed_window = [_FakeParcel(DEPOT_LAT, DEPOT_LON, "08:00", "09:00")]
+    compliance, flags, _wait_minutes = schedule_time_window_compliance(closed_window, vehicle, config)
+    assert compliance == 0.0
+    assert flags == [False]
+
+
+def test_waiting_consumes_shift_time_and_can_cause_a_later_stop_to_run_late():
+    """Waiting must push the clock forward, not be free: an early arrival at
+    stop 1 that waits until its window opens can still make a
+    tightly-windowed stop 2 run late."""
+    config = AssignmentConfig(depot_lat=DEPOT_LAT, depot_lon=DEPOT_LON, depot_departure_time="08:00")
+    vehicle = _test_vehicle_spec()
+    stop1 = _FakeParcel(DEPOT_LAT, DEPOT_LON, "09:00", "17:00")  # depot-co-located: arrives 08:00, waits to 09:00
+    stop2 = _FakeParcel(DEPOT_LAT, DEPOT_LON, "09:00", "09:02")  # closes 2 minutes after stop1's window opens
+
+    compliance, flags, wait_minutes = schedule_time_window_compliance([stop1, stop2], vehicle, config)
+
+    assert flags[0] is True
+    assert wait_minutes == 60.0
+    assert flags[1] is False  # service time after the wait pushed the clock past 09:02
+    assert compliance == 0.5
 
 
 def _seed_catalog(db_session, specs):
@@ -73,6 +152,209 @@ def _stressed_parcels(db_session, n=20, seed=5):
         )
         parcels.append(upsert_parcel(db_session, payload))
     return parcels
+
+
+def test_compliance_objective_is_weighted_by_parcel_count_not_vehicle_count():
+    """F2: f3 must equal compliant parcels / total parcels, not the mean of
+    each vehicle's own compliance rate — a 1-parcel vehicle must not count
+    as much as a 4-parcel vehicle."""
+    config = AssignmentConfig(depot_lat=DEPOT_LAT, depot_lon=DEPOT_LON, depot_departure_time="08:00")
+    vehicle = _test_vehicle_spec()
+    catalog = (vehicle,)
+
+    non_compliant = ParcelIn(
+        parcel_id="A0", latitude=DEPOT_LAT, longitude=DEPOT_LON,
+        weight_kg=1.0, volume_m3=0.01, time_window_start="00:00", time_window_end="00:01",
+    )
+    compliant = [
+        ParcelIn(
+            parcel_id=f"B{i}", latitude=DEPOT_LAT, longitude=DEPOT_LON,
+            weight_kg=1.0, volume_m3=0.01, time_window_start="00:00", time_window_end="23:59",
+        )
+        for i in range(4)
+    ]
+    parcels = [non_compliant] + compliant
+
+    problem = AssignmentProblem(parcels, catalog, config, n_slots=2)
+    row = np.zeros(problem.n + problem.K, dtype=int)
+    row[0] = 0  # the lone non-compliant parcel gets its own slot
+    row[1:] = 1  # the four compliant parcels share the other slot
+    # (type genes, the last K entries, are already 0 — only one catalog type)
+
+    f, g = problem.evaluate_individual(row)
+
+    assert (g <= 0).all(), f"expected a feasible individual for this check, got constraints {g}"
+    mean_compliance = -f[2]
+    assert abs(mean_compliance - 0.8) < 1e-9, (
+        "compliance must be parcel-weighted (4 of 5 parcels compliant = 0.8), "
+        f"not vehicle-averaged (0.5); got {mean_compliance}"
+    )
+
+
+def test_slot_evaluation_cache_hits_on_repeated_slot_contents_and_does_not_leak_across_runs():
+    """F5: identical (parcel-set, vehicle-type) slot contents recur across a
+    population/generations — caching must produce hits, and the cache must
+    live on the AssignmentProblem instance (a fresh run must not inherit
+    another run's cache, which would risk corrupting seeded
+    reproducibility)."""
+    config = AssignmentConfig(depot_lat=DEPOT_LAT, depot_lon=DEPOT_LON)
+    vehicle = _test_vehicle_spec()
+    catalog = (vehicle,)
+    parcels = [
+        ParcelIn(
+            parcel_id=f"P{i}", latitude=DEPOT_LAT, longitude=DEPOT_LON, weight_kg=1.0, volume_m3=0.01,
+            time_window_start="00:00", time_window_end="23:59",
+        )
+        for i in range(6)
+    ]
+
+    problem = AssignmentProblem(parcels, catalog, config, n_slots=2)
+    row = np.zeros(problem.n + problem.K, dtype=int)
+    row[:3] = 0
+    row[3:6] = 1
+
+    problem.evaluate_individual(row)
+    assert problem._cache_misses == 2  # two distinct (slot-contents, type) pairs
+    assert problem._cache_hits == 0
+
+    problem.evaluate_individual(row)  # identical individual again
+    assert problem._cache_hits == 2, "re-evaluating identical slot contents must hit the cache"
+    assert problem.cache_hit_rate() == 0.5
+
+    fresh = AssignmentProblem(parcels, catalog, config, n_slots=2)
+    assert fresh._cache_hits == 0 and fresh._cache_misses == 0, (
+        "a new problem instance must not inherit another instance's cache"
+    )
+
+
+def test_overflow_repair_decodes_the_row_only_once_per_individual(monkeypatch):
+    """F6: `_least_loaded_compatible_slot` must not re-decode the whole row
+    on every parcel moved — `decode` should be called exactly once per row
+    repaired, regardless of how many overflowing parcels get relocated."""
+    import app.optimization.assignment_problem as ap
+
+    small_vehicle = VehicleTypeSpec(
+        code="SMALL", capacity_kg=5.0, capacity_m3=5.0,
+        cargo_length_cm=300.0, cargo_width_cm=200.0, cargo_height_cm=200.0,
+        max_parcels=100, max_stack_layers=4, fixed_cost=0.0, cost_per_km=0.0,
+        avg_speed_kmh=30.0, is_refrigerated=False, temp_min_celsius=None,
+        temp_max_celsius=None, is_hazmat_certified=False, has_tail_lift=False,
+    )
+    config = AssignmentConfig(depot_lat=DEPOT_LAT, depot_lon=DEPOT_LON)
+    catalog = (small_vehicle,)
+    n = 20
+    parcels = [
+        ParcelIn(
+            parcel_id=f"P{i}", latitude=DEPOT_LAT, longitude=DEPOT_LON, weight_kg=1.0, volume_m3=0.01,
+            time_window_start="00:00", time_window_end="23:59",
+        )
+        for i in range(n)
+    ]
+    problem = AssignmentProblem(parcels, catalog, config, n_slots=5)
+    row = np.zeros(problem.n + problem.K, dtype=int)
+    row[:n] = 0  # dump every parcel into slot 0: 20kg on a 5kg-capacity slot, forces many moves
+
+    original_decode = ap.decode
+    decode_call_count = {"n": 0}
+
+    def counting_decode(*args, **kwargs):
+        decode_call_count["n"] += 1
+        return original_decode(*args, **kwargs)
+
+    monkeypatch.setattr(ap, "decode", counting_decode)
+
+    ap.OverflowRepair()._repair_row(problem, row)
+
+    assert decode_call_count["n"] == 1, f"expected exactly one decode() call per row, got {decode_call_count['n']}"
+
+    final_slots, final_types = original_decode(row, problem.n, problem.K)
+    for slot_idx, indices in final_slots.items():
+        vehicle = catalog[int(np.clip(final_types[slot_idx], 0, problem.T - 1))]
+        weight = sum(parcels[i].weight_kg for i in indices)
+        assert weight <= vehicle.capacity_kg + 1e-9, "repair must still leave every slot within capacity"
+
+
+def _catalog_pair():
+    small = VehicleTypeSpec(
+        code="SMALL", capacity_kg=30.0, capacity_m3=0.3, cargo_length_cm=150.0, cargo_width_cm=100.0,
+        cargo_height_cm=100.0, max_parcels=50, max_stack_layers=3, fixed_cost=100.0, cost_per_km=10.0,
+        avg_speed_kmh=25.0, is_refrigerated=False, temp_min_celsius=None, temp_max_celsius=None,
+        is_hazmat_certified=False, has_tail_lift=False,
+    )
+    big = VehicleTypeSpec(
+        code="BIG", capacity_kg=200.0, capacity_m3=2.0, cargo_length_cm=280.0, cargo_width_cm=170.0,
+        cargo_height_cm=170.0, max_parcels=200, max_stack_layers=4, fixed_cost=500.0, cost_per_km=30.0,
+        avg_speed_kmh=28.0, is_refrigerated=False, temp_min_celsius=None, temp_max_celsius=None,
+        is_hazmat_certified=False, has_tail_lift=True,
+    )
+    return (small, big)
+
+
+def test_slot_budget_is_derived_from_capacity_not_a_flat_parcels_per_vehicle_constant():
+    """F9: K comes from total demand against the catalog's capacity range
+    (k_min against the largest type, k_est*slack against the median type),
+    not `n_parcels / min_parcels_per_vehicle`."""
+    catalog = _catalog_pair()
+    config = AssignmentConfig()
+    parcels = [
+        ParcelIn(
+            parcel_id=f"P{i}", latitude=DEPOT_LAT, longitude=DEPOT_LON,
+            weight_kg=10.0, volume_m3=0.05, time_window_start="09:00", time_window_end="17:00",
+        )
+        for i in range(10)
+    ]
+    # total weight=100kg, volume=0.5m3; largest=(200kg,2m3) -> k_min=ceil(0.5)=1
+    # median=(115kg,1.15m3) -> k_est=ceil(100/115)=1 -> ceil(1*1.5)=2 -> K=max(2, k_min+1=2)=2
+    assert slot_budget(parcels, catalog, config) == 2
+
+
+def test_slot_budget_safety_cap_scales_with_n_parcels_not_just_the_configured_value():
+    """F9: `max_vehicle_slots` is raised by `slot_budget` itself when
+    `n_parcels` justifies it, rather than silently truncating a large
+    instance's capacity-derived estimate to a small configured value."""
+    catalog = _catalog_pair()
+    config = AssignmentConfig(max_vehicle_slots=1)  # deliberately far too small on its own
+    parcels = [
+        ParcelIn(
+            parcel_id=f"P{i}", latitude=DEPOT_LAT, longitude=DEPOT_LON,
+            weight_kg=50.0, volume_m3=0.3, time_window_start="09:00", time_window_end="17:00",
+        )
+        for i in range(30)
+    ]
+    # raw demand wants ceil(k_est*1.5)=21 slots; the dynamic cap
+    # max(1, ceil(30/3))=10 should bind instead of the configured 1.
+    assert slot_budget(parcels, catalog, config) == 10
+
+
+def test_imputed_dimensions_get_a_safety_factor_before_the_fit_check():
+    """F12: a parcel flagged `dimensions_imputed=True` must have its stored
+    (cube-from-volume) side inflated by the safety factor before the
+    dimensional-fit check -- an imputed cube is a guess, and a real parcel
+    with the same volume could be long and thin enough not to fit."""
+    vehicle = VehicleTypeSpec(
+        code="TEST", capacity_kg=1000.0, capacity_m3=10.0,
+        cargo_length_cm=22.0, cargo_width_cm=22.0, cargo_height_cm=22.0,
+        max_parcels=100, max_stack_layers=4, fixed_cost=0.0, cost_per_km=0.0,
+        avg_speed_kmh=30.0, is_refrigerated=False, temp_min_celsius=None,
+        temp_max_celsius=None, is_hazmat_certified=False, has_tail_lift=False,
+    )
+    # volume 0.008 m^3 -> cbrt(8000) = a 20cm cube: fits the 22cm bay
+    # untouched, but 20 * 1.5 (default safety factor) = 30cm does not.
+    real_dims = ParcelIn(
+        parcel_id="REAL", latitude=DEPOT_LAT, longitude=DEPOT_LON, weight_kg=1.0, volume_m3=0.008,
+        time_window_start="09:00", time_window_end="17:00", length_cm=20.0, width_cm=20.0, height_cm=20.0,
+        dimensions_imputed=False,
+    )
+    imputed_dims = ParcelIn(
+        parcel_id="IMPUTED", latitude=DEPOT_LAT, longitude=DEPOT_LON, weight_kg=1.0, volume_m3=0.008,
+        time_window_start="09:00", time_window_end="17:00", length_cm=20.0, width_cm=20.0, height_cm=20.0,
+        dimensions_imputed=True,
+    )
+
+    assert _dimension_fits(real_dims, vehicle) is True
+    assert _dimension_fits(imputed_dims, vehicle) is False, (
+        "imputed dims must be inflated by the safety factor, not trusted at face value"
+    )
 
 
 def test_front_has_multiple_solutions_and_objectives_genuinely_vary(db_session):

@@ -52,6 +52,11 @@ LEAKAGE_COLUMNS = {
 BOOLEAN_TRUE = {"1", "true", "t", "yes", "y"}
 BOOLEAN_FALSE = {"0", "false", "f", "no", "n", ""}
 
+#: Chunk size for the bulk insert/update path (F10) -- large enough to keep
+#: the commit count low on a real import, small enough to keep any one
+#: transaction's memory/lock footprint bounded.
+BULK_CHUNK_SIZE = 2000
+
 REQUIRED_FIELDS = ("latitude", "longitude", "weight_kg", "volume_m3")
 BOOLEAN_FIELDS = (
     "fragile",
@@ -168,6 +173,7 @@ def _process_row(
         return None
 
     dims_present = all(row.get(k) for k in ("length_cm", "width_cm", "height_cm"))
+    dimensions_imputed = False
     if dims_present:
         try:
             length_cm = float(row["length_cm"])
@@ -188,6 +194,7 @@ def _process_row(
     else:
         side_cm = (volume_m3 * 1e6) ** (1 / 3)
         length_cm = width_cm = height_cm = side_cm
+        dimensions_imputed = True
         warnings.append(
             {
                 "row": row_index,
@@ -219,6 +226,7 @@ def _process_row(
             length_cm=length_cm,
             width_cm=width_cm,
             height_cm=height_cm,
+            dimensions_imputed=dimensions_imputed,
             hazmat_class=row.get("hazmat_class") or None,
             temp_min_celsius=float(row["temp_min_celsius"]) if row.get("temp_min_celsius") else None,
             temp_max_celsius=float(row["temp_max_celsius"]) if row.get("temp_max_celsius") else None,
@@ -248,6 +256,47 @@ def upsert_parcel(db: Session, payload: ParcelIn) -> Parcel:
     return obj
 
 
+def _bulk_upsert_parcels(db: Session, payloads: list[ParcelIn]) -> tuple[int, int]:
+    """Bulk insert/update path used by `import_csv` (F10). `upsert_parcel`
+    ran one SELECT and one COMMIT per row — 36,000 of each on the project's
+    real dataset, making the importer unusable at that scale. This instead
+    preloads every existing `parcel_id` in one (chunked) query, partitions
+    the payloads into inserts and updates in memory, and applies them with
+    `bulk_insert_mappings`/`bulk_update_mappings` in chunks, committing once
+    per chunk. `upsert_parcel` remains the single-row public API used by the
+    parcel endpoint; it is never called from here. Returns `(inserted,
+    updated)` counts."""
+    if not payloads:
+        return 0, 0
+
+    parcel_ids = [p.parcel_id for p in payloads]
+    id_by_parcel_id: dict[str, int] = {}
+    for i in range(0, len(parcel_ids), BULK_CHUNK_SIZE):
+        chunk = parcel_ids[i : i + BULK_CHUNK_SIZE]
+        rows = db.query(Parcel.id, Parcel.parcel_id).filter(Parcel.parcel_id.in_(chunk)).all()
+        id_by_parcel_id.update({parcel_id: row_id for row_id, parcel_id in rows})
+
+    inserts: list[dict] = []
+    updates: list[dict] = []
+    for payload in payloads:
+        data = payload.model_dump()
+        existing_id = id_by_parcel_id.get(payload.parcel_id)
+        if existing_id is None:
+            inserts.append(data)
+        else:
+            data["id"] = existing_id
+            updates.append(data)
+
+    for i in range(0, len(inserts), BULK_CHUNK_SIZE):
+        db.bulk_insert_mappings(Parcel, inserts[i : i + BULK_CHUNK_SIZE])
+        db.commit()
+    for i in range(0, len(updates), BULK_CHUNK_SIZE):
+        db.bulk_update_mappings(Parcel, updates[i : i + BULK_CHUNK_SIZE])
+        db.commit()
+
+    return len(inserts), len(updates)
+
+
 def import_csv(db: Session, content: bytes, bounds: dict | None = None) -> dict:
     """Import the minimal 8-column format or the full upstream dataset
     (rich column names are mapped via COLUMN_ALIASES). Never raises on a
@@ -274,13 +323,15 @@ def import_csv(db: Session, content: bytes, bounds: dict | None = None) -> dict:
             duplicates_removed += 1
         accepted[payload.parcel_id] = payload  # keep the last occurrence
 
-    for payload in accepted.values():
-        upsert_parcel(db, payload)
+    inserted, updated = _bulk_upsert_parcels(db, list(accepted.values()))
+    dimensions_imputed_count = sum(1 for payload in accepted.values() if payload.dimensions_imputed)
 
     return {
-        "inserted": len(accepted),
+        "inserted": inserted,
+        "updated": updated,
         "skipped": len(errors),
         "duplicates_removed": duplicates_removed,
+        "dimensions_imputed_count": dimensions_imputed_count,
         "errors": errors,
         "warnings": warnings,
     }

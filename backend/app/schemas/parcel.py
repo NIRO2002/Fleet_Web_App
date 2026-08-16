@@ -21,6 +21,9 @@ class ParcelIn(BaseModel):
     length_cm: Optional[float] = Field(default=None, gt=0)
     width_cm: Optional[float] = Field(default=None, gt=0)
     height_cm: Optional[float] = Field(default=None, gt=0)
+    # Set by the importer (F12) when length/width/height were absent and a
+    # cube was imputed from volume_m3 -- never expected as caller input.
+    dimensions_imputed: bool = False
 
     stackable: bool = True
     max_stack_weight_kg: float = Field(default=0.0, ge=0)
@@ -76,7 +79,9 @@ class ImportError_(BaseModel):
 
 class CSVUploadResponse(BaseModel):
     inserted: int
+    updated: int = 0
     skipped: int
     duplicates_removed: int = 0
+    dimensions_imputed_count: int = 0
     errors: list[ImportError_] = []
     warnings: list[ImportError_] = []

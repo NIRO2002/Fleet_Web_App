@@ -5,9 +5,9 @@ type from `vehicle_type_catalog` loaded with a subset of one planning
 instance's parcels. `plan_id` groups every VirtualVehicle produced by the
 same pipeline run.
 """
-from datetime import datetime
 from sqlalchemy import Boolean, Column, Date, DateTime, Float, ForeignKey, Integer, String
 from app.db.database import Base
+from app.utils_datetime import utcnow
 
 
 class VirtualVehicle(Base):
@@ -44,5 +44,5 @@ class VirtualVehicle(Base):
     destination_latitude = Column(Float, nullable=True)
     destination_longitude = Column(Float, nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)

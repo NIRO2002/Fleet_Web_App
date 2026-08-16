@@ -17,6 +17,7 @@ def test_rich_format_import_maps_columns_and_drops_leakage_columns(db_session):
     report = import_csv(db_session, csv_content)
 
     assert report["inserted"] == 1
+    assert report["updated"] == 0
     assert report["skipped"] == 0
     assert report["errors"] == []
 
@@ -58,6 +59,8 @@ def test_corrupted_fixture_produces_accurate_error_report(db_session):
     assert "latitude" in error_fields
 
     assert report["duplicates_removed"] == 1
+    assert report["inserted"] == 2  # OK001 (last occurrence) and WARN004, both new
+    assert report["updated"] == 0
     assert any(w["field"] == "latitude/longitude" for w in report["warnings"])
 
     from app.models.parcel import Parcel
@@ -76,6 +79,7 @@ def test_dimension_volume_mismatch_is_a_warning_not_a_rejection(db_session):
     report = import_csv(db_session, csv_content)
 
     assert report["inserted"] == 1
+    assert report["updated"] == 0
     assert report["skipped"] == 0
     assert any(w["field"] == "volume_m3" for w in report["warnings"])
 
@@ -90,6 +94,7 @@ def test_missing_dimensions_are_imputed_as_a_cube_and_flagged(db_session):
     report = import_csv(db_session, csv_content)
 
     assert report["inserted"] == 1
+    assert report["dimensions_imputed_count"] == 1
     assert any(w["field"] == "length_cm/width_cm/height_cm" for w in report["warnings"])
 
     from app.models.parcel import Parcel
@@ -97,3 +102,69 @@ def test_missing_dimensions_are_imputed_as_a_cube_and_flagged(db_session):
     parcel = db_session.query(Parcel).filter(Parcel.parcel_id == "NODIM01").first()
     assert parcel.length_cm == parcel.width_cm == parcel.height_cm
     assert round(parcel.length_cm, 1) == 20.0  # cbrt(0.008 m^3 * 1e6 cm^3) = 20cm
+    assert parcel.dimensions_imputed is True
+
+
+def test_real_dimensions_are_not_flagged_as_imputed(db_session):
+    csv_content = (
+        "parcel_id,latitude,longitude,weight_kg,volume_m3,"
+        "time_window_start,time_window_end,fragile,length_cm,width_cm,height_cm\n"
+        "REALDIM01,6.9271,79.8612,2.5,0.008,10:00,13:00,false,20,20,20\n"
+    ).encode("utf-8")
+
+    report = import_csv(db_session, csv_content)
+
+    assert report["dimensions_imputed_count"] == 0
+
+    from app.models.parcel import Parcel
+
+    parcel = db_session.query(Parcel).filter(Parcel.parcel_id == "REALDIM01").first()
+    assert parcel.dimensions_imputed is False
+
+
+def _make_csv(n: int, weight_kg: float = 2.5) -> bytes:
+    header = "parcel_id,latitude,longitude,weight_kg,volume_m3,time_window_start,time_window_end,fragile\n"
+    rows = "".join(
+        f"P{i:05d},6.9271,79.8612,{weight_kg},0.015,10:00,13:00,false\n" for i in range(n)
+    )
+    return (header + rows).encode("utf-8")
+
+
+def test_reimporting_the_same_rows_reports_updates_not_inserts(db_session):
+    """F11: `inserted` must not count rows that already existed and were
+    just upserted — re-importing the same file must report those as
+    `updated`, not as fresh inserts."""
+    first = import_csv(db_session, _make_csv(50, weight_kg=2.5))
+    assert first["inserted"] == 50
+    assert first["updated"] == 0
+
+    second = import_csv(db_session, _make_csv(50, weight_kg=9.0))
+    assert second["inserted"] == 0
+    assert second["updated"] == 50
+
+    from app.models.parcel import Parcel
+
+    updated_row = db_session.query(Parcel).filter(Parcel.parcel_id == "P00000").first()
+    assert updated_row.weight_kg == 9.0
+
+
+def test_import_uses_a_bounded_number_of_commits(db_session):
+    """F10: the importer must not COMMIT once per row — that was the actual
+    scaling defect (36,000 commits for a 36,000-row file). Count commits via
+    a SQLAlchemy event listener rather than asserting on timing, which would
+    be flaky in CI."""
+    from sqlalchemy import event
+
+    commit_count = {"n": 0}
+
+    def _count_commit(session):
+        commit_count["n"] += 1
+
+    event.listen(db_session, "after_commit", _count_commit)
+    try:
+        report = import_csv(db_session, _make_csv(5000))
+    finally:
+        event.remove(db_session, "after_commit", _count_commit)
+
+    assert report["inserted"] == 5000
+    assert commit_count["n"] < 10, f"expected a small, chunk-bounded number of commits, got {commit_count['n']}"

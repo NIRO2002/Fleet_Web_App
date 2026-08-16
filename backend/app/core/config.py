@@ -18,11 +18,22 @@ class Settings(BaseSettings):
     import_lng_min: float = 79.7
     import_lng_max: float = 80.1
 
+    # Safety factor applied to a parcel's imputed (cube-from-volume) side
+    # length before dimensional-fit checks (F12) -- an imputed cube is a
+    # last-resort guess, not a measurement, so treat it conservatively
+    # rather than optimistically.
+    imputed_dimension_safety_factor: float = 1.5
+
     # Raised from 80/80 now that the assignment problem's search space is
     # real (Phase 3) — the old n_var=1 formulation over 4 fixed options
     # didn't warrant a larger budget, this one does.
     nsga2_population: int = 100
     nsga2_generations: int = 200
+
+    # Clock time the vehicle leaves the depot, used to simulate time-window
+    # compliance (Phase 3.2) — starting the simulation at midnight would
+    # make every daytime window unreachable.
+    depot_departure_time: str = "08:00"
 
     jwt_secret_key: str = "change-this-in-production"
     jwt_algorithm: str = "HS256"

@@ -21,9 +21,19 @@ A vehicle with `has_tail_lift = False` carrying `two_person_lift` parcels
 should attract a cost/feasibility penalty upstream (assignment_problem.py) —
 this module only decides *where* a parcel goes, not whether the vehicle is
 an appropriate choice for it.
+
+Floor packing is First-Fit-Decreasing-Height shelf packing (see
+`_band_placement_order`): load-order parcels are grouped into delivery-stop
+bands (each band roughly one row's worth of width), and *within* a band,
+sorted largest-footprint-first so the row that band opens is sized by its
+largest member. This reorders placement *within* a band only — bands
+themselves are still visited in load order, so the deepest-first LIFO
+relationship *between* bands is untouched.
 """
 from dataclasses import dataclass, field
 from math import cbrt
+
+from app.core.config import settings
 
 
 @dataclass
@@ -50,18 +60,44 @@ class _Column:
     y_start: float
     z_top: float = 0.0
     layers: int = 0
-    top_weight_limit: float = 0.0
+    # Remaining weight budget for anything placed *above* this column's
+    # current top: the running minimum of (a) what's left of every parcel
+    # already in the stack's own `max_stack_weight_kg`, each reduced by the
+    # weight of everything placed above it, and (b) nothing shortcuts to
+    # just the topmost parcel's limit, or a heavy parcel could sit on a
+    # stack whose bottom parcel tolerates far less (constraint 7).
+    stack_headroom_kg: float = 0.0
     open_for_stacking: bool = True
+
+
+@dataclass
+class _Row:
+    """One depth-slice of the cargo bay, spanning the full width. `depth` is
+    fixed by whichever parcel opened the row (see `_open_new_row`) and never
+    changes; `y_used` tracks how much of the row's width has been claimed so
+    far, so later, narrower parcels can still land in an already-open row
+    instead of forcing a fresh one."""
+
+    x_start: float
+    depth: float
+    y_used: float = 0.0
 
 
 def _footprint(parcel) -> tuple[float, float, float]:
     """(length, width, height) in cm, imputing a cube from volume as a
     last-resort fallback — by the time parcels reach here, Phase 1's
-    importer should already have populated real dimensions."""
+    importer should already have populated real dimensions. Whenever the
+    dimensions are imputed (flagged by the importer via
+    `dimensions_imputed`, or imputed here directly), a safety factor
+    inflates the imputed side (F12), so an unreliable cube claims more
+    floor/stack space than it might actually need rather than less."""
     length, width, height = parcel.length_cm, parcel.width_cm, parcel.height_cm
     if length and width and height:
+        if getattr(parcel, "dimensions_imputed", False):
+            factor = settings.imputed_dimension_safety_factor
+            return float(length) * factor, float(width) * factor, float(height) * factor
         return float(length), float(width), float(height)
-    side = cbrt(max(parcel.volume_m3, 1e-9) * 1_000_000)
+    side = cbrt(max(parcel.volume_m3, 1e-9) * 1_000_000) * settings.imputed_dimension_safety_factor
     return side, side, side
 
 
@@ -97,7 +133,7 @@ def _try_stack(parcel, weight: float, height: float, columns: list[_Column], veh
             continue
         if column.z_top + height > vehicle.cargo_height_cm:
             continue
-        if weight > column.top_weight_limit:
+        if weight > column.stack_headroom_kg:
             continue
         for l, w in _orientations(parcel, length, width):
             if l <= column.footprint_length and w <= column.footprint_width:
@@ -105,39 +141,127 @@ def _try_stack(parcel, weight: float, height: float, columns: list[_Column], veh
     return None
 
 
-def _open_new_column(parcel, columns: list[_Column], row_state: dict, vehicle) -> _Column | None:
-    length, width, _ = _footprint(parcel)
+def _footprint_length(parcel) -> float:
+    """The longer of a parcel's two floor-orientation sides — used only to
+    order parcels within a band (see `_band_placement_order`), so the
+    largest parcel in a band is the one that opens (and therefore sizes)
+    the row."""
+    length, width, _height = _footprint(parcel)
+    return max(length, width)
 
-    # Try the row currently being filled first.
-    for l, w in _orientations(parcel, length, width):
-        if l <= row_state["depth"] and row_state["y_used"] + w <= vehicle.cargo_width_cm:
-            column = _Column(x_start=row_state["x_start"], footprint_length=l, footprint_width=w, y_start=row_state["y_used"])
-            row_state["y_used"] += w
-            columns.append(column)
-            return column
 
-    # Doesn't fit the current row — open a new one, one step nearer the doors.
-    for l, w in _orientations(parcel, length, width):
-        if w > vehicle.cargo_width_cm:
-            continue
-        new_x_start = row_state["x_start"] - l
-        if new_x_start < -1e-9:
-            continue
-        row_state["x_start"] = new_x_start
-        row_state["depth"] = l
-        row_state["y_used"] = w
-        column = _Column(x_start=new_x_start, footprint_length=l, footprint_width=w, y_start=0.0)
-        columns.append(column)
-        return column
+def _band_placement_order(parcels_in_delivery_order: list, load_order: list[int], vehicle) -> list[int]:
+    """Partitions `load_order` into delivery-stop bands — a band is a
+    maximal run of load-order parcels whose combined (conservative) width
+    fills roughly one row — then sorts *within* each band by descending
+    footprint length before concatenating the bands back together.
 
+    Bands are still visited in load order, so band 0 is placed deepest and
+    later bands land progressively nearer the doors: LIFO is preserved
+    *between* bands. Sorting within a band does not disturb that, since
+    sibling items in a band all land in the same depth-slice regardless of
+    which order they're placed in — it only changes which of them opens the
+    row (the largest, so no smaller band-mate is later forced into a
+    premature new row)."""
+    bands: list[list[int]] = []
+    current: list[int] = []
+    current_width = 0.0
+    for idx in load_order:
+        parcel = parcels_in_delivery_order[idx]
+        length, width, _height = _footprint(parcel)
+        narrowest = min(w for _l, w in _orientations(parcel, length, width))
+        if current and current_width + narrowest > vehicle.cargo_width_cm:
+            bands.append(current)
+            current, current_width = [], 0.0
+        current.append(idx)
+        current_width += narrowest
+    if current:
+        bands.append(current)
+
+    order: list[int] = []
+    for band in bands:
+        order.extend(sorted(band, key=lambda i: -_footprint_length(parcels_in_delivery_order[i])))
+    return order
+
+
+def _place_in_open_rows(parcel, rows: list[_Row], vehicle) -> _Column | None:
+    """Tries every row opened so far — not just the most recent one — before
+    the caller falls back to opening a new one, so leftover width in an
+    earlier row is reused instead of abandoned."""
+    length, width, _height = _footprint(parcel)
+    for row in rows:
+        for l, w in _orientations(parcel, length, width):
+            if l <= row.depth + 1e-9 and row.y_used + w <= vehicle.cargo_width_cm + 1e-9:
+                column = _Column(x_start=row.x_start, footprint_length=l, footprint_width=w, y_start=row.y_used)
+                row.y_used += w
+                return column
     return None
 
 
-def attempt_placement(parcels_in_delivery_order: list, vehicle) -> PlacementResult | None:
+def _open_new_row(parcel, rows: list[_Row], vehicle, next_x_start: float) -> tuple[_Column | None, float]:
+    """Opens a fresh row one step nearer the doors. Only called once no
+    already-open row has width to spare for this parcel (see
+    `_place_in_open_rows`) — a new row is never opened merely because a
+    parcel is longer than the *current* row, since every open row is tried
+    first."""
+    length, width, _height = _footprint(parcel)
+    # Prefer presenting the longer side as depth, so this row is as deep as
+    # this parcel needs and can still absorb shorter band-mates later.
+    for l, w in sorted(_orientations(parcel, length, width), key=lambda lw: -lw[0]):
+        if w > vehicle.cargo_width_cm + 1e-9:
+            continue
+        new_x_start = next_x_start - l
+        if new_x_start < -1e-9:
+            continue
+        rows.append(_Row(x_start=new_x_start, depth=l, y_used=w))
+        column = _Column(x_start=new_x_start, footprint_length=l, footprint_width=w, y_start=0.0)
+        return column, new_x_start
+    return None, next_x_start
+
+
+def _lifo_exceptions(parcels_in_delivery_order: list, placements: dict[str, Placement]) -> list[dict]:
+    """O(n) LIFO-violation scan: a delivery-order walk tracking the maximum
+    `x` seen so far. Any parcel whose `x` is less than that running maximum
+    is nearer the doors than something delivered *before* it — i.e. it will
+    have to be dug out past an earlier stop's parcel, one exception per
+    such parcel. Replaces an O(n^2) all-pairs scan that, at 400 parcels, ran
+    80,000 comparisons per slot/individual/generation to produce a list the
+    GA itself never reads (see `collect_exceptions`)."""
+    exceptions = []
+    running_max_x = float("-inf")
+    max_x_parcel_id = None
+    for parcel in parcels_in_delivery_order:
+        x = placements[parcel.parcel_id].x
+        if x < running_max_x:
+            exceptions.append(
+                {
+                    "parcel_a": max_x_parcel_id,
+                    "parcel_b": parcel.parcel_id,
+                    "reason": (
+                        "Physical stacking/dimensional constraints forced a load "
+                        "position that is not strictly LIFO relative to the delivery order."
+                    ),
+                }
+            )
+        else:
+            running_max_x = x
+            max_x_parcel_id = parcel.parcel_id
+    return exceptions
+
+
+def attempt_placement(
+    parcels_in_delivery_order: list, vehicle, *, collect_exceptions: bool = True
+) -> PlacementResult | None:
     """Places every parcel for one vehicle. Returns `None` if any parcel
     cannot be placed at all (too big for the bay in any orientation, or the
     bay is full) — the caller (the NSGA-II stacking constraint, Phase 3.2
-    #7) treats that as an infeasible solution."""
+    #7) treats that as an infeasible solution.
+
+    `collect_exceptions=False` skips the LIFO-violation diagnostics (see
+    `_lifo_exceptions`) entirely — pass it from the GA's constraint
+    evaluation, which only needs the None/not-None feasibility verdict and
+    never reads the exception list. Collect them once, at persistence time,
+    for the solution actually selected."""
     n = len(parcels_in_delivery_order)
     if n == 0:
         return PlacementResult(placements={})
@@ -147,54 +271,54 @@ def attempt_placement(parcels_in_delivery_order: list, vehicle) -> PlacementResu
             return None
 
     load_order = list(range(n - 1, -1, -1))  # last-delivered first
+    placement_order = _band_placement_order(parcels_in_delivery_order, load_order, vehicle)
+
     columns: list[_Column] = []
-    row_state = {"x_start": vehicle.cargo_length_cm, "depth": 0.0, "y_used": vehicle.cargo_width_cm}
+    rows: list[_Row] = []
+    next_x_start = vehicle.cargo_length_cm
     placements: dict[str, Placement] = {}
 
-    for load_sequence, idx in enumerate(load_order, start=1):
+    for load_sequence, idx in enumerate(placement_order, start=1):
         parcel = parcels_in_delivery_order[idx]
         weight = parcel.weight_kg
         _length, _width, height = _footprint(parcel)
 
         column = _try_stack(parcel, weight, height, columns, vehicle)
+        max_stack_weight = parcel.max_stack_weight_kg if parcel.max_stack_weight_kg is not None else 0.0
         if column is None:
-            column = _open_new_column(parcel, columns, row_state, vehicle)
+            column = _place_in_open_rows(parcel, rows, vehicle)
+            if column is None:
+                column, next_x_start = _open_new_row(parcel, rows, vehicle, next_x_start)
             if column is None:
                 return None
+            columns.append(column)
             z, layer = 0.0, 0
+            # Floor parcel: headroom for everything above it starts at its
+            # own budget — nothing has been placed above it yet.
+            column.stack_headroom_kg = max_stack_weight
         else:
             z, layer = column.z_top, column.layers
+            # Accumulated-weight-above check (constraint 7): the budget for
+            # anything placed above *this* parcel is the tighter of what's
+            # left of the stack's existing headroom (after this parcel's
+            # own weight) and this parcel's own limit — not just this
+            # parcel's limit on its own, which would ignore every parcel
+            # already below it.
+            column.stack_headroom_kg = min(column.stack_headroom_kg - weight, max_stack_weight)
 
         column.z_top = z + height
         column.layers = layer + 1
         # A fragile or non-stackable parcel must be the top of its column
         # from here on; everything else may still take more weight up to
-        # its own limit.
+        # the accumulated headroom computed above.
         stackable = parcel.stackable if parcel.stackable is not None else True
         fragile = bool(parcel.fragile)
-        max_stack_weight = parcel.max_stack_weight_kg if parcel.max_stack_weight_kg is not None else 0.0
         column.open_for_stacking = stackable and not fragile
-        column.top_weight_limit = max_stack_weight
 
         placements[parcel.parcel_id] = Placement(
             parcel_id=parcel.parcel_id, x=column.x_start, y=column.y_start, z=z, layer=layer,
             load_sequence=load_sequence,
         )
 
-    exceptions = []
-    for i in range(n):
-        for j in range(i + 1, n):
-            a, b = parcels_in_delivery_order[i], parcels_in_delivery_order[j]
-            if placements[a.parcel_id].x > placements[b.parcel_id].x:
-                exceptions.append(
-                    {
-                        "parcel_a": a.parcel_id,
-                        "parcel_b": b.parcel_id,
-                        "reason": (
-                            "Physical stacking/dimensional constraints forced a load "
-                            "position that is not strictly LIFO relative to the delivery order."
-                        ),
-                    }
-                )
-
+    exceptions = _lifo_exceptions(parcels_in_delivery_order, placements) if collect_exceptions else []
     return PlacementResult(placements=placements, load_order_exceptions=exceptions)

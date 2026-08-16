@@ -5,9 +5,9 @@ aggregate metrics the evaluation harness (Phase 5) and the dissertation's
 statistical comparison read back. `catalog_snapshot` (added in Phase 3) is
 what makes a plan's vehicle data reproducible after catalog rows change.
 """
-from datetime import datetime
 from sqlalchemy import JSON, Column, DateTime, Date, Float, Integer, String
 from app.db.database import Base
+from app.utils_datetime import utcnow
 
 
 class LoadPlan(Base):
@@ -28,6 +28,11 @@ class LoadPlan(Base):
 
     n_parcels = Column(Integer, nullable=False)
     n_vehicles = Column(Integer, nullable=False)
+    # How many of this plan's parcels had imputed (cube-from-volume, not
+    # measured) dimensions (F12) -- so a plan built on imputed data is
+    # identifiable after the fact, since imputed dimensions get a safety
+    # factor that biases the plan conservative, not exact.
+    n_parcels_with_imputed_dimensions = Column(Integer, nullable=False, default=0)
     mean_utilization = Column(Float, nullable=False)
     total_distance_km = Column(Float, nullable=False)
     mean_time_window_compliance = Column(Float, nullable=False)
@@ -35,4 +40,4 @@ class LoadPlan(Base):
     hypervolume = Column(Float, nullable=True)
     runtime_seconds = Column(Float, nullable=False)
 
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utcnow, nullable=False)

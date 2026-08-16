@@ -19,7 +19,6 @@ it into a persisted `LoadPlan`.
 import time
 import uuid
 from dataclasses import asdict
-from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
@@ -36,6 +35,7 @@ from app.optimization.assignment_problem import (
 from app.optimization.placement import attempt_placement
 from app.optimization.selection import hypervolume, select_solution
 from app.services.vehicle_catalog_service import VehicleCatalogCache
+from app.utils_datetime import utcnow
 
 
 def _single_cluster_id(parcel_objs) -> int | None:
@@ -172,6 +172,7 @@ def optimize_load(
         catalog_snapshot=[asdict(v) for v in catalog],
         n_parcels=len(parcels),
         n_vehicles=len(vehicles_summary),
+        n_parcels_with_imputed_dimensions=sum(1 for p in parcels if getattr(p, "dimensions_imputed", False)),
         mean_utilization=sum(utilizations) / len(utilizations) if utilizations else 0.0,
         total_distance_km=sum(distances),
         mean_time_window_compliance=sum(compliances) / len(compliances) if compliances else 0.0,
@@ -213,9 +214,7 @@ def try_insert(db: Session, virtual_vehicle: VirtualVehicle, parcel):
     """Weight/volume-only fit check. Deliberately left as-is (Phase 5 —
     `insertion_service.py` — replaces this wholesale with the full
     constraint set: dimensions, hazmat/refrigeration, actual re-run
-    placement, schedule feasibility, detour bound); only the deprecated
-    `datetime.utcnow()` call is fixed here since the file is already being
-    touched for Phase 3."""
+    placement, schedule feasibility, detour bound)."""
     if virtual_vehicle.used_weight_kg + parcel.weight_kg > virtual_vehicle.capacity_kg:
         return False, "Insufficient weight capacity"
     if virtual_vehicle.used_volume_m3 + parcel.volume_m3 > virtual_vehicle.capacity_m3:
@@ -223,6 +222,6 @@ def try_insert(db: Session, virtual_vehicle: VirtualVehicle, parcel):
 
     virtual_vehicle.used_weight_kg += parcel.weight_kg
     virtual_vehicle.used_volume_m3 += parcel.volume_m3
-    virtual_vehicle.updated_at = datetime.now(timezone.utc)
+    virtual_vehicle.updated_at = utcnow()
     db.commit()
     return True, "Parcel inserted into existing virtual vehicle"

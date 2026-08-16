@@ -6,9 +6,9 @@ capacities and costs from this table at runtime, never from a literal in
 audited and varied per depot without a code deploy, and every load plan can
 record the exact snapshot it was optimized against (reproducibility).
 """
-from datetime import datetime
 from sqlalchemy import Boolean, Column, DateTime, Float, Integer, String
 from app.db.database import Base
+from app.utils_datetime import utcnow
 
 
 class VehicleTypeCatalog(Base):
@@ -48,5 +48,5 @@ class VehicleTypeCatalog(Base):
     # confirmed against real figures.
     source = Column(String(32), nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow, nullable=False)

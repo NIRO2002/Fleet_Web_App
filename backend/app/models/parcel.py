@@ -6,10 +6,10 @@ carries every physical and handling attribute the NSGA-II assignment problem
 planning-instance key required by SO1/SO2 (bounded, reproducible clustering
 and assignment runs instead of an unscoped table scan).
 """
-from datetime import datetime
 from sqlalchemy import Boolean, Column, Date, DateTime, Float, Index, Integer, String
 from sqlalchemy.orm import column_property
 from app.db.database import Base
+from app.utils_datetime import utcnow
 
 PRIORITY_LEVELS = {"standard", "next_day", "express", "same_day"}
 
@@ -38,6 +38,12 @@ class Parcel(Base):
     length_cm = Column(Float, nullable=True)
     width_cm = Column(Float, nullable=True)
     height_cm = Column(Float, nullable=True)
+    # True if the importer had to impute a cube from volume_m3 because
+    # length/width/height were absent (F12) -- a real parcel's true
+    # dimensions can be far from a cube (e.g. long and thin), so downstream
+    # dimensional-fit checks apply a safety factor to imputed sides rather
+    # than trusting them at face value.
+    dimensions_imputed = Column(Boolean, default=False, nullable=False)
 
     # Stacking feasibility (constraint 7).
     stackable = Column(Boolean, default=True, nullable=False)
@@ -65,7 +71,7 @@ class Parcel(Base):
     cluster_id = Column(Integer, nullable=True)
     cluster_probability = Column(Float, nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
 
     # Computed (not stored): hazardous OR requires_refrigeration OR
     # two_person_lift. A SQL-expression column_property so it can never
