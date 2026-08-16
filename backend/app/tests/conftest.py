@@ -55,9 +55,15 @@ def client(db_session):
     app.dependency_overrides.clear()
 
 
-def _parcel_payload(parcel_id, lat, lon, weight, volume, tw_start, tw_end, fragile):
+DEFAULT_DEPOT_ID = "DEPOT-1"
+DEFAULT_DELIVERY_DATE = "2026-08-20"
+
+
+def _parcel_payload(parcel_id, lat, lon, weight, volume, tw_start, tw_end, fragile, depot_id, delivery_date):
     return {
         "parcel_id": parcel_id,
+        "depot_id": depot_id,
+        "delivery_date": delivery_date,
         "latitude": lat,
         "longitude": lon,
         "weight_kg": weight,
@@ -83,6 +89,8 @@ def parcel_factory():
         n_clusters: int = 2,
         depot_lat: float = 6.9271,
         depot_lon: float = 79.8612,
+        depot_id: str = DEFAULT_DEPOT_ID,
+        delivery_date: str = DEFAULT_DELIVERY_DATE,
     ) -> list[dict]:
         rng = random.Random(seed)
         centers = [
@@ -108,6 +116,8 @@ def parcel_factory():
                     f"{start_h:02d}:00",
                     f"{end_h:02d}:00",
                     rng.random() < 0.15,
+                    depot_id,
+                    delivery_date,
                 )
             )
         return payloads

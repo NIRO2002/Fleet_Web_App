@@ -1,135 +1,221 @@
+"""NSGA-II load assignment orchestration (Phase 3 — the core fix).
+
+Satisfies SO3/SO4/FR04: replaces the old fixed n_var=1
+"pick-one-vehicle-type-for-a-fixed-parcel-list" scalarised heuristic (whose
+`minimize()` result was discarded entirely — see docs/DESIGN_DECISIONS.md)
+with `app.optimization.assignment_problem`'s genuine multi-objective
+parcel-to-vehicle-slot assignment. Vehicle data is loaded once per run from
+`vehicle_type_catalog` via `vehicle_catalog_service` — never a literal
+here. The *whole* Pareto front is always returned; the single solution that
+gets persisted as `VirtualVehicle`/`ParcelAssignment` rows is chosen by
+knee-point selection (or a caller preference) among already non-dominated
+solutions only, never as the optimizer's own objective.
+
+Full pipeline orchestration (clustering -> capacity-aware repair -> this
+module -> CSV/JSON export) is Phase 4's `pipeline.py`. This module expects
+an already-assembled parcel list (e.g. one clustering instance) and turns
+it into a persisted `LoadPlan`.
+"""
+import time
 import uuid
-import numpy as np
+from dataclasses import asdict
+from datetime import datetime, timezone
+
 from sqlalchemy.orm import Session
-from pymoo.core.problem import Problem
-from pymoo.algorithms.moo.nsga2 import NSGA2
-from pymoo.optimize import minimize
 
-from app.core.config import settings
+from app.models.load_plan import LoadPlan
+from app.models.parcel_assignment import ParcelAssignment
 from app.models.virtual_vehicle import VirtualVehicle
-from app.routing.distance_matrix import nearest_neighbor_distance_km
-from app.utils_time import time_window_compliance
+from app.optimization.assignment_problem import (
+    AssignmentConfig,
+    decode,
+    load_catalog_snapshot,
+    run_nsga2,
+    vehicle_metrics,
+)
+from app.optimization.placement import attempt_placement
+from app.optimization.selection import hypervolume, select_solution
+from app.services.vehicle_catalog_service import VehicleCatalogCache
 
-VEHICLES = {
-    "BIKE": {"capacity_kg": 25.0, "capacity_m3": 0.08},
-    "THREE_WHEEL": {"capacity_kg": 150.0, "capacity_m3": 0.8},
-    "VAN": {"capacity_kg": 1000.0, "capacity_m3": 8.0},
-    "LORRY": {"capacity_kg": 5000.0, "capacity_m3": 25.0},
-}
 
-def metrics(parcels, vehicle_type, depot_lat, depot_lon):
-    cap = VEHICLES[vehicle_type]
-    weight = sum(p.weight_kg for p in parcels)
-    volume = sum(p.volume_m3 for p in parcels)
-    feasible = weight <= cap["capacity_kg"] and volume <= cap["capacity_m3"]
+def _single_cluster_id(parcel_objs) -> int | None:
+    ids = {p.cluster_id for p in parcel_objs if p.cluster_id is not None}
+    return next(iter(ids)) if len(ids) == 1 else None
 
-    distance = nearest_neighbor_distance_km(
-        depot_lat, depot_lon, [(p.latitude, p.longitude) for p in parcels]
-    )
-    compliance = time_window_compliance(parcels)
 
-    return {
-        "feasible": feasible,
-        "weight": weight,
-        "volume": volume,
-        "distance": distance,
-        "compliance": compliance,
-        "utilization_weight": weight / cap["capacity_kg"],
-        "utilization_volume": volume / cap["capacity_m3"],
-    }
+def optimize_load(
+    db: Session,
+    parcels: list,
+    *,
+    depot_id: str,
+    depot_lat: float,
+    depot_lon: float,
+    delivery_date=None,
+    clustering_method: str = "hdbscan",
+    seed: int = 0,
+    config: AssignmentConfig | None = None,
+    warm_start_clusters: dict[int, list] | None = None,
+    catalog_cache: VehicleCatalogCache | None = None,
+    preference_weights: list[float] | None = None,
+):
+    """Runs NSGA-II over `parcels` and persists the selected solution as a
+    `LoadPlan` with one `VirtualVehicle` + a set of `ParcelAssignment` rows
+    per used vehicle slot. Returns `(result_dict, load_plan)`.
 
-class VehicleTypeNSGAProblem(Problem):
-    def __init__(self, parcels, depot_lat, depot_lon):
-        self.parcels = parcels
-        self.names = list(VEHICLES)
-        self.depot_lat = depot_lat
-        self.depot_lon = depot_lon
-        super().__init__(
-            n_var=1, n_obj=3, n_ieq_constr=1,
-            xl=np.array([0]), xu=np.array([len(self.names) - 1]), vtype=int
-        )
-
-    def _evaluate(self, X, out, *args, **kwargs):
-        F, G = [], []
-        for row in X:
-            idx = max(0, min(len(self.names) - 1, int(round(row[0]))))
-            name = self.names[idx]
-            m = metrics(self.parcels, name, self.depot_lat, self.depot_lon)
-            F.append([-m["utilization_weight"], m["distance"], -m["compliance"]])
-            G.append([0.0 if m["feasible"] else 1.0])
-        out["F"] = np.asarray(F)
-        out["G"] = np.asarray(G)
-
-def optimize_load(db: Session, parcels, depot_lat, depot_lon):
+    `depot_id` is required (not inferred) — the vehicle catalog and the
+    plan's (depot_id, delivery_date) key both depend on it.
+    """
     if not parcels:
         raise ValueError("No parcels selected.")
 
-    problem = VehicleTypeNSGAProblem(parcels, depot_lat, depot_lon)
-    minimize(
-        problem,
-        NSGA2(pop_size=settings.nsga2_population),
-        termination=("n_gen", settings.nsga2_generations),
-        seed=42,
-        verbose=False,
-    )
+    started = time.perf_counter()
+    config = config or AssignmentConfig(depot_lat=depot_lat, depot_lon=depot_lon)
+    catalog = load_catalog_snapshot(db, depot_id, delivery_date, cache=catalog_cache)
 
-    options = []
-    for name, cap in VEHICLES.items():
-        m = metrics(parcels, name, depot_lat, depot_lon)
-        if not m["feasible"]:
-            continue
-        score = (
-            0.45 * m["utilization_weight"]
-            + 0.20 * m["utilization_volume"]
-            + 0.20 * m["compliance"]
-            + 0.15 / (1 + m["distance"])
+    problem, res = run_nsga2(parcels, catalog, config, seed=seed, warm_start_clusters=warm_start_clusters)
+    idx, F, X, G = select_solution(res, preference_weights)
+    front_hypervolume = hypervolume(F)
+
+    selected_row = X[idx]
+    slots, type_of_slot = decode(selected_row, problem.n, problem.K)
+    used_slots = {sidx: members for sidx, members in slots.items() if members}
+
+    plan_id = f"PLAN-{uuid.uuid4().hex[:10].upper()}"
+    vehicles_summary = []
+    virtual_vehicles = []
+    pending_assignments = []
+    utilizations, distances, compliances, costs = [], [], [], []
+
+    for slot_idx, parcel_indices in used_slots.items():
+        type_idx = int(max(0, min(problem.T - 1, type_of_slot[slot_idx])))
+        vehicle_spec = catalog[type_idx]
+        parcel_objs = [parcels[i] for i in parcel_indices]
+
+        m = vehicle_metrics(parcel_objs, vehicle_spec, config)
+        placement = attempt_placement(m["ordered_parcels"], vehicle_spec)
+
+        utilizations.append(m["utilization"])
+        distances.append(m["distance"])
+        compliances.append(m["compliance"])
+        costs.append(m["cost"])
+
+        vv = VirtualVehicle(
+            virtual_vehicle_id=f"VV-{uuid.uuid4().hex[:10].upper()}",
+            depot_id=depot_id,
+            delivery_date=delivery_date,
+            plan_id=plan_id,
+            vehicle_type=vehicle_spec.code,
+            capacity_kg=vehicle_spec.capacity_kg,
+            capacity_m3=vehicle_spec.capacity_m3,
+            used_weight_kg=m["weight"],
+            used_volume_m3=m["volume"],
+            parcel_count=m["count"],
+            max_parcels=vehicle_spec.max_parcels,
+            estimated_distance_km=m["distance"],
+            time_window_compliance=m["compliance"],
+            fleet_cost=m["cost"],
+            is_refrigerated=vehicle_spec.is_refrigerated,
+            is_hazmat_certified=vehicle_spec.is_hazmat_certified,
+            cargo_length_cm=vehicle_spec.cargo_length_cm,
+            cargo_width_cm=vehicle_spec.cargo_width_cm,
+            cargo_height_cm=vehicle_spec.cargo_height_cm,
+            cluster_id=_single_cluster_id(parcel_objs),
+            destination_latitude=float(sum(p.latitude for p in parcel_objs) / len(parcel_objs)),
+            destination_longitude=float(sum(p.longitude for p in parcel_objs) / len(parcel_objs)),
         )
-        options.append({
-            "vehicle_type": name,
-            "capacity_kg": cap["capacity_kg"],
-            "capacity_m3": cap["capacity_m3"],
-            "load_weight_kg": m["weight"],
-            "load_volume_m3": m["volume"],
-            "utilization_weight": m["utilization_weight"],
-            "utilization_volume": m["utilization_volume"],
-            "estimated_distance_km": m["distance"],
-            "time_window_compliance": m["compliance"],
-            "score": score,
-        })
+        db.add(vv)
+        virtual_vehicles.append(vv)
 
-    if not options:
-        raise ValueError("No vehicle type is feasible for this parcel set.")
+        for position, parcel in enumerate(m["ordered_parcels"], start=1):
+            placed = placement.placements.get(parcel.parcel_id) if placement else None
+            pending_assignments.append(
+                ParcelAssignment(
+                    plan_id=plan_id,
+                    virtual_vehicle_id=vv.virtual_vehicle_id,
+                    parcel_id=parcel.parcel_id,
+                    delivery_sequence=position,
+                    load_sequence=placed.load_sequence if placed else position,
+                    stack_layer=placed.layer if placed else 0,
+                    load_position_x=placed.x if placed else 0.0,
+                    load_position_y=placed.y if placed else 0.0,
+                    load_position_z=placed.z if placed else 0.0,
+                )
+            )
 
-    options.sort(key=lambda x: x["score"], reverse=True)
-    selected = options[0]
-    cluster_ids = {p.cluster_id for p in parcels if p.cluster_id is not None}
-    cluster_id = next(iter(cluster_ids)) if len(cluster_ids) == 1 else None
+        vehicles_summary.append(
+            {
+                "virtual_vehicle_id": vv.virtual_vehicle_id,
+                "vehicle_type": vehicle_spec.code,
+                "capacity_kg": vehicle_spec.capacity_kg,
+                "capacity_m3": vehicle_spec.capacity_m3,
+                "load_weight_kg": m["weight"],
+                "load_volume_m3": m["volume"],
+                "utilization_weight": m["util_weight"],
+                "utilization_volume": m["util_volume"],
+                "estimated_distance_km": m["distance"],
+                "time_window_compliance": m["compliance"],
+                "fleet_cost": m["cost"],
+                "delivery_sequence_is_estimate": True,
+                "load_order_exceptions": placement.load_order_exceptions if placement else [],
+            }
+        )
 
-    virtual_vehicle = VirtualVehicle(
-        virtual_vehicle_id=f"VV-{uuid.uuid4().hex[:10].upper()}",
-        vehicle_type=selected["vehicle_type"],
-        capacity_kg=selected["capacity_kg"],
-        capacity_m3=selected["capacity_m3"],
-        used_weight_kg=selected["load_weight_kg"],
-        used_volume_m3=selected["load_volume_m3"],
-        cluster_id=cluster_id,
-        destination_latitude=float(np.mean([p.latitude for p in parcels])),
-        destination_longitude=float(np.mean([p.longitude for p in parcels])),
+    for assignment in pending_assignments:
+        db.add(assignment)
+
+    plan = LoadPlan(
+        plan_id=plan_id,
+        depot_id=depot_id,
+        delivery_date=delivery_date,
+        clustering_method=clustering_method,
+        seed=seed,
+        catalog_snapshot=[asdict(v) for v in catalog],
+        n_parcels=len(parcels),
+        n_vehicles=len(vehicles_summary),
+        mean_utilization=sum(utilizations) / len(utilizations) if utilizations else 0.0,
+        total_distance_km=sum(distances),
+        mean_time_window_compliance=sum(compliances) / len(compliances) if compliances else 0.0,
+        total_fleet_cost=sum(costs),
+        hypervolume=front_hypervolume,
+        runtime_seconds=time.perf_counter() - started,
     )
-    db.add(virtual_vehicle)
+    db.add(plan)
     db.commit()
-    db.refresh(virtual_vehicle)
+    for vv in virtual_vehicles:
+        db.refresh(vv)
 
-    return {
-        "optimization_id": f"OPT-{uuid.uuid4().hex[:10].upper()}",
-        "selected_vehicle": selected,
+    result = {
+        "plan_id": plan_id,
+        "optimization_id": plan_id,  # kept for the old response shape; Phase 4 retires it
+        "seed": seed,
+        "clustering_method": clustering_method,
+        "cluster_id": _single_cluster_id(parcels),
         "parcel_ids": [p.parcel_id for p in parcels],
-        "cluster_id": cluster_id,
-        "pareto_solutions": options,
-        "virtual_vehicle_id": virtual_vehicle.virtual_vehicle_id,
-    }, virtual_vehicle
+        "virtual_vehicle_id": vehicles_summary[0]["virtual_vehicle_id"] if len(vehicles_summary) == 1 else None,
+        "virtual_vehicle_ids": [v["virtual_vehicle_id"] for v in vehicles_summary],
+        "selected_vehicle": vehicles_summary[0] if vehicles_summary else None,
+        "vehicles": vehicles_summary,
+        "pareto_solutions": [
+            {
+                "utilization": -row[0],
+                "estimated_distance_km": row[1],
+                "time_window_compliance": -row[2],
+                "fleet_cost": row[3],
+            }
+            for row in F.tolist()
+        ],
+        "hypervolume": front_hypervolume,
+    }
+    return result, virtual_vehicles
+
 
 def try_insert(db: Session, virtual_vehicle: VirtualVehicle, parcel):
+    """Weight/volume-only fit check. Deliberately left as-is (Phase 5 —
+    `insertion_service.py` — replaces this wholesale with the full
+    constraint set: dimensions, hazmat/refrigeration, actual re-run
+    placement, schedule feasibility, detour bound); only the deprecated
+    `datetime.utcnow()` call is fixed here since the file is already being
+    touched for Phase 3."""
     if virtual_vehicle.used_weight_kg + parcel.weight_kg > virtual_vehicle.capacity_kg:
         return False, "Insufficient weight capacity"
     if virtual_vehicle.used_volume_m3 + parcel.volume_m3 > virtual_vehicle.capacity_m3:
@@ -137,6 +223,6 @@ def try_insert(db: Session, virtual_vehicle: VirtualVehicle, parcel):
 
     virtual_vehicle.used_weight_kg += parcel.weight_kg
     virtual_vehicle.used_volume_m3 += parcel.volume_m3
-    virtual_vehicle.updated_at = __import__("datetime").datetime.utcnow()
+    virtual_vehicle.updated_at = datetime.now(timezone.utc)
     db.commit()
     return True, "Parcel inserted into existing virtual vehicle"

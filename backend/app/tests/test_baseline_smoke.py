@@ -1,18 +1,37 @@
 """Phase 0 (Backend Remediation) regression net.
 
-Exercises the *current* (pre-remediation) pipeline end-to-end through the
-public API: ingest parcels -> train HDBSCAN -> run NSGA-II-labelled
-optimization -> generate a virtual vehicle -> dynamically insert a parcel.
+Exercises the pipeline end-to-end through the public HTTP API: ingest
+parcels -> train HDBSCAN -> run NSGA-II load assignment -> list the
+resulting virtual vehicle(s) -> dynamically insert a parcel. Complements
+(does not replace) `test_nsga2.py`'s direct, service-level Phase 3 gate
+tests — this one is the only place that exercises the whole thing through
+FastAPI routes, so it catches wiring bugs the service-level tests can't.
 
-This file documents the current (defective) behaviour on purpose, so later
-phases can detect accidental regressions while rewriting the internals. It
-is allowed to be deleted once Phase 3's real tests (test_nsga2.py etc.)
-replace it, per the remediation spec.
+Originally documented the pre-remediation pipeline's defective behaviour on
+purpose; since Phase 3 the assignment problem requires a real
+vehicle_type_catalog (it never falls back to a built-in default), so this
+test now seeds one, and no longer assumes exactly one virtual vehicle comes
+out of one cluster — the new n+K encoding may legitimately split a cluster
+across more than one vehicle.
 """
+from app.schemas.vehicle_type import VehicleTypeCatalogIn
+from app.services import vehicle_catalog_service
 
 
-def test_full_pipeline_smoke(client, parcel_factory):
-    parcels = parcel_factory(n=20, seed=1, n_clusters=2)
+def test_full_pipeline_smoke(client, db_session, parcel_factory):
+    vehicle_catalog_service.upsert_type(
+        db_session,
+        VehicleTypeCatalogIn(
+            code="VAN", display_name="Delivery van", capacity_kg=1000.0, capacity_m3=8.0,
+            cargo_length_cm=280.0, cargo_width_cm=170.0, cargo_height_cm=170.0,
+            max_parcels=120, max_stack_layers=4, fixed_cost=2500.0, cost_per_km=45.0,
+            avg_speed_kmh=32.0, source="test-fixture",
+        ),
+    )
+
+    depot_id = "DEPOT-1"
+    delivery_date = "2026-08-20"
+    parcels = parcel_factory(n=20, seed=1, n_clusters=2, depot_id=depot_id, delivery_date=delivery_date)
     for payload in parcels:
         resp = client.post("/api/v1/parcels", json=payload)
         assert resp.status_code == 200, resp.text
@@ -21,7 +40,10 @@ def test_full_pipeline_smoke(client, parcel_factory):
     assert resp.status_code == 200
     assert len(resp.json()) == len(parcels)
 
-    resp = client.post("/api/v1/parcels/clustering/train")
+    resp = client.post(
+        "/api/v1/parcels/clustering/train",
+        params={"depot_id": depot_id, "delivery_date": delivery_date},
+    )
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["status"] == "trained"
@@ -31,7 +53,10 @@ def test_full_pipeline_smoke(client, parcel_factory):
     real_cluster_ids = sorted(int(k) for k in clusters if k != "-1")
     assert real_cluster_ids, f"expected at least one real cluster, got {clusters}"
 
-    resp = client.get("/api/v1/parcels/clustering")
+    resp = client.get(
+        "/api/v1/parcels/clustering",
+        params={"depot_id": depot_id, "delivery_date": delivery_date},
+    )
     assert resp.status_code == 200
     assert resp.json() == clusters
 
@@ -46,7 +71,10 @@ def test_full_pipeline_smoke(client, parcel_factory):
     resp = client.get("/api/v1/virtual-vehicles")
     assert resp.status_code == 200
     vehicles = resp.json()
-    assert len(vehicles) == 1
+    # A cluster may now legitimately be split across more than one vehicle
+    # slot (the n+K encoding, unlike the old one-vehicle-type-for-the-whole
+    # -parcel-list defect) — at least one is the real invariant.
+    assert len(vehicles) >= 1
 
     new_parcel = {
         "parcel_id": "P9999",

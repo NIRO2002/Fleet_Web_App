@@ -18,8 +18,11 @@ class Settings(BaseSettings):
     import_lng_min: float = 79.7
     import_lng_max: float = 80.1
 
-    nsga2_population: int = 80
-    nsga2_generations: int = 80
+    # Raised from 80/80 now that the assignment problem's search space is
+    # real (Phase 3) — the old n_var=1 formulation over 4 fixed options
+    # didn't warrant a larger budget, this one does.
+    nsga2_population: int = 100
+    nsga2_generations: int = 200
 
     jwt_secret_key: str = "change-this-in-production"
     jwt_algorithm: str = "HS256"

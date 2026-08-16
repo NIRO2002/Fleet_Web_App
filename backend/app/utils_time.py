@@ -8,6 +8,14 @@ def overlap_minutes(a_start, a_end, b_start, b_end):
     return max(0, end - start)
 
 def time_window_compliance(parcels):
+    """DEPRECATED (Phase 3, spec 3.2): measures whether parcels in the same
+    vehicle *could* share a delivery window, not whether the vehicle can
+    actually reach each one on time. Superseded by
+    `app.optimization.assignment_problem.schedule_time_window_compliance`,
+    which walks the vehicle's actual tour. Kept importable only so the
+    dissertation can report the old pairwise metric alongside the new one
+    for comparison, if useful — do not use it for constraint 5-style
+    compliance in new code."""
     if len(parcels) <= 1:
         return 1.0
 

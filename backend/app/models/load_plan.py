@@ -6,7 +6,7 @@ statistical comparison read back. `catalog_snapshot` (added in Phase 3) is
 what makes a plan's vehicle data reproducible after catalog rows change.
 """
 from datetime import datetime
-from sqlalchemy import Column, DateTime, Date, Float, Integer, String
+from sqlalchemy import JSON, Column, DateTime, Date, Float, Integer, String
 from app.db.database import Base
 
 
@@ -19,6 +19,12 @@ class LoadPlan(Base):
 
     clustering_method = Column(String(16), nullable=False)  # 'hdbscan' | 'kmeans'
     seed = Column(Integer, nullable=False)
+
+    # Exact vehicle_type_catalog rows this plan was optimized against
+    # (list of VehicleTypeSpec fields, as dicts) — reproducibility: catalog
+    # rows can change after the fact, but the plan still records what the
+    # optimizer actually saw (Phase 3.1).
+    catalog_snapshot = Column(JSON, nullable=True)
 
     n_parcels = Column(Integer, nullable=False)
     n_vehicles = Column(Integer, nullable=False)
