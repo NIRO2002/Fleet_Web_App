@@ -40,6 +40,25 @@ class VehicleTypeCatalog(Base):
     # for a future access-restriction feature.
     min_road_width_m = Column(Float, nullable=True)
 
+    model_name = Column(String(128), nullable=True)
+    gross_vehicle_weight_kg = Column(Float, nullable=True)
+    # Bundled per-trip quote from the source data, e.g. a typical-distance
+    # fare. Provenance only -- never read by the objective function, which
+    # uses fixed_cost + cost_per_km * distance instead. Storing both would
+    # double-count (see docs/DESIGN_DECISIONS.md).
+    cost_per_trip_reference = Column(Float, nullable=True)
+    # Vehicle-level cap on total weight stacked above the cargo bay floor
+    # (Fix Pass 2 A.5) -- distinct from Parcel.max_stack_weight_kg, which is
+    # the per-parcel headroom for whatever sits directly above it.
+    vehicle_max_stack_weight_kg = Column(Float, nullable=False, default=1_000_000.0)
+    max_speed_kmh = Column(Float, nullable=True)
+    # HH:MM shift window this vehicle type is available for dispatch/return
+    # (Fix Pass 2 A.6) -- constrains the optimizer's schedule simulation
+    # independently of the shared depot_departure_time.
+    available_from = Column(String(5), nullable=False, default="00:00")
+    available_until = Column(String(5), nullable=False, default="23:59")
+    source_reference = Column(String(128), nullable=True)
+
     depot_id = Column(String(32), nullable=True)  # null = available at every depot
     is_active = Column(Boolean, default=True, nullable=False)
 

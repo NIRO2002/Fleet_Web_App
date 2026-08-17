@@ -4,8 +4,6 @@ Provides an isolated in-memory SQLite session per test, a TestClient wired to
 that session via dependency override, and a deterministic synthetic parcel
 factory so tests never depend on the developer's local `fleet_web_app.db`.
 """
-import random
-
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -14,6 +12,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.db.database import Base
 from app.db.session import get_db
+from app.evaluation.synthetic_data import generate_synthetic_parcels
 
 
 @pytest.fixture()
@@ -59,21 +58,6 @@ DEFAULT_DEPOT_ID = "DEPOT-1"
 DEFAULT_DELIVERY_DATE = "2026-08-20"
 
 
-def _parcel_payload(parcel_id, lat, lon, weight, volume, tw_start, tw_end, fragile, depot_id, delivery_date):
-    return {
-        "parcel_id": parcel_id,
-        "depot_id": depot_id,
-        "delivery_date": delivery_date,
-        "latitude": lat,
-        "longitude": lon,
-        "weight_kg": weight,
-        "volume_m3": volume,
-        "time_window_start": tw_start,
-        "time_window_end": tw_end,
-        "fragile": fragile,
-    }
-
-
 @pytest.fixture()
 def parcel_factory():
     """Deterministic synthetic parcel generator.
@@ -81,7 +65,11 @@ def parcel_factory():
     Produces `n` parcels jittered tightly around `n_clusters` geographic
     centers near the depot, so HDBSCAN reliably finds distinct clusters at
     the default `min_cluster_size`. Same `seed` always yields the same set.
-    """
+
+    Thin wrapper around `app.evaluation.synthetic_data.generate_synthetic_parcels`
+    (Fix Pass 2 -- shared with the A.7 verification, the runtime harness, and
+    the feasibility-invariant tests, instead of three near-identical
+    generators)."""
 
     def _factory(
         n: int = 20,
@@ -92,34 +80,9 @@ def parcel_factory():
         depot_id: str = DEFAULT_DEPOT_ID,
         delivery_date: str = DEFAULT_DELIVERY_DATE,
     ) -> list[dict]:
-        rng = random.Random(seed)
-        centers = [
-            (depot_lat + rng.uniform(-0.03, 0.03), depot_lon + rng.uniform(-0.03, 0.03))
-            for _ in range(n_clusters)
-        ]
-        payloads = []
-        for i in range(n):
-            clat, clon = centers[i % n_clusters]
-            lat = clat + rng.uniform(-0.002, 0.002)
-            lon = clon + rng.uniform(-0.002, 0.002)
-            weight = round(rng.uniform(1.0, 8.0), 2)
-            volume = round(rng.uniform(0.01, 0.05), 3)
-            start_h = rng.choice([9, 10, 11])
-            end_h = start_h + 3
-            payloads.append(
-                _parcel_payload(
-                    f"P{i:04d}",
-                    lat,
-                    lon,
-                    weight,
-                    volume,
-                    f"{start_h:02d}:00",
-                    f"{end_h:02d}:00",
-                    rng.random() < 0.15,
-                    depot_id,
-                    delivery_date,
-                )
-            )
-        return payloads
+        return generate_synthetic_parcels(
+            n=n, seed=seed, n_clusters=n_clusters, depot_lat=depot_lat, depot_lon=depot_lon,
+            depot_id=depot_id, delivery_date=delivery_date,
+        )
 
     return _factory

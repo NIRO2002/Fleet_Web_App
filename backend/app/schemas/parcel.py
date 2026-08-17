@@ -3,6 +3,7 @@ from typing import Optional
 from pydantic import BaseModel, Field, field_validator
 
 PRIORITY_LEVELS = {"standard", "next_day", "express", "same_day"}
+PARCEL_STATUSES = {"PENDING", "PLANNED", "DELIVERED", "FAILED"}
 
 
 class ParcelIn(BaseModel):
@@ -40,6 +41,21 @@ class ParcelIn(BaseModel):
 
     priority_level: str = "standard"
     service_type: str = "door_to_door"
+
+    # Fix Pass 2 item C. Not expected as caller input for a fresh import
+    # (defaults to PENDING like the ORM column) -- present mainly so an
+    # import can carry a status column when re-importing already-planned
+    # data, and so `get_planning_instance`'s carryover logic has something
+    # to update.
+    status: str = "PENDING"
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, value: str) -> str:
+        value = value.strip().upper()
+        if value not in PARCEL_STATUSES:
+            raise ValueError(f"status must be one of {sorted(PARCEL_STATUSES)}")
+        return value
 
     @field_validator("time_window_start", "time_window_end")
     @classmethod

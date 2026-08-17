@@ -33,6 +33,15 @@ class LoadPlan(Base):
     # identifiable after the fact, since imputed dimensions get a safety
     # factor that biases the plan conservative, not exact.
     n_parcels_with_imputed_dimensions = Column(Integer, nullable=False, default=0)
+    # Fix Pass 2 item C: how many of this plan's parcels were rolled forward
+    # from an earlier delivery_date (Parcel.carried_over_from_date is set).
+    n_carryover_parcels = Column(Integer, nullable=False, default=0)
+    # DRAFT | PUBLISHED | CLOSED. Only DRAFT is set by this pass -- no
+    # transition trigger for PUBLISHED/CLOSED exists yet (out of scope).
+    status = Column(String(16), nullable=False, default="DRAFT")
+    # Fix Pass 2 item E: reproducibility snapshot (git commit, package
+    # versions, settings) captured at the moment this plan was optimized.
+    run_manifest = Column(JSON, nullable=True)
     mean_utilization = Column(Float, nullable=False)
     total_distance_km = Column(Float, nullable=False)
     mean_time_window_compliance = Column(Float, nullable=False)

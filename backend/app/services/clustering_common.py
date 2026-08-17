@@ -141,16 +141,51 @@ def transform_with_scaler(
     return scaled * _weight_vector(config.feature_weights)
 
 
-def get_planning_instance(db: Session, depot_id: str, delivery_date) -> list[Parcel]:
+def get_planning_instance(
+    db: Session, depot_id: str, delivery_date, *, include_carryover: bool = True
+) -> list[Parcel]:
     """The only sanctioned way to load parcels for clustering/optimization —
     always scoped to one (depot_id, delivery_date) instance. Replaces the
-    old `db.query(Parcel).all()` full-table scan."""
-    return (
+    old `db.query(Parcel).all()` full-table scan.
+
+    Fix Pass 2 item C -- the "previous day / leftover parcels" slice of the
+    descoped Target 5: parcels eligible for planning on
+    (depot_id, delivery_date) are every PENDING parcel already dated for
+    that day, plus -- when `include_carryover` -- parcels from *earlier*
+    dates at the same depot that are still PENDING or FAILED (never
+    delivered or already claimed by another plan). Carried-over parcels get
+    `carried_over_from_date` set to their original `delivery_date` and
+    `delivery_date` moved forward to the target date. Their time windows are
+    left untouched -- rescheduling a customer's delivery window is a
+    customer-facing decision this system does not make, so a now-unreachable
+    window shows up honestly as a compliance cost (objective f3) instead of
+    being silently rewritten."""
+    same_day = (
         db.query(Parcel)
-        .filter(Parcel.depot_id == depot_id, Parcel.delivery_date == delivery_date)
-        .order_by(Parcel.parcel_id)
+        .filter(
+            Parcel.depot_id == depot_id,
+            Parcel.delivery_date == delivery_date,
+            Parcel.status == "PENDING",
+        )
         .all()
     )
+
+    carryover: list[Parcel] = []
+    if include_carryover:
+        carryover = (
+            db.query(Parcel)
+            .filter(
+                Parcel.depot_id == depot_id,
+                Parcel.delivery_date < delivery_date,
+                Parcel.status.in_(["PENDING", "FAILED"]),
+            )
+            .all()
+        )
+        for parcel in carryover:
+            parcel.carried_over_from_date = parcel.delivery_date
+            parcel.delivery_date = delivery_date
+
+    return sorted(same_day + carryover, key=lambda p: p.parcel_id)
 
 
 def handle_noise(

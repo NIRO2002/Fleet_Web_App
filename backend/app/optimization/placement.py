@@ -71,6 +71,17 @@ class _Column:
 
 
 @dataclass
+class _VehicleStackState:
+    """Running total of weight stacked above the bay floor (layer > 0),
+    across every column in the vehicle -- distinct from `_Column`'s
+    per-column `stack_headroom_kg`, which only tracks what one stack's own
+    parcels tolerate. Fix Pass 2 A.5: the vehicle's
+    `vehicle_max_stack_weight_kg` bounds this total independently."""
+
+    cumulative_above_floor_kg: float = 0.0
+
+
+@dataclass
 class _Row:
     """One depth-slice of the cargo bay, spanning the full width. `depth` is
     fixed by whichever parcel opened the row (see `_open_new_row`) and never
@@ -101,6 +112,26 @@ def _footprint(parcel) -> tuple[float, float, float]:
     return side, side, side
 
 
+def _get_footprint(parcel, footprint_cache: dict | None) -> tuple[float, float, float]:
+    """Same as `_footprint`, but memoized per `id(parcel)` when a cache dict
+    is supplied. Profiling a full GA run showed a single parcel's footprint
+    recomputed up to ~5 times per `attempt_placement` call (once each from
+    `_fits_bay_at_all`, `_band_placement_order`, `attempt_placement` itself,
+    `_try_stack`, and whichever of `_place_in_open_rows`/`_open_new_row` is
+    tried) -- `_footprint` is pure given a parcel, so this is wasted
+    recomputation, not a correctness requirement. Scoped to one
+    `attempt_placement` call (never module-level), so it can't leak state
+    across calls or problem instances."""
+    if footprint_cache is None:
+        return _footprint(parcel)
+    key = id(parcel)
+    cached = footprint_cache.get(key)
+    if cached is None:
+        cached = _footprint(parcel)
+        footprint_cache[key] = cached
+    return cached
+
+
 def _orientations(parcel, length: float, width: float) -> list[tuple[float, float]]:
     """Floor-rotation candidates (length, width). `do_not_tilt` and
     `loading_orientation_fixed` both forbid changing which face is up, but a
@@ -111,8 +142,8 @@ def _orientations(parcel, length: float, width: float) -> list[tuple[float, floa
     return [(length, width), (width, length)]
 
 
-def _fits_bay_at_all(parcel, vehicle) -> bool:
-    length, width, height = _footprint(parcel)
+def _fits_bay_at_all(parcel, vehicle, footprint_cache: dict | None = None) -> bool:
+    length, width, height = _get_footprint(parcel, footprint_cache)
     if height > vehicle.cargo_height_cm:
         return False
     return any(
@@ -121,11 +152,16 @@ def _fits_bay_at_all(parcel, vehicle) -> bool:
     )
 
 
-def _try_stack(parcel, weight: float, height: float, columns: list[_Column], vehicle) -> _Column | None:
+def _try_stack(
+    parcel, weight: float, height: float, columns: list[_Column], vehicle, stack_state: _VehicleStackState,
+    footprint_cache: dict | None = None,
+) -> _Column | None:
     """First open column this parcel can be stacked on top of, honouring
-    fragility/stackability, remaining stack-weight budget, layer cap and
-    cargo height. Tried before opening new floor space."""
-    length, width, _ = _footprint(parcel)
+    fragility/stackability, remaining stack-weight budget, layer cap, cargo
+    height, and the vehicle-level cumulative stack-weight cap (A.5). Tried
+    before opening new floor space."""
+    length, width, _ = _get_footprint(parcel, footprint_cache)
+    vehicle_max_stack_weight = getattr(vehicle, "vehicle_max_stack_weight_kg", None)
     for column in columns:
         if not column.open_for_stacking:
             continue
@@ -135,22 +171,29 @@ def _try_stack(parcel, weight: float, height: float, columns: list[_Column], veh
             continue
         if weight > column.stack_headroom_kg:
             continue
+        if (
+            vehicle_max_stack_weight is not None
+            and stack_state.cumulative_above_floor_kg + weight > vehicle_max_stack_weight
+        ):
+            continue
         for l, w in _orientations(parcel, length, width):
             if l <= column.footprint_length and w <= column.footprint_width:
                 return column
     return None
 
 
-def _footprint_length(parcel) -> float:
+def _footprint_length(parcel, footprint_cache: dict | None = None) -> float:
     """The longer of a parcel's two floor-orientation sides — used only to
     order parcels within a band (see `_band_placement_order`), so the
     largest parcel in a band is the one that opens (and therefore sizes)
     the row."""
-    length, width, _height = _footprint(parcel)
+    length, width, _height = _get_footprint(parcel, footprint_cache)
     return max(length, width)
 
 
-def _band_placement_order(parcels_in_delivery_order: list, load_order: list[int], vehicle) -> list[int]:
+def _band_placement_order(
+    parcels_in_delivery_order: list, load_order: list[int], vehicle, footprint_cache: dict | None = None
+) -> list[int]:
     """Partitions `load_order` into delivery-stop bands — a band is a
     maximal run of load-order parcels whose combined (conservative) width
     fills roughly one row — then sorts *within* each band by descending
@@ -168,7 +211,7 @@ def _band_placement_order(parcels_in_delivery_order: list, load_order: list[int]
     current_width = 0.0
     for idx in load_order:
         parcel = parcels_in_delivery_order[idx]
-        length, width, _height = _footprint(parcel)
+        length, width, _height = _get_footprint(parcel, footprint_cache)
         narrowest = min(w for _l, w in _orientations(parcel, length, width))
         if current and current_width + narrowest > vehicle.cargo_width_cm:
             bands.append(current)
@@ -180,15 +223,17 @@ def _band_placement_order(parcels_in_delivery_order: list, load_order: list[int]
 
     order: list[int] = []
     for band in bands:
-        order.extend(sorted(band, key=lambda i: -_footprint_length(parcels_in_delivery_order[i])))
+        order.extend(
+            sorted(band, key=lambda i: -_footprint_length(parcels_in_delivery_order[i], footprint_cache))
+        )
     return order
 
 
-def _place_in_open_rows(parcel, rows: list[_Row], vehicle) -> _Column | None:
+def _place_in_open_rows(parcel, rows: list[_Row], vehicle, footprint_cache: dict | None = None) -> _Column | None:
     """Tries every row opened so far — not just the most recent one — before
     the caller falls back to opening a new one, so leftover width in an
     earlier row is reused instead of abandoned."""
-    length, width, _height = _footprint(parcel)
+    length, width, _height = _get_footprint(parcel, footprint_cache)
     for row in rows:
         for l, w in _orientations(parcel, length, width):
             if l <= row.depth + 1e-9 and row.y_used + w <= vehicle.cargo_width_cm + 1e-9:
@@ -198,13 +243,15 @@ def _place_in_open_rows(parcel, rows: list[_Row], vehicle) -> _Column | None:
     return None
 
 
-def _open_new_row(parcel, rows: list[_Row], vehicle, next_x_start: float) -> tuple[_Column | None, float]:
+def _open_new_row(
+    parcel, rows: list[_Row], vehicle, next_x_start: float, footprint_cache: dict | None = None
+) -> tuple[_Column | None, float]:
     """Opens a fresh row one step nearer the doors. Only called once no
     already-open row has width to spare for this parcel (see
     `_place_in_open_rows`) — a new row is never opened merely because a
     parcel is longer than the *current* row, since every open row is tried
     first."""
-    length, width, _height = _footprint(parcel)
+    length, width, _height = _get_footprint(parcel, footprint_cache)
     # Prefer presenting the longer side as depth, so this row is as deep as
     # this parcel needs and can still absorb shorter band-mates later.
     for l, w in sorted(_orientations(parcel, length, width), key=lambda lw: -lw[0]):
@@ -266,29 +313,36 @@ def attempt_placement(
     if n == 0:
         return PlacementResult(placements={})
 
+    # Scoped to this call only (never module-level -- see _get_footprint):
+    # a parcel's footprint is read repeatedly across this function and its
+    # helpers, and is pure given the parcel, so compute it once per parcel
+    # per call instead of up to ~5 times.
+    footprint_cache: dict = {}
+
     for parcel in parcels_in_delivery_order:
-        if not _fits_bay_at_all(parcel, vehicle):
+        if not _fits_bay_at_all(parcel, vehicle, footprint_cache):
             return None
 
     load_order = list(range(n - 1, -1, -1))  # last-delivered first
-    placement_order = _band_placement_order(parcels_in_delivery_order, load_order, vehicle)
+    placement_order = _band_placement_order(parcels_in_delivery_order, load_order, vehicle, footprint_cache)
 
     columns: list[_Column] = []
     rows: list[_Row] = []
     next_x_start = vehicle.cargo_length_cm
     placements: dict[str, Placement] = {}
+    stack_state = _VehicleStackState()
 
     for load_sequence, idx in enumerate(placement_order, start=1):
         parcel = parcels_in_delivery_order[idx]
         weight = parcel.weight_kg
-        _length, _width, height = _footprint(parcel)
+        _length, _width, height = _get_footprint(parcel, footprint_cache)
 
-        column = _try_stack(parcel, weight, height, columns, vehicle)
+        column = _try_stack(parcel, weight, height, columns, vehicle, stack_state, footprint_cache)
         max_stack_weight = parcel.max_stack_weight_kg if parcel.max_stack_weight_kg is not None else 0.0
         if column is None:
-            column = _place_in_open_rows(parcel, rows, vehicle)
+            column = _place_in_open_rows(parcel, rows, vehicle, footprint_cache)
             if column is None:
-                column, next_x_start = _open_new_row(parcel, rows, vehicle, next_x_start)
+                column, next_x_start = _open_new_row(parcel, rows, vehicle, next_x_start, footprint_cache)
             if column is None:
                 return None
             columns.append(column)
@@ -305,6 +359,9 @@ def attempt_placement(
             # parcel's limit on its own, which would ignore every parcel
             # already below it.
             column.stack_headroom_kg = min(column.stack_headroom_kg - weight, max_stack_weight)
+            # This parcel landed above layer 0 -- counts toward the
+            # vehicle-level cumulative stack-weight cap (A.5).
+            stack_state.cumulative_above_floor_kg += weight
 
         column.z_top = z + height
         column.layers = layer + 1

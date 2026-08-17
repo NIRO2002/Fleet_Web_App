@@ -71,6 +71,16 @@ class Parcel(Base):
     cluster_id = Column(Integer, nullable=True)
     cluster_probability = Column(Float, nullable=True)
 
+    # Fix Pass 2 item C: the minimal parcel-status slice of the descoped
+    # Target 5 -- just enough for "previous day / leftover parcels" to be
+    # trackable, not a full deferral/re-optimization system.
+    status = Column(String(16), default="PENDING", nullable=False, index=True)
+    plan_id = Column(String(64), nullable=True, index=True)
+    # Set when a parcel is rolled forward into a later planning instance by
+    # get_planning_instance's carryover logic; delivery_date is updated to
+    # the target date but the original date is kept here for reporting.
+    carried_over_from_date = Column(Date, nullable=True)
+
     created_at = Column(DateTime, default=utcnow, nullable=False)
 
     # Computed (not stored): hazardous OR requires_refrigeration OR

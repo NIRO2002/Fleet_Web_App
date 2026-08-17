@@ -43,6 +43,19 @@ def _lorry() -> VehicleTypeSpec:
     )
 
 
+def _bike() -> VehicleTypeSpec:
+    """Fix Pass 2 A.1/A.5: real BIKE figures -- tiny bay, single stack
+    layer, 10kg vehicle-level stack-weight cap."""
+    return VehicleTypeSpec(
+        code="BIKE", capacity_kg=25.0, capacity_m3=0.07,
+        cargo_length_cm=45.0, cargo_width_cm=45.0, cargo_height_cm=45.0,
+        max_parcels=6, max_stack_layers=1, fixed_cost=180.0, cost_per_km=55.0,
+        avg_speed_kmh=35.0, is_refrigerated=False, temp_min_celsius=None,
+        temp_max_celsius=None, is_hazmat_certified=False, has_tail_lift=False,
+        vehicle_max_stack_weight_kg=10.0,
+    )
+
+
 def test_placement_succeeds_at_three_times_floor_footprint_with_stacking():
     """F3: with everything stackable and a generous stack-weight budget, 5
     layers of headroom should let the bay absorb roughly 3x its own floor
@@ -208,3 +221,23 @@ def test_placement_failure_reflects_high_floor_utilization_not_row_abandonment()
     )
     utilization = floor_occupied / floor_area
     assert utilization > 0.70, f"floor utilization {utilization:.1%} is too low — looks like row abandonment"
+
+
+def test_bike_never_stacks_a_parcel_above_the_floor():
+    """A.5: BIKE's `max_stack_layers=1` already forbids stacking, and the new
+    vehicle-level `vehicle_max_stack_weight_kg=10.0` cap is a second,
+    independent guard against it -- confirmed here by construction rather
+    than relying on max_stack_layers alone."""
+    vehicle = _bike()
+    rng = random.Random(3)
+    # Small enough to comfortably fit BIKE's 45x45cm floor without stacking
+    # (max_parcels=6 for BIKE -- this exercises exactly that many).
+    parcels = [
+        _FakeParcel(f"P{i:03d}", rng.uniform(6, 10), rng.uniform(6, 10), rng.uniform(5, 10), rng.uniform(0.5, 2.0))
+        for i in range(6)
+    ]
+
+    result = attempt_placement(parcels, vehicle)
+
+    assert result is not None
+    assert all(p.layer == 0 for p in result.placements.values()), "no parcel should ever land above the floor on BIKE"

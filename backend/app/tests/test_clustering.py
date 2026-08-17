@@ -59,6 +59,39 @@ def test_get_planning_instance_scopes_to_depot_and_date(db_session):
     assert len(other) == 1
 
 
+def test_get_planning_instance_carries_over_leftover_pending_parcels(db_session):
+    """Fix Pass 2 item C gate: PENDING/FAILED parcels from an earlier date
+    at the same depot are included when planning a later date, marked with
+    carried_over_from_date, and their delivery_date is rolled forward --
+    but their time windows are left untouched (not this system's decision
+    to make)."""
+    earlier = _make_parcel(
+        "LEFTOVER-1", 6.90, 79.85, depot_id="D1", delivery_date=date(2026, 8, 19),
+        time_window_start="09:00", time_window_end="11:00", status="PENDING",
+    )
+    delivered_already = _make_parcel(
+        "ALREADY-DELIVERED", 6.90, 79.85, depot_id="D1", delivery_date=date(2026, 8, 19), status="DELIVERED",
+    )
+    today = _make_parcel("TODAY-1", 6.91, 79.86, depot_id="D1", delivery_date=date(2026, 8, 20), status="PENDING")
+    db_session.add_all([earlier, delivered_already, today])
+    db_session.commit()
+
+    instance = get_planning_instance(db_session, "D1", date(2026, 8, 20))
+    ids = {p.parcel_id for p in instance}
+    assert ids == {"LEFTOVER-1", "TODAY-1"}, "DELIVERED parcels must never be carried over"
+
+    leftover = next(p for p in instance if p.parcel_id == "LEFTOVER-1")
+    assert leftover.delivery_date == date(2026, 8, 20)
+    assert leftover.carried_over_from_date == date(2026, 8, 19)
+    assert leftover.time_window_start == "09:00", "time windows must not be silently rewritten"
+
+    today_parcel = next(p for p in instance if p.parcel_id == "TODAY-1")
+    assert today_parcel.carried_over_from_date is None
+
+    no_carryover = get_planning_instance(db_session, "D1", date(2026, 8, 20), include_carryover=False)
+    assert {p.parcel_id for p in no_carryover} == {"TODAY-1"}
+
+
 def test_hdbscan_finds_distinct_clusters_and_resolves_noise(db_session):
     _tight_two_cluster_instance(db_session)
     parcels = get_planning_instance(db_session, "D1", date(2026, 8, 20))

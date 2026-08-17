@@ -22,6 +22,7 @@ from dataclasses import asdict
 
 from sqlalchemy.orm import Session
 
+from app.core.reproducibility import run_manifest
 from app.models.load_plan import LoadPlan
 from app.models.parcel_assignment import ParcelAssignment
 from app.models.virtual_vehicle import VirtualVehicle
@@ -163,6 +164,15 @@ def optimize_load(
     for assignment in pending_assignments:
         db.add(assignment)
 
+    # Fix Pass 2 item C: every parcel this plan actually covers is now
+    # claimed by it. optimize_load assumes full assignment (every input
+    # parcel lands in some slot -- see test_selected_solution_satisfies_all_
+    # constraints), so this applies to all of `parcels`, not just used_slots.
+    for parcel in parcels:
+        parcel.status = "PLANNED"
+        parcel.plan_id = plan_id
+    n_carryover_parcels = sum(1 for p in parcels if getattr(p, "carried_over_from_date", None) is not None)
+
     plan = LoadPlan(
         plan_id=plan_id,
         depot_id=depot_id,
@@ -173,6 +183,8 @@ def optimize_load(
         n_parcels=len(parcels),
         n_vehicles=len(vehicles_summary),
         n_parcels_with_imputed_dimensions=sum(1 for p in parcels if getattr(p, "dimensions_imputed", False)),
+        n_carryover_parcels=n_carryover_parcels,
+        run_manifest=run_manifest(catalog=catalog),
         mean_utilization=sum(utilizations) / len(utilizations) if utilizations else 0.0,
         total_distance_km=sum(distances),
         mean_time_window_compliance=sum(compliances) / len(compliances) if compliances else 0.0,

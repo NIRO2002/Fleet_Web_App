@@ -34,7 +34,13 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.optimization.placement import attempt_placement
-from app.routing.distance_matrix import haversine_km, nearest_neighbor_tour
+from app.routing.distance_matrix import (
+    haversine_km,
+    haversine_matrix_km,
+    haversine_vector_km,
+    nearest_neighbor_tour,
+    nearest_neighbor_tour_from_matrix,
+)
 from app.services.vehicle_catalog_service import VehicleCatalogCache, list_available_types
 from app.utils_time import minutes
 
@@ -63,6 +69,14 @@ class VehicleTypeSpec:
     temp_max_celsius: float | None
     is_hazmat_certified: bool
     has_tail_lift: bool
+    # Vehicle-level cap on cumulative weight stacked above the bay floor
+    # (Fix Pass 2 A.5). None means unlimited -- kept optional so existing
+    # direct-construction call sites (tests) don't need updating.
+    vehicle_max_stack_weight_kg: float | None = None
+    # Shift window this vehicle type is available for dispatch/return
+    # (Fix Pass 2 A.6).
+    available_from: str = "00:00"
+    available_until: str = "23:59"
 
 
 def load_catalog_snapshot(
@@ -100,6 +114,9 @@ def load_catalog_snapshot(
             temp_max_celsius=r.temp_max_celsius,
             is_hazmat_certified=r.is_hazmat_certified,
             has_tail_lift=r.has_tail_lift,
+            vehicle_max_stack_weight_kg=r.vehicle_max_stack_weight_kg,
+            available_from=r.available_from,
+            available_until=r.available_until,
         )
         for r in rows
     )
@@ -245,7 +262,7 @@ def _refrigeration_ok(parcel, vehicle: VehicleTypeSpec) -> bool:
 
 def schedule_time_window_compliance(
     parcels_in_delivery_order: list, vehicle: VehicleTypeSpec, config: AssignmentConfig
-) -> tuple[float, list[bool], float]:
+) -> tuple[float, list[bool], float, float]:
     """Replaces the deprecated pairwise-overlap metric (spec 3.2): walks the
     vehicle's actual nearest-neighbour tour, accumulating travel time from
     `avg_speed_kmh` plus a per-stop service time (doubled for
@@ -258,12 +275,20 @@ def schedule_time_window_compliance(
     failing compliance — real vehicles do this. Waiting consumes shift time,
     so it pushes the clock forward (an early stop can still cause a later
     stop to run late) and the total is returned for the metrics layer, even
-    though it is not itself an objective."""
+    though it is not itself an objective.
+
+    Departure is `max(depot_departure_time, vehicle.available_from)` (Fix
+    Pass 2 A.6) -- a vehicle type's own shift can start later than the
+    shared depot baseline. The returned `return_time_minutes` includes the
+    final leg back to the depot, so the caller can check it against
+    `vehicle.available_until` (the vehicle's shift constraint, not itself a
+    per-parcel compliance concern)."""
     if not parcels_in_delivery_order:
-        return 1.0, [], 0.0
+        depot_start = max(minutes(config.depot_departure_time), minutes(vehicle.available_from))
+        return 1.0, [], 0.0, float(depot_start)
 
     lat, lon = config.depot_lat, config.depot_lon
-    clock_minutes = minutes(config.depot_departure_time)
+    clock_minutes = max(minutes(config.depot_departure_time), minutes(vehicle.available_from))
     compliant = []
     total_wait_minutes = 0.0
     for parcel in parcels_in_delivery_order:
@@ -285,7 +310,10 @@ def schedule_time_window_compliance(
         clock_minutes += service
         lat, lon = parcel.latitude, parcel.longitude
 
-    return sum(compliant) / len(compliant), compliant, total_wait_minutes
+    return_dist_km = haversine_km(lat, lon, config.depot_lat, config.depot_lon)
+    clock_minutes += (return_dist_km / max(vehicle.avg_speed_kmh, 1e-6)) * 60.0
+
+    return sum(compliant) / len(compliant), compliant, total_wait_minutes, clock_minutes
 
 
 def vehicle_metrics(parcel_objs: list, vehicle: VehicleTypeSpec, config: AssignmentConfig) -> dict:
@@ -298,7 +326,9 @@ def vehicle_metrics(parcel_objs: list, vehicle: VehicleTypeSpec, config: Assignm
     order, distance = nearest_neighbor_tour(config.depot_lat, config.depot_lon, points)
     ordered_parcels = [parcel_objs[i] for i in order]
 
-    compliance, flags, total_wait_minutes = schedule_time_window_compliance(ordered_parcels, vehicle, config)
+    compliance, flags, total_wait_minutes, return_time_minutes = schedule_time_window_compliance(
+        ordered_parcels, vehicle, config
+    )
     util_weight = weight / vehicle.capacity_kg if vehicle.capacity_kg else 0.0
     util_volume = volume / vehicle.capacity_m3 if vehicle.capacity_m3 else 0.0
     cost = vehicle.fixed_cost + vehicle.cost_per_km * distance
@@ -318,11 +348,12 @@ def vehicle_metrics(parcel_objs: list, vehicle: VehicleTypeSpec, config: Assignm
         "utilization": max(util_weight, util_volume),
         "ordered_parcels": ordered_parcels,
         "total_wait_minutes": total_wait_minutes,
+        "return_time_minutes": return_time_minutes,
     }
 
 
 N_OBJECTIVES = 4
-N_CONSTRAINTS = 8
+N_CONSTRAINTS = 9
 
 
 #: Bound on the per-problem-instance slot caches (F5): large enough to cover
@@ -345,6 +376,16 @@ class AssignmentProblem(Problem):
         self.K = n_slots if n_slots is not None else slot_budget(parcels, catalog, config)
         self.T = len(catalog)
 
+        # B.1: the same n parcels get a tour computed against them
+        # repeatedly across every slot/individual/generation of a run --
+        # precompute the full pairwise distance matrix and depot-distance
+        # vector once (vectorised, not a Python double loop) instead of
+        # calling haversine_km per pair on every tour build.
+        lats = np.array([p.latitude for p in parcels])
+        lons = np.array([p.longitude for p in parcels])
+        self._dist_matrix = haversine_matrix_km(lats, lons)
+        self._depot_dist = haversine_vector_km(config.depot_lat, config.depot_lon, lats, lons)
+
         # Per-instance caches (F5): slot contents repeat constantly across a
         # population and across generations, so memoise the expensive parts
         # of a slot's evaluation on (frozenset(parcel_indices), type_idx).
@@ -356,6 +397,10 @@ class AssignmentProblem(Problem):
         self._slot_cache: OrderedDict[tuple[frozenset, int], dict] = OrderedDict()
         self._cache_hits = 0
         self._cache_misses = 0
+        # B.2: how often a slot's placement check is skipped because the
+        # slot is already infeasible on cheaper grounds.
+        self._short_circuit_count = 0
+        self._placement_attempts = 0
 
         n_var = self.n + self.K
         xl = np.zeros(n_var)
@@ -374,6 +419,9 @@ class AssignmentProblem(Problem):
         total = self._cache_hits + self._cache_misses
         return self._cache_hits / total if total else 0.0
 
+    def short_circuit_rate(self) -> float:
+        return self._short_circuit_count / self._placement_attempts if self._placement_attempts else 0.0
+
     def _get_tour(self, parcel_indices: tuple[int, ...]) -> tuple[list[int], float]:
         key = frozenset(parcel_indices)
         cached = self._tour_cache.get(key)
@@ -381,8 +429,7 @@ class AssignmentProblem(Problem):
             self._tour_cache.move_to_end(key)
             return cached
 
-        points = [(self.parcels[i].latitude, self.parcels[i].longitude) for i in parcel_indices]
-        order, distance = nearest_neighbor_tour(self.config.depot_lat, self.config.depot_lon, points)
+        order, distance = nearest_neighbor_tour_from_matrix(self._depot_dist, self._dist_matrix, list(parcel_indices))
         result = ([parcel_indices[i] for i in order], distance)
 
         self._tour_cache[key] = result
@@ -405,14 +452,44 @@ class AssignmentProblem(Problem):
 
         weight = sum(self.parcels[i].weight_kg for i in parcel_indices)
         volume = sum(self.parcels[i].volume_m3 for i in parcel_indices)
-        compliance, flags, total_wait_minutes = schedule_time_window_compliance(ordered_parcels, vehicle, self.config)
+        compliance, flags, total_wait_minutes, return_time_minutes = schedule_time_window_compliance(
+            ordered_parcels, vehicle, self.config
+        )
         util_weight = weight / vehicle.capacity_kg if vehicle.capacity_kg else 0.0
         util_volume = volume / vehicle.capacity_m3 if vehicle.capacity_m3 else 0.0
         cost = vehicle.fixed_cost + vehicle.cost_per_km * distance
-        # F7: the GA only needs the feasibility verdict, never the LIFO
-        # exception list -- computing it here would be pure waste, repeated
-        # per slot/individual/generation.
-        placement_ok = attempt_placement(ordered_parcels, vehicle, collect_exceptions=False) is not None
+
+        # Per-parcel dim/hazmat/refrig checks (constraints 4-6), computed
+        # exactly once per slot and reused below both for the B.2
+        # short-circuit decision and for evaluate_individual's g_dim/
+        # g_hazmat/g_refrig accumulation -- previously each parcel was
+        # checked twice (once here, once again in evaluate_individual).
+        parcel_objs = [self.parcels[i] for i in parcel_indices]
+        dim_violations = sum(1 for p in parcel_objs if not _dimension_fits(p, vehicle))
+        hazmat_violations = sum(1 for p in parcel_objs if not _hazmat_ok(p, vehicle))
+        refrig_violations = sum(1 for p in parcel_objs if not _refrigeration_ok(p, vehicle))
+
+        # B.2: cheapest-first short-circuit -- skip the (expensive) placement
+        # attempt entirely when the slot is already infeasible on grounds
+        # that are cheap to check, and report the stacking constraint as
+        # violated directly.
+        self._placement_attempts += 1
+        cheaply_infeasible = (
+            len(parcel_indices) > vehicle.max_parcels
+            or weight > vehicle.capacity_kg
+            or volume > vehicle.capacity_m3
+            or dim_violations > 0
+            or hazmat_violations > 0
+            or refrig_violations > 0
+        )
+        if cheaply_infeasible:
+            self._short_circuit_count += 1
+            placement_ok = False
+        else:
+            # F7: the GA only needs the feasibility verdict, never the LIFO
+            # exception list -- computing it here would be pure waste,
+            # repeated per slot/individual/generation.
+            placement_ok = attempt_placement(ordered_parcels, vehicle, collect_exceptions=False) is not None
 
         result = {
             "weight": weight,
@@ -427,7 +504,11 @@ class AssignmentProblem(Problem):
             "utilization": max(util_weight, util_volume),
             "ordered_parcels": ordered_parcels,
             "total_wait_minutes": total_wait_minutes,
+            "return_time_minutes": return_time_minutes,
             "placement_ok": placement_ok,
+            "dim_violations": dim_violations,
+            "hazmat_violations": hazmat_violations,
+            "refrig_violations": refrig_violations,
         }
         self._slot_cache[cache_key] = result
         if len(self._slot_cache) > SLOT_CACHE_MAXSIZE:
@@ -438,7 +519,7 @@ class AssignmentProblem(Problem):
         slots, type_of_slot = decode(row, self.n, self.K)
 
         used_metrics = []
-        g_weight = g_volume = g_count = g_dim = g_hazmat = g_refrig = g_stack = 0.0
+        g_weight = g_volume = g_count = g_dim = g_hazmat = g_refrig = g_stack = g_shift = 0.0
 
         for slot_idx, parcel_indices in slots.items():
             type_idx = int(np.clip(type_of_slot[slot_idx], 0, self.T - 1))
@@ -451,17 +532,19 @@ class AssignmentProblem(Problem):
             g_volume += max(0.0, m["volume"] - vehicle.capacity_m3)
             g_count += max(0.0, m["count"] - vehicle.max_parcels)
 
-            parcel_objs = [self.parcels[i] for i in parcel_indices]
-            for p in parcel_objs:
-                if not _dimension_fits(p, vehicle):
-                    g_dim += 1.0
-                if not _hazmat_ok(p, vehicle):
-                    g_hazmat += 1.0
-                if not _refrigeration_ok(p, vehicle):
-                    g_refrig += 1.0
+            # Computed once in _evaluate_slot and cached there -- see that
+            # method's docstring note on why these must not be
+            # recomputed per parcel here as well.
+            g_dim += m["dim_violations"]
+            g_hazmat += m["hazmat_violations"]
+            g_refrig += m["refrig_violations"]
 
             if not m["placement_ok"]:
-                g_stack += len(parcel_objs)
+                g_stack += m["count"]
+
+            # A.6: the vehicle's tour must return to depot within its own
+            # shift window (available_until), including accumulated wait.
+            g_shift += max(0.0, m["return_time_minutes"] - minutes(vehicle.available_until))
 
         # Utilization is intentionally averaged per *vehicle*, not weighted
         # by parcel count — it answers "how well-loaded is a typical
@@ -483,7 +566,8 @@ class AssignmentProblem(Problem):
         # parcel, and its type gene is always in [0, T-1] by construction
         # of `xu`. Kept as an explicit always-zero column so
         # `n_ieq_constr` matches the spec's numbered constraint list.
-        g = np.array([g_weight, g_volume, g_count, g_dim, g_hazmat, g_refrig, g_stack, 0.0])
+        # Constraint 9 (Fix Pass 2 A.6): vehicle shift-window compliance.
+        g = np.array([g_weight, g_volume, g_count, g_dim, g_hazmat, g_refrig, g_stack, 0.0, g_shift])
         return f, g
 
 

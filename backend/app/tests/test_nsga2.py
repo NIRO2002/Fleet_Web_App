@@ -58,7 +58,7 @@ def test_early_arrival_waits_instead_of_failing_compliance():
     vehicle = _test_vehicle_spec()
     stops = [_FakeParcel(DEPOT_LAT + 0.001 * i, DEPOT_LON, "09:00", "17:00") for i in range(1, 4)]
 
-    compliance, flags, wait_minutes = schedule_time_window_compliance(stops, vehicle, config)
+    compliance, flags, wait_minutes, _return_time = schedule_time_window_compliance(stops, vehicle, config)
 
     assert compliance == 1.0
     assert flags == [True, True, True]
@@ -70,17 +70,17 @@ def test_late_arrival_is_genuinely_non_compliant():
     vehicle = _test_vehicle_spec()
     stops = [_FakeParcel(DEPOT_LAT, DEPOT_LON, "09:00", "17:00")]
 
-    compliance, flags, _wait_minutes = schedule_time_window_compliance(stops, vehicle, config)
+    compliance, flags, _wait_minutes, _return_time = schedule_time_window_compliance(stops, vehicle, config)
 
     assert compliance == 1.0  # sanity: co-located stop, departure already inside the window
     late_stops = [_FakeParcel(DEPOT_LAT, DEPOT_LON, "09:00", "09:31")]  # window closes right after depot departure + travel
-    compliance, flags, _wait_minutes = schedule_time_window_compliance(late_stops, vehicle, config)
+    compliance, flags, _wait_minutes, _return_time = schedule_time_window_compliance(late_stops, vehicle, config)
     assert compliance == 1.0
 
     # A window that has already closed by the time the (co-located, zero
     # travel-time) vehicle departs must fail compliance.
     closed_window = [_FakeParcel(DEPOT_LAT, DEPOT_LON, "08:00", "09:00")]
-    compliance, flags, _wait_minutes = schedule_time_window_compliance(closed_window, vehicle, config)
+    compliance, flags, _wait_minutes, _return_time = schedule_time_window_compliance(closed_window, vehicle, config)
     assert compliance == 0.0
     assert flags == [False]
 
@@ -94,7 +94,7 @@ def test_waiting_consumes_shift_time_and_can_cause_a_later_stop_to_run_late():
     stop1 = _FakeParcel(DEPOT_LAT, DEPOT_LON, "09:00", "17:00")  # depot-co-located: arrives 08:00, waits to 09:00
     stop2 = _FakeParcel(DEPOT_LAT, DEPOT_LON, "09:00", "09:02")  # closes 2 minutes after stop1's window opens
 
-    compliance, flags, wait_minutes = schedule_time_window_compliance([stop1, stop2], vehicle, config)
+    compliance, flags, wait_minutes, _return_time = schedule_time_window_compliance([stop1, stop2], vehicle, config)
 
     assert flags[0] is True
     assert wait_minutes == 60.0
@@ -472,3 +472,50 @@ def test_load_plan_and_parcel_assignments_are_persisted(db_session):
         load_sequences = sorted(a.load_sequence for a in vehicle_assignments)
         assert delivery_sequences == list(range(1, len(vehicle_assignments) + 1))
         assert load_sequences == list(range(1, len(vehicle_assignments) + 1))
+
+
+def test_optimize_load_marks_parcels_planned_and_records_carryover(db_session):
+    """Fix Pass 2 item C gate, end to end: PENDING parcels across two dates
+    -> planning the later date pulls in the earlier date's leftovers via
+    get_planning_instance -> optimize_load marks every planned parcel
+    PLANNED with plan_id set, and the persisted LoadPlan records how many
+    were carryover."""
+    from app.models.load_plan import LoadPlan
+    from app.models.parcel import Parcel
+    from app.services.clustering_common import get_planning_instance
+
+    _seed_catalog(db_session, [("SMALL", 30.0, 0.3), ("BIG", 200.0, 2.0)])
+
+    earlier_date = date(2026, 8, 19)
+    leftover_payload = ParcelIn(
+        parcel_id="LEFTOVER-1", depot_id=DEPOT_ID, delivery_date=earlier_date,
+        latitude=DEPOT_LAT, longitude=DEPOT_LON, weight_kg=2.0, volume_m3=0.01,
+        time_window_start="09:00", time_window_end="17:00", status="PENDING",
+    )
+    upsert_parcel(db_session, leftover_payload)
+
+    today_parcels = _stressed_parcels(db_session, n=5, seed=41)
+
+    parcels = get_planning_instance(db_session, DEPOT_ID, DELIVERY_DATE)
+    db_session.commit()
+    assert {p.parcel_id for p in parcels} == {"LEFTOVER-1"} | {p.parcel_id for p in today_parcels}
+
+    result, _virtual_vehicles = optimize_load(
+        db_session, parcels,
+        depot_id=DEPOT_ID, depot_lat=DEPOT_LAT, depot_lon=DEPOT_LON, delivery_date=DELIVERY_DATE,
+        seed=41, config=FAST_CONFIG,
+    )
+
+    for parcel in parcels:
+        db_session.refresh(parcel)
+        assert parcel.status == "PLANNED"
+        assert parcel.plan_id == result["plan_id"]
+
+    leftover = db_session.query(Parcel).filter_by(parcel_id="LEFTOVER-1").first()
+    assert leftover.carried_over_from_date == earlier_date
+    assert leftover.delivery_date == DELIVERY_DATE
+
+    plan = db_session.query(LoadPlan).filter_by(plan_id=result["plan_id"]).first()
+    assert plan.n_carryover_parcels == 1
+    assert plan.run_manifest is not None
+    assert "git_commit_sha" in plan.run_manifest
