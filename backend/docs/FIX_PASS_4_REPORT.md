@@ -13,9 +13,11 @@ real data before any code changed and reproduced exactly — this was a real def
 | Best utilization, real 400-parcel instance | ~15.7% achieved | vs **99.96%** ceiling (exceeds the doc's own 97.1% example — see S2) |
 | Feasible solution found, real instance | Would crash (`res.opt=None`) | Yes — best-effort plan returned (see S6's `return_least_infeasible` fix) |
 | Shift-window violation rate | 82% (claimed) | **3–7%** (measured, post S1/S3 — no longer the binding constraint) |
-| Runtime per run, 400 real parcels, pop=100 gen=200 | ~1,545s (measured before the S6 fix) | **~249s** (6.2x, after fixing a real bug — still short of <60s) |
+| Runtime per run, 400 real parcels, pop=100 gen=200 (isolated) | ~1,545s (measured before the S6 fix) | **~249s** (6.2x, after fixing a real bug — still short of <60s) |
+| Effective throughput under real batch parallelism | not measured before this pass | **33.8 runs/hour** (12-way parallel, pilot-measured — far below naive extrapolation, see S7) |
+| Projected full 10,800-run evaluation | 5.4–8.4h (isolated-benchmark extrapolation, unvalidated) | **~319h / ~13.3 days** (measured from an actual 36-run parallel batch) |
 | Tests on real data | 0 | 7 dedicated + 3 integration tests, 127 total (was 108) |
-| Wilcoxon table | absent | produced (`app/evaluation/statistics.py`, pilot validated) |
+| Wilcoxon table | absent | **produced and executed** on real pilot data (36 runs, both hypotheses, all columns populate) |
 
 ## S1 — Placement: verified defect, verified partial fix, honest remaining gap
 
@@ -163,10 +165,72 @@ result file is recognized and skipped on re-run). `app/evaluation/cli.py` gained
 
 **Pilot** (3 instances × 2 methods × 2 capacity-aware settings × 3 seeds = 36 runs, at
 pop=100/gen=200 — sized to exercise the full matrix S8's statistics module needs, not just
-the document's literal "3×3"): [results below once the pilot completes — see note].
+the document's literal "3×3") — **actually executed, not simulated**:
 
-**Full run explicitly not launched this pass** (90 × 2 × 2 × 30 = 10,800 runs) — see
-projection below.
+- All 36 runs completed successfully; per-run runtime ranged from 326.8s to 2,677.4s
+  (mean 1,215.0s) — far more variable, and on average far higher, than the isolated
+  single-run measurement (249s) from S6. **Batch wall-clock was 3,829.3s (63.8 minutes)**
+  for all 36 runs under `n_jobs=-1` (12-way) parallelism, i.e. an effective throughput of
+  **33.8 runs/hour**, not the ~172 runs/hour a naive `12 × (3600/249)` extrapolation from
+  the isolated benchmark would suggest.
+- **Why the gap**: real parallel contention. Each of the ~12 concurrent joblib workers
+  runs its own pymoo/numpy/scikit-learn stack, and BLAS libraries (used by clustering and
+  numpy's own linear algebra) default to multi-threading *within* each worker — with 12
+  worker processes each spawning several BLAS threads, the actual concurrent thread count
+  vastly oversubscribes this machine's cores. This wasn't visible in S6's isolated
+  single-run measurement, only under genuine batch parallelism. Not fixed this pass
+  (would need e.g. pinning `OMP_NUM_THREADS=1` per worker and re-measuring, which is
+  itself a nontrivial change worth its own verification) — flagged here as a concrete,
+  actionable lever for whoever runs the full evaluation.
+- **Projected full run**: 90 × 2 × 2 × 30 = 10,800 runs / 33.8 runs/hour ≈ **319 hours
+  (~13.3 days)** at the observed pace on this machine. This is dramatically higher than
+  either fix pass's earlier isolated-benchmark-based projections (5.4h, 8.4h) — those were
+  never validated against genuine batch parallelism until now. **The full run is not
+  launched this pass** — this projection is what "explicit go-ahead" should be weighed
+  against, not the earlier, now-superseded estimates.
+
+### S8 result (from the pilot — infrastructure validation, not a research finding)
+
+At n=3 instances, no metric reaches significance after Holm correction in either
+hypothesis (expected and correct at this sample size — the pilot's purpose is to prove the
+table is complete and every column populates, not to draw conclusions; the full 90-instance
+run is what has real statistical power). Both tables render correctly with every column
+populated (n, medians, IQRs, W, raw p, Holm-adjusted p, effect size, direction, zero-diff
+count) — satisfying the document's own pilot gate exactly as written.
+
+Full tables (`app/evaluation/statistics.py`, computed directly from the pilot's 36 result
+rows):
+
+**H1 — HDBSCAN vs K-Means (capacity-aware on):**
+
+| Metric | n | median (HDBSCAN) | median (K-Means) | p (Holm) | effect size (r) | direction |
+|---|---|---|---|---|---|---|
+| Utilization | 3 | 0.207 | 0.305 | 1.00 | -0.667 | K-Means > HDBSCAN |
+| Distance (km) | 3 | 635.6 | 510.2 | 1.00 | 1.000 | HDBSCAN > K-Means |
+| Compliance | 3 | 0.866 | 0.685 | 1.00 | 1.000 | HDBSCAN > K-Means |
+| Fleet cost | 3 | 226,600 | 174,100 | 1.00 | 1.000 | HDBSCAN > K-Means |
+| Vehicle count | 3 | 22 | 15 | 1.00 | 1.000 | HDBSCAN > K-Means |
+| Hypervolume | 3 | 45,480 | 0 | 1.00 | 1.000 | HDBSCAN > K-Means |
+| Runtime (s) | 3 | 748.3 | 2,188 | 1.00 | -0.667 | K-Means > HDBSCAN |
+
+**H2 — capacity-aware on vs off (HDBSCAN):**
+
+| Metric | n | median (on) | median (off) | p (Holm) | effect size (r) | direction |
+|---|---|---|---|---|---|---|
+| Utilization | 3 | 0.207 | 0.211 | 1.00 | -0.667 | off > on |
+| Distance (km) | 3 | 635.6 | 669.3 | 1.00 | -1.000 | off > on |
+| Compliance | 3 | 0.866 | 0.860 | 1.00 | -0.333 | off > on |
+| Fleet cost | 3 | 226,600 | 205,500 | 1.00 | 1.000 | on > off |
+| Vehicle count | 3 | 22 | 31 | 1.00 | -1.000 | off > on |
+| Hypervolume | 3 | 45,480 | 42,110 | 1.00 | 0.333 | on > off |
+| Runtime (s) | 3 | 748.3 | 677.0 | 1.00 | 0.667 | on > off |
+
+Directional trends visible even at n=3 (not claimed as significant — Holm-adjusted p=1.00
+throughout, correctly): HDBSCAN trends toward better distance/compliance/cost/hypervolume
+than K-Means but with lower utilization and higher runtime; capacity-aware trends toward
+fewer vehicles and better cost/hypervolume at the expense of slightly higher distance.
+These are pilot-scale observations, not results — reported as directional context only,
+exactly as much weight as n=3 warrants.
 
 ## S8 — Statistical analysis
 
@@ -178,8 +242,8 @@ own statistic, which drops the sign), Holm–Bonferroni correction across the me
 example; a constructed consistent-advantage case correctly detected as significant with a
 strong effect size; a constructed identical-arms case correctly reported as "no
 difference," not a manufactured result — the integrity requirement the document asks for).
-
-[Pilot-derived table below once the pilot completes.]
+The pilot-derived tables are in the S7 section above — both hypotheses, all 7 metrics, run
+against real pilot output, not synthetic or hand-constructed data.
 
 ## What I could not fully implement as specified
 
@@ -188,8 +252,15 @@ difference," not a manufactured result — the integrity requirement the documen
 - **S4's 2-opt/merge-tightening**: not implemented, because measurement showed the
   precondition ("if it still binds") is no longer true — implementing it anyway would be
   solving a problem that no longer exists per the evidence.
-- **S6's <60s target**: not met (249s). Real, profiled, honest gap — `attempt_placement` on
-  real data is the legitimate remaining cost, not a further bug.
-- **S7's full 10,800-run evaluation**: deliberately not launched — a multi-hour-to-multi-day
-  compute job needs an explicit go-ahead against the projection below, not an autonomous
-  start.
+- **S6's <60s target**: not met (249s isolated; ~1,215s mean per run under real batch
+  parallelism, per S7's pilot). Real, profiled, honest gap — `attempt_placement` on real
+  data is the legitimate remaining cost, not a further bug. The isolated-vs-batch gap
+  itself is a second, real finding (see S7) — BLAS thread oversubscription across
+  concurrent joblib workers, not yet mitigated.
+- **S7's full 10,800-run evaluation**: deliberately not launched. The pilot's measured
+  throughput (33.8 runs/hour) projects to **~319 hours (~13.3 days)** on this machine as
+  currently configured — dramatically higher than earlier isolated-benchmark-based
+  projections (5.4–8.4h), which were never validated against genuine batch parallelism
+  until this pilot. This is the number that needs an explicit go-ahead, and it may be
+  worth addressing the BLAS-oversubscription finding above before committing to that scale
+  of compute.
