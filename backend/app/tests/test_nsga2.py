@@ -11,6 +11,8 @@ from datetime import date
 
 import numpy as np
 
+from app.db.seed_vehicle_types import VEHICLE_TYPES
+from app.evaluation.real_data import real_instance_payloads
 from app.optimization.assignment_problem import (
     AssignmentConfig,
     AssignmentProblem,
@@ -272,6 +274,165 @@ def test_overflow_repair_decodes_the_row_only_once_per_individual(monkeypatch):
         assert weight <= vehicle.capacity_kg + 1e-9, "repair must still leave every slot within capacity"
 
 
+def test_overflow_repair_fixes_count_violations():
+    """Fix Pass 4 S3.2: a slot with more parcels than its type's
+    max_parcels moves the excess to a compatible slot."""
+    import app.optimization.assignment_problem as ap
+
+    tiny_count_vehicle = VehicleTypeSpec(
+        code="TINY_COUNT", capacity_kg=1000.0, capacity_m3=1000.0,
+        cargo_length_cm=500.0, cargo_width_cm=500.0, cargo_height_cm=500.0,
+        max_parcels=3, max_stack_layers=4, fixed_cost=0.0, cost_per_km=0.0,
+        avg_speed_kmh=30.0, has_tail_lift=False,
+    )
+    config = AssignmentConfig(depot_lat=DEPOT_LAT, depot_lon=DEPOT_LON)
+    catalog = (tiny_count_vehicle,)
+    n = 10
+    parcels = [
+        ParcelIn(
+            parcel_id=f"P{i}", latitude=DEPOT_LAT, longitude=DEPOT_LON, weight_kg=0.1, volume_m3=0.001,
+            time_window_start="00:00", time_window_end="23:59",
+        )
+        for i in range(n)
+    ]
+    problem = ap.AssignmentProblem(parcels, catalog, config, n_slots=5)
+    row = np.zeros(problem.n + problem.K, dtype=int)
+    row[:n] = 0  # dump all 10 into slot 0, which only allows 3
+
+    ap.OverflowRepair()._repair_row(problem, row)
+
+    final_slots, final_types = ap.decode(row, problem.n, problem.K)
+    for slot_idx, indices in final_slots.items():
+        vehicle = catalog[int(np.clip(final_types[slot_idx], 0, problem.T - 1))]
+        assert len(indices) <= vehicle.max_parcels, f"slot {slot_idx} still exceeds max_parcels after repair"
+    total_after = sum(len(indices) for indices in final_slots.values())
+    assert total_after == n, "repair must not lose or duplicate parcels"
+
+
+def test_overflow_repair_fixes_dimensional_misfits():
+    """Fix Pass 4 S3.2: a parcel too large for its slot's type moves to a
+    slot whose type accepts it, or that slot's type gets upgraded."""
+    import app.optimization.assignment_problem as ap
+
+    small_bay_vehicle = VehicleTypeSpec(
+        code="SMALL_BAY", capacity_kg=1000.0, capacity_m3=1000.0,
+        cargo_length_cm=30.0, cargo_width_cm=30.0, cargo_height_cm=30.0,
+        max_parcels=100, max_stack_layers=1, fixed_cost=0.0, cost_per_km=0.0,
+        avg_speed_kmh=30.0, has_tail_lift=False,
+    )
+    big_bay_vehicle = VehicleTypeSpec(
+        code="BIG_BAY", capacity_kg=1000.0, capacity_m3=1000.0,
+        cargo_length_cm=300.0, cargo_width_cm=300.0, cargo_height_cm=300.0,
+        max_parcels=100, max_stack_layers=1, fixed_cost=0.0, cost_per_km=0.0,
+        avg_speed_kmh=30.0, has_tail_lift=False,
+    )
+    config = AssignmentConfig(depot_lat=DEPOT_LAT, depot_lon=DEPOT_LON)
+    catalog = (small_bay_vehicle, big_bay_vehicle)
+    # one small parcel (fits SMALL_BAY) + one oversized parcel (needs BIG_BAY)
+    parcels = [
+        ParcelIn(
+            parcel_id="SMALL", latitude=DEPOT_LAT, longitude=DEPOT_LON, weight_kg=1.0, volume_m3=0.001,
+            time_window_start="00:00", time_window_end="23:59", length_cm=10.0, width_cm=10.0, height_cm=10.0,
+        ),
+        ParcelIn(
+            parcel_id="OVERSIZED", latitude=DEPOT_LAT, longitude=DEPOT_LON, weight_kg=1.0, volume_m3=0.5,
+            time_window_start="00:00", time_window_end="23:59", length_cm=100.0, width_cm=100.0, height_cm=100.0,
+        ),
+    ]
+    problem = ap.AssignmentProblem(parcels, catalog, config, n_slots=2)
+    row = np.zeros(problem.n + problem.K, dtype=int)
+    row[:2] = 0  # both parcels in slot 0, typed SMALL_BAY -- OVERSIZED doesn't fit
+
+    ap.OverflowRepair()._repair_row(problem, row)
+
+    final_slots, final_types = ap.decode(row, problem.n, problem.K)
+    oversized_idx = [p.parcel_id for p in parcels].index("OVERSIZED")
+    oversized_slot = next(s for s, indices in final_slots.items() if oversized_idx in indices)
+    oversized_vehicle = catalog[int(np.clip(final_types[oversized_slot], 0, problem.T - 1))]
+    assert _dimension_fits(parcels[oversized_idx], oversized_vehicle), (
+        "OVERSIZED must end up on a slot/type that actually fits it after repair"
+    )
+
+
+def test_placement_repair_calls_attempt_placement_a_bounded_number_of_times(monkeypatch):
+    """Fix Pass 4 S6 regression guard: `_repair_placement` (S3.2) originally
+    retried `attempt_placement` once per candidate removed, uncapped -- on
+    real data, where a badly-oversized slot can be far past where any small
+    number of drops would succeed, this dominated a full run's wall-clock
+    (~1545s -> ~249s for one 400-real-parcel/pop=100/gen=200 run once
+    capped; see docs/FIX_PASS_4_REPORT.md). `MAX_PLACEMENT_REPAIR_ATTEMPTS`
+    bounds it to a small constant per slot, regardless of slot size."""
+    import app.optimization.assignment_problem as ap
+    import app.optimization.placement as pl
+
+    tiny_bay_vehicle = VehicleTypeSpec(
+        code="TINY_BAY", capacity_kg=10_000.0, capacity_m3=10_000.0,
+        cargo_length_cm=10.0, cargo_width_cm=10.0, cargo_height_cm=10.0,
+        max_parcels=1000, max_stack_layers=1, fixed_cost=0.0, cost_per_km=0.0,
+        avg_speed_kmh=30.0, has_tail_lift=False,
+    )
+    config = AssignmentConfig(depot_lat=DEPOT_LAT, depot_lon=DEPOT_LON)
+    catalog = (tiny_bay_vehicle,)
+    n = 40  # every parcel is individually too large for the 10x10cm bay -- repair can never succeed
+    parcels = [
+        ParcelIn(
+            parcel_id=f"P{i}", latitude=DEPOT_LAT, longitude=DEPOT_LON, weight_kg=0.1, volume_m3=0.001,
+            time_window_start="00:00", time_window_end="23:59",
+            length_cm=50.0, width_cm=50.0, height_cm=50.0,
+        )
+        for i in range(n)
+    ]
+    problem = ap.AssignmentProblem(parcels, catalog, config, n_slots=5)
+    row = np.zeros(problem.n + problem.K, dtype=int)
+    row[:n] = 0
+
+    call_count = {"n": 0}
+    original_attempt_placement = pl.attempt_placement
+
+    def counting_attempt_placement(*args, **kwargs):
+        call_count["n"] += 1
+        return original_attempt_placement(*args, **kwargs)
+
+    monkeypatch.setattr(ap, "attempt_placement", counting_attempt_placement)
+
+    ap.OverflowRepair()._repair_row(problem, row)
+
+    # 1 initial check + at most MAX_PLACEMENT_REPAIR_ATTEMPTS retries, for
+    # this single slot -- regardless of n=40 candidates being available.
+    assert call_count["n"] <= 1 + ap.OverflowRepair.MAX_PLACEMENT_REPAIR_ATTEMPTS
+
+
+def test_warm_start_produces_multiple_rows_and_splits_an_oversized_cluster():
+    """Fix Pass 4 S3.1: no single catalog type fits the whole cluster ->
+    the cluster is split across multiple slots instead of an infeasible
+    row being emitted, and multiple warm-start individuals are produced."""
+    import app.optimization.assignment_problem as ap
+
+    small = VehicleTypeSpec(
+        code="SMALL", capacity_kg=10.0, capacity_m3=10.0,
+        cargo_length_cm=100.0, cargo_width_cm=100.0, cargo_height_cm=100.0,
+        max_parcels=50, max_stack_layers=3, fixed_cost=0.0, cost_per_km=0.0,
+        avg_speed_kmh=30.0, has_tail_lift=False,
+    )
+    catalog = (small,)
+    n = 6
+    parcels = [
+        ParcelIn(
+            parcel_id=f"P{i}", latitude=DEPOT_LAT, longitude=DEPOT_LON, weight_kg=4.0, volume_m3=0.01,
+            time_window_start="00:00", time_window_end="23:59",
+        )
+        for i in range(n)
+    ]  # total weight 24kg -- no single SMALL (10kg) can hold the whole cluster
+    clusters = {0: parcels}
+    K = 6
+
+    rows = ap.warm_start_rows_from_clusters(parcels, clusters, catalog, K)
+
+    assert len(rows) >= 1
+    slot_assignment = rows[0][:n]
+    assert len(set(slot_assignment.tolist())) > 1, "an oversized cluster must be split across multiple slots"
+
+
 def _catalog_pair():
     small = VehicleTypeSpec(
         code="SMALL", capacity_kg=30.0, capacity_m3=0.3, cargo_length_cm=150.0, cargo_width_cm=100.0,
@@ -438,6 +599,31 @@ def test_seed_is_a_real_caller_supplied_parameter(db_session):
     assert front_a == front_b, "same seed must reproduce the same Pareto front"
 
 
+def test_optimize_load_does_not_crash_when_nothing_is_fully_feasible(db_session):
+    """Fix Pass 4 regression guard: pymoo's NSGA2 defaults to
+    `return_least_infeasible=False`, meaning `res.opt`/`res.X`/`res.F`/
+    `res.G` are ALL None whenever not one individual in the entire run was
+    fully feasible -- common on harder real instances (see
+    docs/FIX_PASS_4_REPORT.md), previously crashing `optimize_load` outright
+    with 'NSGA-II produced no result.' Forces genuine infeasibility here
+    (demand far beyond any catalog type's capacity, at a tiny population/
+    generation budget) and asserts a best-effort plan is still returned."""
+    _seed_catalog(db_session, [("TINY", 1.0, 0.01)])
+    parcels = _stressed_parcels(db_session, n=15, seed=5)  # each ~1-8kg, total far exceeds any TINY-only fleet
+    tiny_config = AssignmentConfig(
+        depot_lat=DEPOT_LAT, depot_lon=DEPOT_LON, population=6, generations=2, max_vehicle_slots=3,
+    )
+
+    result, virtual_vehicles = optimize_load(
+        db_session, parcels,
+        depot_id=DEPOT_ID, depot_lat=DEPOT_LAT, depot_lon=DEPOT_LON, delivery_date=DELIVERY_DATE,
+        seed=5, config=tiny_config,
+    )
+
+    assert result["plan_id"]
+    assert virtual_vehicles
+
+
 def test_load_plan_and_parcel_assignments_are_persisted(db_session):
     from app.models.load_plan import LoadPlan
     from app.models.parcel_assignment import ParcelAssignment
@@ -514,3 +700,33 @@ def test_optimize_load_marks_parcels_planned_and_records_carryover(db_session):
     assert plan.n_carryover_parcels == 1
     assert plan.run_manifest is not None
     assert "git_commit_sha" in plan.run_manifest
+
+
+def test_optimize_load_runs_on_a_real_instance_subset(db_session):
+    """Fix Pass 4 item S5: at least one integration test per module runs
+    against real data (data/parcels_sample_36000.csv), not only synthetic --
+    this is what would have caught the priority_level='priority' schema gap
+    and the S1 placement defect, both real-data-only defects that 108
+    synthetic-only-tested passes didn't surface. A 30-parcel subset of the
+    real D-CMB-001/2026-01-05 instance, real 7-row catalog, real
+    conservation/persistence check."""
+    for payload in VEHICLE_TYPES:
+        vehicle_catalog_service.upsert_type(db_session, payload)
+
+    real_depot_id, real_delivery_date = "D-CMB-001", date(2026, 1, 5)
+    payloads = real_instance_payloads("D-CMB-001", "2026-01-05")[:30]
+    parcels = [upsert_parcel(db_session, ParcelIn(**p)) for p in payloads]
+
+    result, virtual_vehicles = optimize_load(
+        db_session, parcels,
+        depot_id=real_depot_id, depot_lat=6.9271, depot_lon=79.8612, delivery_date=real_delivery_date,
+        seed=7, config=FAST_CONFIG,
+    )
+
+    assert result["plan_id"]
+    assert virtual_vehicles
+    total_assigned = sum(vv.parcel_count for vv in virtual_vehicles)
+    assert total_assigned == len(parcels), "every real parcel must end up on exactly one vehicle"
+    for vv in virtual_vehicles:
+        assert vv.used_weight_kg <= vv.capacity_kg + 1e-6
+        assert vv.used_volume_m3 <= vv.capacity_m3 + 1e-6

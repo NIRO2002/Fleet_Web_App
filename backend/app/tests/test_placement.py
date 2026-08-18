@@ -16,9 +16,28 @@ does not reproduce against the current code (the F3 fix below already
 handles it). `test_placement_diagnostic_table_at_1x_2x_3x_4x_floor_area`
 verifies this with a real reportable table rather than re-implementing
 already-working logic.
+
+Fix Pass 4 S1 found (and fixed) a *different* defect, verified against the
+real dataset (`data/parcels_sample_36000.csv`): `_band_placement_order`
+sized its groups to one row's *width*, not a full floor -- on real,
+non-uniform parcel sizes this meant a new group's largest member routinely
+didn't fit any column an earlier group had opened, so it opened fresh floor
+space instead of stacking. Verified real-data failure: the real
+`D-CMB-001/2026-01-05` instance failed at n=65 parcels (105.4% of one
+floor) into a `TRUCK_4T`, despite 6 layers of headroom. Fixed by
+`_placement_order`: stack-eligible parcels (`stackable and not fragile`)
+placed before parcels that would close their column, largest-area-first
+within each group -- see `docs/FIX_PASS_4_REPORT.md`. This is a verified
+improvement, not a complete fix: it resolves the n=65 cliff but the real
+instance still fails to place at n=80 (124.6%), well short of a full
+400-parcel load. The root cause beyond n=80 is structural (see the report)
+and was deliberately not chased further this pass, per the explicit
+direction in `FIX_PASS_4.md`'s S1 to stop and report rather than
+attempt a further redesign.
 """
 import random
 
+from app.evaluation.real_data import real_instance_payloads
 from app.optimization.assignment_problem import VehicleTypeSpec
 from app.optimization.placement import _footprint, attempt_placement
 
@@ -219,12 +238,19 @@ def test_footprint_inflates_imputed_dimensions_by_the_safety_factor():
     assert (imputed_length, imputed_width, imputed_height) == (30.0, 30.0, 30.0)
 
 
-def test_placement_failure_reflects_high_floor_utilization_not_row_abandonment():
-    """F3 regression guard: if row abandonment reappears, placement fails
-    far earlier and leaves most of the floor empty. A real, size-driven
-    failure should instead leave the floor mostly (>70%) full."""
+def test_placement_uses_multiple_layers_not_just_the_floor():
+    """F3/Fix Pass 4 S1 regression guard: with every parcel stackable and 5
+    layers of headroom, placement must genuinely distribute across layers,
+    not collapse onto layer 0 regardless of `max_stack_layers` -- that
+    collapse is exactly the row-abandonment (Fix Pass 1) and
+    band-width-sizing (Fix Pass 4 S1) defects this test would catch.
+
+    Before S1's fix, checking floor (layer-0) utilization alone was the
+    right regression guard, because poor cross-band stacking meant almost
+    every parcel stayed at layer 0 regardless. After S1, legitimate
+    multi-layer stacking means fewer parcels need layer 0 at all, so the
+    right guard is now the layer histogram directly, not floor occupancy."""
     vehicle = _lorry()
-    floor_area = vehicle.cargo_length_cm * vehicle.cargo_width_cm
     rng = random.Random(7)
     parcels = [
         _FakeParcel(
@@ -236,11 +262,15 @@ def test_placement_failure_reflects_high_floor_utilization_not_row_abandonment()
     result = attempt_placement(parcels, vehicle)
 
     assert result is not None
-    floor_occupied = sum(
-        p.length_cm * p.width_cm for p in parcels if result.placements[p.parcel_id].layer == 0
+    layer_counts: dict[int, int] = {}
+    for placement in result.placements.values():
+        layer_counts[placement.layer] = layer_counts.get(placement.layer, 0) + 1
+    layer_0_fraction = layer_counts.get(0, 0) / len(parcels)
+    assert layer_0_fraction < 0.70, (
+        f"{layer_0_fraction:.1%} of parcels are stuck at layer 0 with 5 layers of headroom and "
+        f"every parcel stackable — looks like row abandonment. layers={dict(sorted(layer_counts.items()))}"
     )
-    utilization = floor_occupied / floor_area
-    assert utilization > 0.70, f"floor utilization {utilization:.1%} is too low — looks like row abandonment"
+    assert max(layer_counts) >= 2, "expected genuine use of at least 3 layers with this much headroom"
 
 
 def _realistic_mix_parcel(pid, rng, fragile_p=0.2, non_stackable_p=0.2):
@@ -355,3 +385,76 @@ def test_bike_never_stacks_a_parcel_above_the_floor():
 
     assert result is not None
     assert all(p.layer == 0 for p in result.placements.values()), "no parcel should ever land above the floor on BIKE"
+
+
+def _real_fake_parcel(payload: dict):
+    from types import SimpleNamespace
+
+    return SimpleNamespace(
+        parcel_id=payload["parcel_id"],
+        length_cm=payload["length_cm"], width_cm=payload["width_cm"], height_cm=payload["height_cm"],
+        weight_kg=payload["weight_kg"], volume_m3=payload["volume_m3"],
+        stackable=payload["stackable"], fragile=payload["fragile"],
+        max_stack_weight_kg=payload["max_stack_weight_kg"],
+        loading_orientation_fixed=payload["loading_orientation_fixed"],
+        dimensions_imputed=False,
+        latitude=payload["latitude"], longitude=payload["longitude"],
+        time_window_start=payload["time_window_start"], time_window_end=payload["time_window_end"],
+        two_person_lift=payload["two_person_lift"],
+    )
+
+
+def test_placement_layers_on_real_instance():
+    """Fix Pass 4 S1 gate: the real D-CMB-001/2026-01-05 instance into the
+    real TRUCK_4T catalog row. Reports the layer histogram at increasing n
+    up to the first failure -- the doc's own acceptance signal is that the
+    histogram shows genuine multi-layer use, not that every n up to 400
+    must succeed.
+
+    Verified improvement (regression guard): n=65 (105.4% of one floor) now
+    succeeds -- it failed before this pass's fix, with the exact
+    attribute-isolation signature confirmed against this same real data
+    (see docs/FIX_PASS_4_REPORT.md).
+
+    NOT asserted: n=200 (303.5%) succeeding. It doesn't, on real data, after
+    this fix. Confirmed via direct prototyping against this same instance
+    that the remaining gap is structural (too many fragile/non-stackable
+    parcels relative to how many columns the floor opens -- each one
+    permanently closes a column when it stacks) and not an ordering
+    artifact fixable by further sort-order tweaks. Per FIX_PASS_4.md's own
+    S1 instruction, this is reported rather than chased with a further
+    redesign this pass."""
+    vehicle = _truck_4t()
+    floor_area = vehicle.cargo_length_cm * vehicle.cargo_width_cm
+    payloads = real_instance_payloads("D-CMB-001", "2026-01-05")
+
+    first_fail_n = None
+    for n in (20, 60, 65, 80, 100, 150, 200, 300, 400):
+        sub = payloads[:n]
+        parcels = [_real_fake_parcel(p) for p in sub]
+        ratio = sum(p.length_cm * p.width_cm for p in parcels) / floor_area
+        result = attempt_placement(parcels, vehicle)
+
+        if result is None:
+            print(f"  n={n:4d} floor={ratio*100:6.1f}% -> FAIL")
+            if first_fail_n is None:
+                first_fail_n = n
+            continue
+
+        layer_counts: dict[int, int] = {}
+        for placement in result.placements.values():
+            layer_counts[placement.layer] = layer_counts.get(placement.layer, 0) + 1
+        layer_0_fraction = layer_counts.get(0, 0) / len(parcels)
+        print(f"  n={n:4d} floor={ratio*100:6.1f}% -> OK  layers={dict(sorted(layer_counts.items()))}")
+
+        if n == 65:
+            assert result is not None, "regression: the verified n=65/105.4% fix must hold"
+        if n >= 60:
+            assert layer_0_fraction < 0.90, (
+                f"n={n}: {layer_0_fraction:.1%} of parcels stuck at layer 0 -- "
+                f"the fix isn't producing genuine multi-layer use. layers={layer_counts}"
+            )
+
+    assert first_fail_n is not None and first_fail_n > 65, (
+        "expected the verified improvement to push the failure point past the old n=65 cliff"
+    )

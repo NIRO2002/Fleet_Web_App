@@ -22,13 +22,23 @@ should attract a cost/feasibility penalty upstream (assignment_problem.py) —
 this module only decides *where* a parcel goes, not whether the vehicle is
 an appropriate choice for it.
 
-Floor packing is First-Fit-Decreasing-Height shelf packing (see
-`_band_placement_order`): load-order parcels are grouped into delivery-stop
-bands (each band roughly one row's worth of width), and *within* a band,
-sorted largest-footprint-first so the row that band opens is sized by its
-largest member. This reorders placement *within* a band only — bands
-themselves are still visited in load order, so the deepest-first LIFO
-relationship *between* bands is untouched.
+Floor/stack packing is First-Fit-Decreasing-Height shelf packing with a
+stackability-aware placement order (see `_placement_order`, Fix Pass 4 S1):
+parcels able to be stacked on (`stackable and not fragile`) are placed
+before parcels that cannot (fragile or non-stackable), and within each of
+those two groups, largest-footprint-area-first. This replaces an earlier
+row-width-sized "band" grouping that, on real (non-uniform-size) parcel
+data, capped effective capacity at roughly one floor's worth regardless of
+`max_stack_layers` -- see `docs/FIX_PASS_4_REPORT.md` for the diagnosis and
+the verified fix. Placing stackable parcels first lets them build up tall
+columns before any parcel that would permanently close a column (a fragile
+or non-stackable parcel can be supported, but cannot support anything
+placed after it) gets a chance to cap one prematurely. This reorders
+placement globally within a vehicle, not within any narrower grouping — the
+existing LIFO-exception audit (`_lifo_exceptions`) is what records where the
+physical result deviates from pure delivery order, rather than the ordering
+enforcing strict delivery order during packing itself; that is unchanged
+from before this pass.
 """
 from dataclasses import dataclass, field
 from math import cbrt
@@ -116,7 +126,7 @@ def _get_footprint(parcel, footprint_cache: dict | None) -> tuple[float, float, 
     """Same as `_footprint`, but memoized per `id(parcel)` when a cache dict
     is supplied. Profiling a full GA run showed a single parcel's footprint
     recomputed up to ~5 times per `attempt_placement` call (once each from
-    `_fits_bay_at_all`, `_band_placement_order`, `attempt_placement` itself,
+    `_fits_bay_at_all`, `_placement_order`, `attempt_placement` itself,
     `_try_stack`, and whichever of `_place_in_open_rows`/`_open_new_row` is
     tried) -- `_footprint` is pure given a parcel, so this is wasted
     recomputation, not a correctness requirement. Scoped to one
@@ -182,51 +192,50 @@ def _try_stack(
     return None
 
 
-def _footprint_length(parcel, footprint_cache: dict | None = None) -> float:
-    """The longer of a parcel's two floor-orientation sides — used only to
-    order parcels within a band (see `_band_placement_order`), so the
-    largest parcel in a band is the one that opens (and therefore sizes)
-    the row."""
+def _footprint_area(parcel, footprint_cache: dict | None = None) -> float:
     length, width, _height = _get_footprint(parcel, footprint_cache)
-    return max(length, width)
+    return length * width
 
 
-def _band_placement_order(
+def _blocks_stacking(parcel) -> bool:
+    """True if this parcel, once placed, closes its column to anything
+    placed after it (`column.open_for_stacking = stackable and not
+    fragile`, unchanged below) -- i.e. a fragile or non-stackable parcel."""
+    stackable = parcel.stackable if parcel.stackable is not None else True
+    return (not stackable) or bool(parcel.fragile)
+
+
+def _placement_order(
     parcels_in_delivery_order: list, load_order: list[int], vehicle, footprint_cache: dict | None = None
 ) -> list[int]:
-    """Partitions `load_order` into delivery-stop bands — a band is a
-    maximal run of load-order parcels whose combined (conservative) width
-    fills roughly one row — then sorts *within* each band by descending
-    footprint length before concatenating the bands back together.
+    """Fix Pass 4 S1: parcels that can be stacked on (`stackable and not
+    fragile`) are placed before parcels that cannot -- within each group,
+    largest footprint area first.
 
-    Bands are still visited in load order, so band 0 is placed deepest and
-    later bands land progressively nearer the doors: LIFO is preserved
-    *between* bands. Sorting within a band does not disturb that, since
-    sibling items in a band all land in the same depth-slice regardless of
-    which order they're placed in — it only changes which of them opens the
-    row (the largest, so no smaller band-mate is later forced into a
-    premature new row)."""
-    bands: list[list[int]] = []
-    current: list[int] = []
-    current_width = 0.0
-    for idx in load_order:
-        parcel = parcels_in_delivery_order[idx]
-        length, width, _height = _get_footprint(parcel, footprint_cache)
-        narrowest = min(w for _l, w in _orientations(parcel, length, width))
-        if current and current_width + narrowest > vehicle.cargo_width_cm:
-            bands.append(current)
-            current, current_width = [], 0.0
-        current.append(idx)
-        current_width += narrowest
-    if current:
-        bands.append(current)
+    Replaces the earlier row-width-sized "band" grouping (see
+    `docs/FIX_PASS_4_REPORT.md` for the diagnosis): sizing groups to one
+    row's width meant a new group's largest member routinely didn't fit any
+    column opened by an earlier, differently-sized group, so it opened a
+    fresh floor column instead of stacking -- collapsing effective capacity
+    to roughly one floor's worth regardless of `max_stack_layers`.
 
-    order: list[int] = []
-    for band in bands:
-        order.extend(
-            sorted(band, key=lambda i: -_footprint_length(parcels_in_delivery_order[i], footprint_cache))
-        )
-    return order
+    Placing all stack-eligible parcels first, largest-area first, lets them
+    build up tall columns via the existing `_try_stack`-first logic in
+    `attempt_placement` before any column-closing (fragile/non-stackable)
+    parcel gets a turn to cap one prematurely. This is a global reordering
+    within the vehicle, not a narrower per-group one -- LIFO is not
+    strictly preserved by construction (as it wasn't under band grouping
+    either); `_lifo_exceptions` records where the physical result deviates
+    from delivery order."""
+    stack_eligible = [i for i in load_order if not _blocks_stacking(parcels_in_delivery_order[i])]
+    blocked = [i for i in load_order if _blocks_stacking(parcels_in_delivery_order[i])]
+
+    def by_area_desc(idx: int) -> float:
+        return -_footprint_area(parcels_in_delivery_order[idx], footprint_cache)
+
+    stack_eligible.sort(key=by_area_desc)
+    blocked.sort(key=by_area_desc)
+    return stack_eligible + blocked
 
 
 def _place_in_open_rows(parcel, rows: list[_Row], vehicle, footprint_cache: dict | None = None) -> _Column | None:
@@ -324,7 +333,7 @@ def attempt_placement(
             return None
 
     load_order = list(range(n - 1, -1, -1))  # last-delivered first
-    placement_order = _band_placement_order(parcels_in_delivery_order, load_order, vehicle, footprint_cache)
+    placement_order = _placement_order(parcels_in_delivery_order, load_order, vehicle, footprint_cache)
 
     columns: list[_Column] = []
     rows: list[_Row] = []

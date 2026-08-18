@@ -305,15 +305,11 @@ def _assert_shift_window(parcels_by_id, assignments, catalog_by_code, vehicle_by
         )
 
 
-@pytest.mark.parametrize("seed", range(N_SEEDS))
-def test_feasibility_invariants_hold(db_session, seed):
-    _seed_real_catalog(db_session)
-    parcels = _build_instance(db_session, seed)
-
+def _assert_all_invariants(db_session, parcels, config, seed, depot_id, depot_lat, depot_lon, delivery_date):
     result, virtual_vehicles = optimize_load(
         db_session, parcels,
-        depot_id=DEPOT_ID, depot_lat=DEPOT_LAT, depot_lon=DEPOT_LON, delivery_date=DELIVERY_DATE,
-        seed=seed, config=INVARIANT_CONFIG,
+        depot_id=depot_id, depot_lat=depot_lat, depot_lon=depot_lon, delivery_date=delivery_date,
+        seed=seed, config=config,
     )
 
     plan = db_session.query(LoadPlan).filter_by(plan_id=result["plan_id"]).first()
@@ -334,4 +330,33 @@ def test_feasibility_invariants_hold(db_session, seed):
     _assert_load_order_completeness(assignments)
     _assert_lifo_consistency(assignments, load_order_exceptions_by_vehicle)
     _assert_catalog_fidelity(virtual_vehicles, catalog_by_code)
-    _assert_shift_window(parcels_by_id, assignments, catalog_by_code, vehicle_by_id, INVARIANT_CONFIG)
+    _assert_shift_window(parcels_by_id, assignments, catalog_by_code, vehicle_by_id, config)
+
+
+@pytest.mark.parametrize("seed", range(N_SEEDS))
+def test_feasibility_invariants_hold(db_session, seed):
+    _seed_real_catalog(db_session)
+    parcels = _build_instance(db_session, seed)
+    _assert_all_invariants(
+        db_session, parcels, INVARIANT_CONFIG, seed,
+        depot_id=DEPOT_ID, depot_lat=DEPOT_LAT, depot_lon=DEPOT_LON, delivery_date=DELIVERY_DATE,
+    )
+
+
+def test_feasibility_invariants_hold_on_a_real_instance_subset(db_session):
+    """Fix Pass 4 item S5: the same 13 invariants, against real data (a
+    40-parcel subset of D-CMB-001/2026-01-05) instead of synthetic --
+    real parcels' handling-attribute correlations (e.g. non-stackable
+    parcels tending to be larger/heavier) aren't reproduced by the
+    synthetic generator's independent random draws, so this is a
+    genuinely different check, not a duplicate of the seeded-loop above."""
+    from app.evaluation.real_data import real_instance_payloads
+
+    _seed_real_catalog(db_session)
+    payloads = real_instance_payloads("D-CMB-001", "2026-01-05")[:40]
+    parcels = [upsert_parcel(db_session, ParcelIn(**p)) for p in payloads]
+
+    _assert_all_invariants(
+        db_session, parcels, INVARIANT_CONFIG, seed=0,
+        depot_id="D-CMB-001", depot_lat=6.9271, depot_lon=79.8612, delivery_date=date(2026, 1, 5),
+    )

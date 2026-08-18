@@ -12,7 +12,10 @@ from sqlalchemy.pool import StaticPool
 
 from app.db.database import Base
 from app.db.session import get_db
+from app.evaluation.real_data import real_instance_payloads
 from app.evaluation.synthetic_data import generate_synthetic_parcels
+from app.schemas.parcel import ParcelIn
+from app.services.data_service import upsert_parcel
 
 
 @pytest.fixture()
@@ -86,3 +89,19 @@ def parcel_factory():
         )
 
     return _factory
+
+
+@pytest.fixture()
+def real_instance(db_session):
+    """Fix Pass 4 item S5: loads one real (depot_id, delivery_date) instance
+    from `data/parcels_sample_36000.csv` (via `app.evaluation.real_data`,
+    which caches the CSV so this isn't a 36,000-row read per test) and
+    persists it as real `Parcel` ORM rows in `db_session`, same as
+    `parcel_factory` does for synthetic data. Defaults to the instance Fix
+    Pass 4's S1 placement diagnosis was verified against."""
+
+    def _load(depot_id: str = "D-CMB-001", delivery_date: str = "2026-01-05") -> list:
+        payloads = real_instance_payloads(depot_id, delivery_date)
+        return [upsert_parcel(db_session, ParcelIn(**p)) for p in payloads]
+
+    return _load

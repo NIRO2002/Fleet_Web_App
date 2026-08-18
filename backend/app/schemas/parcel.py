@@ -2,7 +2,10 @@ from datetime import date as date_type
 from typing import Optional
 from pydantic import BaseModel, Field, field_validator
 
-PRIORITY_LEVELS = {"standard", "next_day", "express", "same_day"}
+#: "priority" added for Fix Pass 4 S5 -- present in the real dataset
+#: (~10% of parcels_sample_36000.csv) as a distinct tier from "express", not
+#: a typo or alias for it.
+PRIORITY_LEVELS = {"standard", "next_day", "express", "same_day", "priority"}
 PARCEL_STATUSES = {"PENDING", "PLANNED", "DELIVERED", "FAILED"}
 
 

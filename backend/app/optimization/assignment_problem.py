@@ -556,44 +556,143 @@ class WarmStartSampling(Sampling):
         return base
 
 
+def _cluster_fits_type(members: list, vehicle: VehicleTypeSpec) -> bool:
+    """Full feasibility chain for seeding a warm-start row, cheapest check
+    first (Fix Pass 4 S3.1): weight -> volume -> parcel count -> every
+    parcel's dimensional fit -> `attempt_placement` actually succeeding.
+    This only affects what seeds the GA's initial population -- the GA's
+    own constraint evaluation (`AssignmentProblem.evaluate_individual`) is
+    unchanged and remains the authority on feasibility."""
+    weight = sum(p.weight_kg for p in members)
+    volume = sum(p.volume_m3 for p in members)
+    if weight > vehicle.capacity_kg or volume > vehicle.capacity_m3:
+        return False
+    if len(members) > vehicle.max_parcels:
+        return False
+    if not all(_dimension_fits(p, vehicle) for p in members):
+        return False
+    return attempt_placement(members, vehicle, collect_exceptions=False) is not None
+
+
+def _best_fitting_type_idx(members: list, catalog: tuple[VehicleTypeSpec, ...]) -> int | None:
+    """Smallest-capacity catalog type whose type passes the full
+    feasibility chain for this cluster whole, or None if no single type
+    fits it (the caller then splits it -- see `_split_cluster_for_warm_start`)."""
+    best_idx, best_capacity = None, float("inf")
+    for t_idx, vehicle in enumerate(catalog):
+        if vehicle.capacity_kg < best_capacity and _cluster_fits_type(members, vehicle):
+            best_idx, best_capacity = t_idx, vehicle.capacity_kg
+    return best_idx
+
+
+def _split_cluster_for_warm_start(
+    members: list, catalog: tuple[VehicleTypeSpec, ...]
+) -> list[tuple[list, int]]:
+    """When no single catalog type fits a cluster whole, greedily bin-fills
+    it across multiple (sub-cluster, type_idx) pairs -- largest-weight
+    parcels first, into the smallest type that can hold as many of them as
+    possible -- the warm-start seeding equivalent of capacity-aware
+    clustering's own split operation. Each sub-cluster is re-checked
+    against the same feasibility chain as a whole cluster would be."""
+    remaining = sorted(members, key=lambda p: -p.weight_kg)
+    groups: list[tuple[list, int]] = []
+    while remaining:
+        best_group, best_type_idx = None, None
+        for t_idx, vehicle in enumerate(catalog):
+            group: list = []
+            weight = volume = 0.0
+            for p in remaining:
+                if (
+                    weight + p.weight_kg <= vehicle.capacity_kg
+                    and volume + p.volume_m3 <= vehicle.capacity_m3
+                    and len(group) < vehicle.max_parcels
+                ):
+                    group.append(p)
+                    weight += p.weight_kg
+                    volume += p.volume_m3
+            if group and _cluster_fits_type(group, vehicle):
+                if best_group is None or len(group) > len(best_group):
+                    best_group, best_type_idx = group, t_idx
+        if best_group is None:
+            # Nothing fits even the single largest remaining parcel against
+            # any type -- put it alone against the highest-capacity type so
+            # the loop still makes forward progress. The GA's own
+            # constraint evaluator (not this seeding heuristic) is what
+            # ultimately judges feasibility.
+            fallback_idx = max(range(len(catalog)), key=lambda i: catalog[i].capacity_kg)
+            best_group, best_type_idx = [remaining[0]], fallback_idx
+        groups.append((best_group, best_type_idx))
+        remaining_ids = {id(p) for p in best_group}
+        remaining = [p for p in remaining if id(p) not in remaining_ids]
+    return groups
+
+
 def warm_start_rows_from_clusters(
     parcels: list, clusters: dict[int, list], catalog: tuple[VehicleTypeSpec, ...], K: int
 ) -> list[np.ndarray]:
-    """One individual: each capacity-aware-repaired cluster becomes its own
-    vehicle slot (wrapping if there are more clusters than slots — should
-    not happen since `slot_budget` sizes K to at least the cluster count),
-    with the smallest catalog type that fits that cluster's aggregate
-    load."""
+    """Builds warm-start individuals from capacity-aware-repaired clusters.
+
+    Fix Pass 4 S3.1: extends the old weight/volume-only type selection to
+    the full feasibility chain (`_cluster_fits_type`), and splits a cluster
+    across multiple slots (`_split_cluster_for_warm_start`) when no single
+    catalog type fits it whole, instead of emitting a row the GA would have
+    to repair from scratch. Produces up to three individuals -- smallest-
+    feasible, one-size-up, and a forced-split variant -- so the seeded
+    initial population spans a region instead of a single point."""
     index_of_parcel = {p.parcel_id: i for i, p in enumerate(parcels)}
     n = len(parcels)
-    row = np.zeros(n + K, dtype=int)
 
-    for slot_idx, members in enumerate(clusters.values()):
-        slot = slot_idx % K
-        for p in members:
-            idx = index_of_parcel.get(p.parcel_id)
-            if idx is not None:
-                row[idx] = slot
+    def larger_type_idx(t_idx: int) -> int:
+        larger = [i for i, v in enumerate(catalog) if v.capacity_kg > catalog[t_idx].capacity_kg]
+        return min(larger, key=lambda i: catalog[i].capacity_kg) if larger else t_idx
 
-        weight = sum(p.weight_kg for p in members)
-        volume = sum(p.volume_m3 for p in members)
-        best_type_idx, best_capacity = 0, float("inf")
-        for t_idx, vehicle in enumerate(catalog):
-            if vehicle.capacity_kg >= weight and vehicle.capacity_m3 >= volume and vehicle.capacity_kg < best_capacity:
-                best_type_idx, best_capacity = t_idx, vehicle.capacity_kg
-        row[n + slot] = best_type_idx
+    def build_row(*, one_size_up: bool = False, force_split: bool = False) -> np.ndarray:
+        row = np.zeros(n + K, dtype=int)
+        slot_idx = 0
+        for members in clusters.values():
+            if not members:
+                continue
+            type_idx = None if force_split else _best_fitting_type_idx(members, catalog)
+            sub_groups = (
+                _split_cluster_for_warm_start(members, catalog)
+                if type_idx is None
+                else [(members, type_idx)]
+            )
+            for sub_members, t_idx in sub_groups:
+                slot = slot_idx % K
+                slot_idx += 1
+                for p in sub_members:
+                    idx = index_of_parcel.get(p.parcel_id)
+                    if idx is not None:
+                        row[idx] = slot
+                row[n + slot] = larger_type_idx(t_idx) if one_size_up else t_idx
+        return row
 
-    return [row]
+    candidate_rows = [build_row(), build_row(one_size_up=True), build_row(force_split=True)]
+    rows: list[np.ndarray] = []
+    seen: set[bytes] = set()
+    for row in candidate_rows:
+        key = row.tobytes()
+        if key not in seen:
+            seen.add(key)
+            rows.append(row)
+    return rows
 
 
 class OverflowRepair(Repair):
     """Standard cheap repair for constrained assignment GAs (spec 3.3): if a
-    slot overflows weight or volume capacity, move its lightest parcels to
-    the least-loaded slot that has headroom for them. Does not touch
-    dimensional/stacking feasibility — those remain the constraint
-    evaluator's job; this only relieves the two most common,
-    cheaply-fixable overflow constraints so the GA spends less time on
-    trivially-infeasible individuals."""
+    slot overflows weight, volume, or parcel count, move parcels to the
+    least-loaded compatible slot; if a parcel fails dimensional fit, move
+    it to a slot whose type accepts it or upgrade that slot's type; if a
+    slot fails placement, drop parcels until it succeeds. Fix Pass 4 S3.2
+    extends this from weight/volume only to the full chain -- the GA's own
+    constraint evaluator remains the authority on feasibility; this only
+    gives it fewer trivially-infeasible individuals to spend time on.
+
+    Decode once per row (F6): every repair pass below shares one live,
+    incrementally-updated `slots` mapping and running per-slot weight/
+    volume totals via `_move`, so no pass re-decodes the row or re-sums a
+    slot's members from scratch."""
 
     def _do(self, problem: AssignmentProblem, X, **kwargs):
         for row in X:
@@ -601,14 +700,10 @@ class OverflowRepair(Repair):
         return X
 
     def _repair_row(self, problem: AssignmentProblem, row):
-        # Decode once (F6): the old code re-decoded the whole row — an O(n)
-        # walk — inside `_least_loaded_compatible_slot`, once per parcel
-        # moved, per overflowing slot. Instead, decode once and maintain
-        # running per-slot weight/volume totals, updated incrementally as
-        # parcels move, so no further decode or `sum()` over slot members
-        # is needed for the rest of this repair.
-        slots, type_of_slot = decode(row, problem.n, problem.K)
+        raw_slots, type_of_slot = decode(row, problem.n, problem.K)
         type_of_slot = np.clip(type_of_slot, 0, problem.T - 1).astype(int)
+        row[problem.n :] = type_of_slot
+        slots: dict[int, list[int]] = {slot_idx: list(indices) for slot_idx, indices in raw_slots.items()}
 
         slot_weight = np.zeros(problem.K)
         slot_volume = np.zeros(problem.K)
@@ -616,26 +711,154 @@ class OverflowRepair(Repair):
             slot_weight[slot_idx] = sum(problem.parcels[i].weight_kg for i in parcel_indices)
             slot_volume[slot_idx] = sum(problem.parcels[i].volume_m3 for i in parcel_indices)
 
+        def move(idx: int, source_slot: int, target_slot: int) -> None:
+            parcel = problem.parcels[idx]
+            row[idx] = target_slot
+            slots[source_slot].remove(idx)
+            slots.setdefault(target_slot, []).append(idx)
+            slot_weight[source_slot] -= parcel.weight_kg
+            slot_volume[source_slot] -= parcel.volume_m3
+            slot_weight[target_slot] += parcel.weight_kg
+            slot_volume[target_slot] += parcel.volume_m3
+
+        self._repair_weight_volume(problem, slots, type_of_slot, slot_weight, slot_volume, move)
+        self._repair_count(problem, slots, type_of_slot, slot_weight, slot_volume, move)
+        self._repair_dimensional_fit(problem, row, slots, type_of_slot, move)
+        self._repair_placement(problem, row, slots, type_of_slot, slot_weight, slot_volume, move)
+
+    def _repair_weight_volume(self, problem, slots, type_of_slot, slot_weight, slot_volume, move):
         for slot_idx, parcel_indices in list(slots.items()):
             vehicle = problem.catalog[type_of_slot[slot_idx]]
             if slot_weight[slot_idx] <= vehicle.capacity_kg and slot_volume[slot_idx] <= vehicle.capacity_m3:
                 continue
-
             members = sorted(parcel_indices, key=lambda i: problem.parcels[i].weight_kg)
             for idx in members:
                 if slot_weight[slot_idx] <= vehicle.capacity_kg and slot_volume[slot_idx] <= vehicle.capacity_m3:
                     break
-                parcel = problem.parcels[idx]
                 target = self._least_loaded_compatible_slot(
-                    problem, type_of_slot, slot_weight, slot_volume, slot_idx, parcel
+                    problem, type_of_slot, slot_weight, slot_volume, slot_idx, problem.parcels[idx]
+                )
+                if target is not None:
+                    move(idx, slot_idx, target)
+
+    def _repair_count(self, problem, slots, type_of_slot, slot_weight, slot_volume, move):
+        """Fix Pass 4 S3.2: a slot with more parcels than its type's
+        `max_parcels` moves the excess (lightest first, same tie-break as
+        weight/volume) to the least-loaded compatible slot."""
+        for slot_idx, parcel_indices in list(slots.items()):
+            vehicle = problem.catalog[type_of_slot[slot_idx]]
+            if len(parcel_indices) <= vehicle.max_parcels:
+                continue
+            members = sorted(parcel_indices, key=lambda i: problem.parcels[i].weight_kg)
+            for idx in members:
+                if len(slots[slot_idx]) <= vehicle.max_parcels:
+                    break
+                target = self._least_loaded_compatible_slot(
+                    problem, type_of_slot, slot_weight, slot_volume, slot_idx, problem.parcels[idx]
+                )
+                if target is not None:
+                    move(idx, slot_idx, target)
+
+    def _repair_dimensional_fit(self, problem, row, slots, type_of_slot, move):
+        """Fix Pass 4 S3.2: a parcel that doesn't dimensionally fit its
+        slot's type moves to a slot whose type does accept it; if no
+        existing slot can, and a catalog type exists that fits every
+        parcel currently in the slot, the slot's own type gene is upgraded
+        to it instead of moving anything."""
+        for slot_idx, parcel_indices in list(slots.items()):
+            vehicle = problem.catalog[type_of_slot[slot_idx]]
+            misfits = [i for i in parcel_indices if not _dimension_fits(problem.parcels[i], vehicle)]
+            if not misfits:
+                continue
+
+            for idx in list(misfits):
+                parcel = problem.parcels[idx]
+                target = next(
+                    (
+                        s for s in slots
+                        if s != slot_idx and _dimension_fits(parcel, problem.catalog[type_of_slot[s]])
+                    ),
+                    None,
+                )
+                if target is not None:
+                    move(idx, slot_idx, target)
+
+            remaining = slots.get(slot_idx, [])
+            if not remaining:
+                continue
+            still_misfit = any(not _dimension_fits(problem.parcels[i], problem.catalog[type_of_slot[slot_idx]]) for i in remaining)
+            if not still_misfit:
+                continue
+            upgrade = next(
+                (
+                    t_idx for t_idx, v in enumerate(problem.catalog)
+                    if all(_dimension_fits(problem.parcels[i], v) for i in remaining)
+                ),
+                None,
+            )
+            if upgrade is not None:
+                type_of_slot[slot_idx] = upgrade
+                row[problem.n + slot_idx] = upgrade
+
+    #: Fix Pass 4 S6: `attempt_placement` is expensive, and on real data a
+    #: badly-oversized slot can be far past where a handful of drops would
+    #: ever succeed (see docs/FIX_PASS_4_REPORT.md's runtime finding --
+    #: this repair, uncapped, dominated a full run's wall-clock on real
+    #: data). Capping the number of retries per slot bounds the cost to a
+    #: small constant number of expensive calls; a slot that still fails
+    #: after the cap is left for the GA's own constraint evaluator to
+    #: flag as infeasible, same as before this repair pass existed.
+    MAX_PLACEMENT_REPAIR_ATTEMPTS = 5
+
+    def _repair_placement(self, problem, row, slots, type_of_slot, slot_weight, slot_volume, move):
+        """Fix Pass 4 S3.2: a slot whose parcels can't all physically be
+        placed (`attempt_placement` fails) drops its lightest/smallest-
+        footprint parcels one at a time until it succeeds, moving them to
+        the least-loaded compatible slot or a freshly-opened one if every
+        existing slot is full. `attempt_placement` is the same expensive
+        check the GA's own constraint evaluation uses -- run here at most
+        once per drop, capped at `MAX_PLACEMENT_REPAIR_ATTEMPTS`."""
+        for slot_idx, parcel_indices in list(slots.items()):
+            if not parcel_indices:
+                continue
+            vehicle = problem.catalog[type_of_slot[slot_idx]]
+            ordered = [problem.parcels[i] for i in parcel_indices]
+            if attempt_placement(ordered, vehicle, collect_exceptions=False) is not None:
+                continue
+
+            candidates = sorted(
+                parcel_indices, key=lambda i: (problem.parcels[i].length_cm or 0) * (problem.parcels[i].width_cm or 0)
+            )
+            for attempt, idx in enumerate(candidates):
+                if attempt >= self.MAX_PLACEMENT_REPAIR_ATTEMPTS or len(slots[slot_idx]) <= 1:
+                    break
+                target = self._least_loaded_compatible_slot(
+                    problem, type_of_slot, slot_weight, slot_volume, slot_idx, problem.parcels[idx]
                 )
                 if target is None:
-                    continue
-                row[idx] = target
-                slot_weight[slot_idx] -= parcel.weight_kg
-                slot_volume[slot_idx] -= parcel.volume_m3
-                slot_weight[target] += parcel.weight_kg
-                slot_volume[target] += parcel.volume_m3
+                    target = self._open_new_slot(problem, slots, type_of_slot, slot_weight, slot_volume, problem.parcels[idx])
+                    if target is None:
+                        continue
+                move(idx, slot_idx, target)
+                remaining = [problem.parcels[i] for i in slots[slot_idx]]
+                if attempt_placement(remaining, vehicle, collect_exceptions=False) is not None:
+                    break
+
+    def _open_new_slot(self, problem, slots, type_of_slot, slot_weight, slot_volume, parcel) -> int | None:
+        """First slot index (0..K-1) with no parcels at all -- treated as
+        'freshly opened' -- whose current type gene can hold `parcel`
+        alone. Returns None if every slot already has members (K is a
+        search-space upper bound, not something this repair can grow)."""
+        for slot_idx in range(problem.K):
+            if slots.get(slot_idx):
+                continue
+            vehicle = problem.catalog[type_of_slot[slot_idx]]
+            if parcel.weight_kg <= vehicle.capacity_kg and parcel.volume_m3 <= vehicle.capacity_m3:
+                slots.setdefault(slot_idx, [])
+                slot_weight[slot_idx] = 0.0
+                slot_volume[slot_idx] = 0.0
+                return slot_idx
+        return None
 
     def _least_loaded_compatible_slot(
         self, problem: AssignmentProblem, type_of_slot, slot_weight, slot_volume, exclude_slot: int, parcel
@@ -687,6 +910,14 @@ def run_nsga2(
         mutation=PM(prob=1.0 / problem.n_var, eta=20, vtype=float, repair=RoundingRepair()),
         repair=OverflowRepair(),
         eliminate_duplicates=True,
+        # Fix Pass 4: pymoo's default (False) discards the whole result --
+        # res.opt/X/F/G all become None -- whenever not a single individual
+        # in the run was fully feasible, rather than returning the
+        # least-infeasible one found. On real, harder instances this is
+        # common (see docs/FIX_PASS_4_REPORT.md), and the old default meant
+        # optimize_load simply crashed instead of persisting a best-effort,
+        # honestly-still-infeasible plan the caller can inspect.
+        return_least_infeasible=True,
     )
 
     res = minimize(

@@ -5,6 +5,45 @@ different reader could reasonably have chosen differently. Recorded here so
 an examiner (or future maintainer) can see the reasoning, not just the
 result.
 
+## Placement (Fix Pass 4, item S1)
+
+### Decision 5 — the placement fix is reported as partial, not papered over
+
+Real-data verification (`data/parcels_sample_36000.csv`) confirmed the placement
+heuristic collapsed to roughly one floor's worth of capacity regardless of
+`max_stack_layers`, on real (non-uniform) parcel sizes. The fix implemented
+(`_placement_order` in `app/optimization/placement.py`: stack-eligible
+parcels placed before column-closing ones, largest-footprint-area-first)
+is a verified, measured improvement — the specific n=65/105.4%-of-floor
+cliff the diagnosis reported is fixed — but real 400-parcel instances still
+fail placement at n=80 (124.6% of floor), short of the theoretical 6-layer
+capacity.
+
+**Decision**: report this honestly as a partial fix with numbers, rather
+than either (a) claiming full success, or (b) pursuing a bin-packing
+redesign this pass. Direct prototyping against the real instance (not
+guessed) traced the remaining gap to a structural cause: ~40% of real
+parcels are fragile-or-non-stackable, and each one that stacks permanently
+closes its column (correct behavior). With that many closing events
+relative to how many columns the floor opens, columns exhaust before
+6-layer capacity is used, regardless of placement order. A first-fit vs.
+best-fit column-selection change was tried and made no measurable
+difference, confirming the bottleneck is structural, not an easy
+algorithmic tweak. See `docs/FIX_PASS_4_REPORT.md` for the full diagnostic
+trail.
+
+### Decision 6 — the utilization ceiling is computed exhaustively, not assumed
+
+The source document's own worked example for the real instance
+(`[TRUCK_2T, TRUCK_2T]`, 97.1% utilization) was recomputed independently
+(`app/evaluation/utilization_ceiling.py`) rather than trusted, per this
+project's established practice of verifying claimed diagnostics against
+real data before building on them. An exhaustive search over fleet sizes
+1-6 finds a tighter fit: `[APE_CARGO, APE_CARGO, MICRO_VAN, MICRO_VAN,
+TRUCK_2T]` at 99.96% utilization. The document's example wasn't wrong, just
+not exhaustive — reported as the corrected figure, not silently substituted
+without explanation.
+
 ## Scope (Fix Pass 3, item G1)
 
 ### Decision 4 — hazmat and refrigeration are descoped from the optimizer; peel is dropped
