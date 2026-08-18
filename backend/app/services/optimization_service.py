@@ -35,7 +35,7 @@ from app.optimization.assignment_problem import (
 )
 from app.optimization.placement import attempt_placement
 from app.optimization.selection import hypervolume, select_solution
-from app.services.vehicle_catalog_service import VehicleCatalogCache
+from app.services.vehicle_catalog_service import VehicleCatalogCache, list_available_types
 from app.utils_datetime import utcnow
 
 
@@ -72,6 +72,14 @@ def optimize_load(
     started = time.perf_counter()
     config = config or AssignmentConfig(depot_lat=depot_lat, depot_lon=depot_lon)
     catalog = load_catalog_snapshot(db, depot_id, delivery_date, cache=catalog_cache)
+    # is_refrigerated/is_hazmat_certified are no longer optimizer constraints
+    # (Fix Pass 3 G1 -- out of scope for commercial last-mile delivery) so
+    # VehicleTypeSpec no longer carries them, but VirtualVehicle still
+    # records the real catalog row's values for reporting. `catalog_cache`
+    # (if passed) means this is a cache hit, not a second query.
+    catalog_row_by_code = {
+        r.code: r for r in list_available_types(db, depot_id, delivery_date, cache=catalog_cache)
+    }
 
     problem, res = run_nsga2(parcels, catalog, config, seed=seed, warm_start_clusters=warm_start_clusters)
     idx, F, X, G = select_solution(res, preference_weights)
@@ -115,8 +123,8 @@ def optimize_load(
             estimated_distance_km=m["distance"],
             time_window_compliance=m["compliance"],
             fleet_cost=m["cost"],
-            is_refrigerated=vehicle_spec.is_refrigerated,
-            is_hazmat_certified=vehicle_spec.is_hazmat_certified,
+            is_refrigerated=catalog_row_by_code[vehicle_spec.code].is_refrigerated,
+            is_hazmat_certified=catalog_row_by_code[vehicle_spec.code].is_hazmat_certified,
             cargo_length_cm=vehicle_spec.cargo_length_cm,
             cargo_width_cm=vehicle_spec.cargo_width_cm,
             cargo_height_cm=vehicle_spec.cargo_height_cm,

@@ -7,6 +7,15 @@ parcel forced a brand-new row even when the current row still had width to
 spare. Rows were abandoned after ~2 columns and placement failed just past
 100% of the bay's floor area despite `max_stack_layers=5` of headroom going
 almost entirely unused.
+
+Fix Pass 3 G2 re-raised this as a "blocker" with specific diagnostic
+numbers, but those numbers used the old placeholder LORRY's dimensions
+(550x220x210cm/5 layers), not the real current TRUCK_4T catalog row
+(520x220x210cm/6 layers) -- and empirically, the row-abandonment failure
+does not reproduce against the current code (the F3 fix below already
+handles it). `test_placement_diagnostic_table_at_1x_2x_3x_4x_floor_area`
+verifies this with a real reportable table rather than re-implementing
+already-working logic.
 """
 import random
 
@@ -38,8 +47,7 @@ def _lorry() -> VehicleTypeSpec:
         code="LORRY", capacity_kg=5000.0, capacity_m3=25.0,
         cargo_length_cm=550.0, cargo_width_cm=220.0, cargo_height_cm=220.0,
         max_parcels=400, max_stack_layers=5, fixed_cost=6000.0, cost_per_km=85.0,
-        avg_speed_kmh=28.0, is_refrigerated=False, temp_min_celsius=None,
-        temp_max_celsius=None, is_hazmat_certified=False, has_tail_lift=True,
+        avg_speed_kmh=28.0, has_tail_lift=True,
     )
 
 
@@ -50,9 +58,21 @@ def _bike() -> VehicleTypeSpec:
         code="BIKE", capacity_kg=25.0, capacity_m3=0.07,
         cargo_length_cm=45.0, cargo_width_cm=45.0, cargo_height_cm=45.0,
         max_parcels=6, max_stack_layers=1, fixed_cost=180.0, cost_per_km=55.0,
-        avg_speed_kmh=35.0, is_refrigerated=False, temp_min_celsius=None,
-        temp_max_celsius=None, is_hazmat_certified=False, has_tail_lift=False,
+        avg_speed_kmh=35.0, has_tail_lift=False,
         vehicle_max_stack_weight_kg=10.0,
+    )
+
+
+def _truck_4t() -> VehicleTypeSpec:
+    """Fix Pass 3 G2: the real current TRUCK_4T catalog row -- used for the
+    placement diagnostic table, since the row-abandonment failure G2
+    originally described used the old placeholder LORRY's dimensions
+    (550x220x210cm/5 layers), not this real spec (520x220x210cm/6 layers)."""
+    return VehicleTypeSpec(
+        code="TRUCK_4T", capacity_kg=4500.0, capacity_m3=24.02,
+        cargo_length_cm=520.0, cargo_width_cm=220.0, cargo_height_cm=210.0,
+        max_parcels=420, max_stack_layers=6, fixed_cost=6000.0, cost_per_km=380.0,
+        avg_speed_kmh=40.0, has_tail_lift=False, vehicle_max_stack_weight_kg=2500.0,
     )
 
 
@@ -221,6 +241,100 @@ def test_placement_failure_reflects_high_floor_utilization_not_row_abandonment()
     )
     utilization = floor_occupied / floor_area
     assert utilization > 0.70, f"floor utilization {utilization:.1%} is too low — looks like row abandonment"
+
+
+def _realistic_mix_parcel(pid, rng, fragile_p=0.2, non_stackable_p=0.2):
+    parcel = _FakeParcel(
+        pid, rng.uniform(20, 60), rng.uniform(20, 60), rng.uniform(20, 60), rng.uniform(2, 15)
+    )
+    parcel.fragile = rng.random() < fragile_p
+    parcel.stackable = rng.random() >= non_stackable_p
+    parcel.max_stack_weight_kg = rng.uniform(0, 40)
+    return parcel
+
+
+def test_placement_diagnostic_table_at_1x_2x_3x_4x_floor_area():
+    """Fix Pass 3 G2 gate: verifies (does not re-implement) the placement
+    heuristic at footprint ratios of 1x/2x/3x/4x floor area on the real
+    current TRUCK_4T catalog row, under both an all-stackable mix and a
+    realistic mix (20% fragile, 20% non-stackable, stack budget U(0,40)kg
+    -- the doc's own parameters). The row-abandonment "blocker" G2
+    originally described does not reproduce against the current code (the
+    FFDH shelf-packing fix it prescribes -- try every open row, sort
+    largest-first within a band -- already exists, carried over from Fix
+    Pass 1); this test proves that with a real, reportable table rather
+    than taking it on faith.
+
+    Required: all-stackable succeeds at >= 3x floor area, and floor
+    utilization exceeds 70% at the point of eventual failure (catches a
+    real regression to row-abandonment, not just a hard failure)."""
+    vehicle = _truck_4t()
+    floor_area = vehicle.cargo_length_cm * vehicle.cargo_width_cm
+    fixed_footprint_cm2 = 40.0 * 30.0  # matches the existing all-stackable fixture shape
+
+    print(f"\nPlacement diagnostic table (Fix Pass 3 G2) -- TRUCK_4T, floor_area={floor_area:.0f}cm^2:")
+
+    all_stackable_results = {}
+    for ratio in (1, 2, 3, 4):
+        n = round(ratio * floor_area / fixed_footprint_cm2)
+        parcels = [_FakeParcel(f"AS{i:04d}", 40.0, 30.0, 40.0, 5.0) for i in range(n)]
+        actual_ratio = sum(p.length_cm * p.width_cm for p in parcels) / floor_area
+        result = attempt_placement(parcels, vehicle)
+        all_stackable_results[ratio] = result is not None
+        print(f"  all-stackable  n={n:4d}  footprint={actual_ratio*100:6.1f}% of floor  -> "
+              f"{'OK' if result is not None else 'FAIL'}")
+
+    assert all_stackable_results[3] is True, "all-stackable must succeed at >= 3x floor area"
+
+    print("  --")
+    realistic_results = {}
+    last_ok_n, first_fail_n = None, None
+    for ratio in (1, 2, 3, 4):
+        n = round(ratio * floor_area / fixed_footprint_cm2)
+        rng = random.Random(7)
+        parcels = [_realistic_mix_parcel(f"RM{i:04d}", rng) for i in range(n)]
+        actual_ratio = sum(p.length_cm * p.width_cm for p in parcels) / floor_area
+        result = attempt_placement(parcels, vehicle)
+        realistic_results[ratio] = result is not None
+        print(f"  realistic-mix  n={n:4d}  footprint={actual_ratio*100:6.1f}% of floor  -> "
+              f"{'OK' if result is not None else 'FAIL'}")
+        if result is not None:
+            last_ok_n = (n, parcels, result)
+        elif first_fail_n is None:
+            first_fail_n = (n, parcels)
+
+    # The realistic mix is expected to fail earlier than all-stackable --
+    # non-stackable/fragile parcels can't share stack space, so they
+    # consume floor area 1:1 rather than being absorbed by 6 layers of
+    # headroom. This is a real, different, and much more mundane effect
+    # than row-abandonment, not a bug to fix in this pass. What must hold
+    # is that when it does fail, the floor is genuinely full (>70%
+    # utilized), not abandoned early with width to spare.
+    if first_fail_n is not None:
+        n, parcels = first_fail_n
+        rng = random.Random(7)
+        parcels = [_realistic_mix_parcel(f"RM{i:04d}", rng) for i in range(n)]
+        # Reduce to the largest floor-only placement to measure utilization
+        # at the failure boundary: re-run with just enough parcels to still
+        # succeed, then inspect its floor occupancy.
+        succeeding = None
+        for k in range(n, 0, -1):
+            trial = parcels[:k]
+            res = attempt_placement(trial, vehicle)
+            if res is not None:
+                succeeding = (trial, res)
+                break
+        assert succeeding is not None, "expected at least a small realistic-mix load to succeed"
+        trial, res = succeeding
+        floor_occupied = sum(
+            p.length_cm * p.width_cm for p in trial if res.placements[p.parcel_id].layer == 0
+        )
+        utilization = floor_occupied / floor_area
+        print(f"  realistic-mix floor utilization at failure boundary (n={len(trial)}): {utilization:.1%}")
+        assert utilization > 0.70, (
+            f"realistic-mix floor utilization {utilization:.1%} at the failure boundary is too low "
+            "-- looks like row abandonment, not a legitimate non-stackable/fragile capacity limit"
+        )
 
 
 def test_bike_never_stacks_a_parcel_above_the_floor():

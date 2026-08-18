@@ -88,33 +88,29 @@ def _seed_real_catalog(db_session):
         service.upsert_type(db_session, payload)
 
 
-def test_real_catalog_seeds_ten_types(db_session):
-    """A.7: T == 10 (7 field-data rows + 3 estimated reefer variants)."""
+def test_real_catalog_seeds_seven_types(db_session):
+    """Fix Pass 3 G1: T == 7 (field-data rows only). The three estimated
+    reefer variants were dropped when hazmat/refrigeration were descoped
+    from the optimizer -- see docs/DESIGN_DECISIONS.md."""
     _seed_real_catalog(db_session)
     types = service.list_available_types(db_session, depot_id=None)
-    assert len(types) == 10
+    assert len(types) == 7
     assert {t.code for t in types} == {
         "BIKE", "APE_CARGO", "TVS_KING", "MICRO_VAN", "VAN_MED", "TRUCK_2T", "TRUCK_4T",
-        "VAN_MED_REEFER", "TRUCK_2T_REEFER", "TRUCK_4T_REEFER",
     }
-    assert {t.code for t in types if t.source == "field_data"} == {
-        "BIKE", "APE_CARGO", "TVS_KING", "MICRO_VAN", "VAN_MED", "TRUCK_2T", "TRUCK_4T",
-    }
-    assert {t.code for t in types if t.source == "estimated_variant"} == {
-        "VAN_MED_REEFER", "TRUCK_2T_REEFER", "TRUCK_4T_REEFER",
-    }
+    assert all(t.source == "field_data" for t in types)
 
 
-def test_assignment_problem_search_space_grows_with_an_eleventh_catalog_row(db_session):
+def test_assignment_problem_search_space_grows_with_an_eighth_catalog_row(db_session):
     """Phase 3.1 requirement, exercised for real: T changes with the
-    catalog, no code change, going from 10 rows to 11."""
+    catalog, no code change, going from 7 rows to 8."""
     _seed_real_catalog(db_session)
-    catalog_10 = load_catalog_snapshot(db_session, depot_id=None)
-    assert len(catalog_10) == 10
+    catalog_7 = load_catalog_snapshot(db_session, depot_id=None)
+    assert len(catalog_7) == 7
 
     service.upsert_type(db_session, _van_payload(code="EXTRA_VAN"))
-    catalog_11 = load_catalog_snapshot(db_session, depot_id=None)
-    assert len(catalog_11) == 11
+    catalog_8 = load_catalog_snapshot(db_session, depot_id=None)
+    assert len(catalog_8) == 8
 
     parcels = [
         SimpleNamespace(latitude=6.9271, longitude=79.8612, weight_kg=5.0, volume_m3=0.02,
@@ -122,10 +118,10 @@ def test_assignment_problem_search_space_grows_with_an_eleventh_catalog_row(db_s
         for _ in range(5)
     ]
     config = AssignmentConfig(depot_lat=6.9271, depot_lon=79.8612)
-    problem_10 = AssignmentProblem(parcels, catalog_10, config)
-    problem_11 = AssignmentProblem(parcels, catalog_11, config)
-    assert problem_10.T == 10
-    assert problem_11.T == 11
+    problem_7 = AssignmentProblem(parcels, catalog_7, config)
+    problem_8 = AssignmentProblem(parcels, catalog_8, config)
+    assert problem_7.T == 7
+    assert problem_8.T == 8
 
 
 def test_bike_dimensional_fit_rate_against_synthetic_parcels(db_session, capsys):
@@ -139,7 +135,7 @@ def test_bike_dimensional_fit_rate_against_synthetic_parcels(db_session, capsys)
     the dimensional constraint must bind, not be decorative."""
     _seed_real_catalog(db_session)
     catalog = load_catalog_snapshot(db_session, depot_id=None)
-    assert len(catalog) == 10
+    assert len(catalog) == 7
 
     payloads = generate_synthetic_parcels(
         n=5000, seed=42, n_clusters=6, with_dimensions=True, include_edge_cases=True,

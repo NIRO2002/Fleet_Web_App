@@ -5,9 +5,53 @@ different reader could reasonably have chosen differently. Recorded here so
 an examiner (or future maintainer) can see the reasoning, not just the
 result.
 
+## Scope (Fix Pass 3, item G1)
+
+### Decision 4 — hazmat and refrigeration are descoped from the optimizer; peel is dropped
+
+Neither hazardous goods nor cold chain appears in any Specific Objective or
+Functional Requirement of the submitted proposal. This is commercial
+last-mile parcel delivery. Both were introduced by earlier fix passes and
+are withdrawn here.
+
+**Decision**: `VehicleTypeSpec` (the optimizer's per-run snapshot) no
+longer carries `is_refrigerated`/`temp_min_celsius`/`temp_max_celsius`/
+`is_hazmat_certified`, and NSGA-II's constraint set drops the two hazmat/
+refrigeration constraints (`N_CONSTRAINTS` 9 -> 7). The three estimated
+reefer catalog rows (`VAN_MED_REEFER`, `TRUCK_2T_REEFER`,
+`TRUCK_4T_REEFER` -- Decision 1 below) are removed from seeding entirely;
+the catalog returns to the 7 field-data rows. Capacity-aware clustering's
+"peel" operation, whose entire purpose was pre-grouping hazmat/refrigerated
+parcels before splitting, is removed -- the operation is **split-and-merge**,
+not split-merge-peel, and that is the honest description of the novelty
+going forward.
+
+**What stays, deliberately**: every underlying data column
+(`Parcel.hazardous/hazmat_class/requires_refrigeration/temp_min_celsius/
+temp_max_celsius`, `VehicleTypeCatalog.is_refrigerated/temp_min_celsius/
+temp_max_celsius/is_hazmat_certified`, `VirtualVehicle.is_refrigerated/
+is_hazmat_certified`) and the import path that populates them. The data is
+in the dataset and costs nothing to keep; "the data supports it, we scoped
+it out" is a stronger answer than not having considered it at all.
+`capacity_aware_clustering.py`'s merge step still keeps clusters with
+different handling classes apart (`_cluster_handling_key`) -- not because
+of peel (which no longer exists), but because merging a hazardous cluster
+into a non-hazardous one would misrepresent the resulting cluster's
+contents, which is a reason independent of whether NSGA-II enforces
+eligibility downstream.
+
+This supersedes the operational relevance (not the historical accuracy) of
+Decision 1's reefer-row derivation and Decision 2's "gives peel genuine
+work to do" remark below -- both decisions are kept for the record, since
+the reasoning was sound for the scope that existed at the time.
+
 ## Vehicle catalog (Fix Pass 2, item A)
 
 ### Decision 1 — refrigeration is a separate catalog row, not a boolean flag
+
+**Superseded by Decision 4 above (Fix Pass 3 G1)**: the three reefer rows
+described here were removed from seeding when refrigeration was descoped
+from the optimizer. Kept for the record.
 
 The source data marks refrigeration as "Optional (Chiller)" for `VAN_MED`
 and "Optional (Reefer Box)" for `TRUCK_2T`/`TRUCK_4T`. `is_refrigerated` on
@@ -42,17 +86,20 @@ downstream reader can revise them with visibility into what changed.
 
 ### Decision 2 — hazmat certification: "Limited" reads as not certified
 
+**Superseded by Decision 4 above (Fix Pass 3 G1)**: `is_hazmat_certified`
+is no longer read by the optimizer, and the "peel" step this decision
+referenced no longer exists. Kept for the record.
+
 The source data is `Yes (With Permit)` for `TRUCK_2T`/`TRUCK_4T`, `Limited`
 for `VAN_MED`, `No` for the rest. `is_hazmat_certified` is a boolean; there
 is no modellable middle state for "Limited".
 
-**Decision**: `is_hazmat_certified=True` only for `TRUCK_2T` and
-`TRUCK_4T`. `VAN_MED`'s "Limited" is read conservatively as `False`, since
-treating it as `True` would let the optimizer route hazardous parcels onto
-a vehicle class that may not legally carry them under a "limited" permit.
-This makes the two largest trucks mandatory for the dataset's 144 hazardous
-parcels, which is realistic and gives the capacity-aware clustering "peel"
-step genuine work to do.
+**Decision** (as it stood in Fix Pass 2): `is_hazmat_certified=True` only
+for `TRUCK_2T` and `TRUCK_4T`. `VAN_MED`'s "Limited" is read conservatively
+as `False`, since treating it as `True` would let the optimizer route
+hazardous parcels onto a vehicle class that may not legally carry them
+under a "limited" permit. The `is_hazmat_certified` column itself is
+unchanged by Fix Pass 3 -- only the optimizer's use of it is gone.
 
 ### Decision 3 — `max_parcels` is a derived estimate, not source data
 

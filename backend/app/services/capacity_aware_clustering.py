@@ -8,15 +8,18 @@ independently switchable (`capacity_aware=False` in the pipeline, Phase 4)
 so its marginal contribution can be ablated in the evaluation harness
 (Phase 5).
 
-Three operations, applied in this order: peel special-handling parcels into
-their own clusters, recursively split clusters that don't fit any catalog
-vehicle, then greedily merge clusters that are small enough to share one
-vehicle and close enough in space and time. Hazmat/refrigeration *vehicle
-eligibility* (as opposed to weight/volume/dimensional fit) is a hard
-constraint enforced later by NSGA-II (Phase 3, constraints 5/6) — peeling
-here only groups those parcels together so they don't drag an unrelated
-cluster onto an expensive certified vehicle; it does not itself verify a
-certified vehicle exists.
+Two operations, applied in this order: recursively split clusters that
+don't fit any catalog vehicle, then greedily merge clusters that are small
+enough to share one vehicle and close enough in space and time. This is
+split-and-merge, not split-merge-peel — a third "peel" operation (grouping
+hazmat/refrigerated parcels into their own clusters before splitting) was
+dropped in Fix Pass 3 G1 when hazmat/refrigeration vehicle-eligibility
+constraints were descoped from NSGA-II (out of scope for commercial
+last-mile delivery; see docs/DESIGN_DECISIONS.md). Merge still keeps
+clusters with different handling classes apart (`_cluster_handling_key`)
+purely because merging, say, a hazardous cluster into a non-hazardous one
+would misrepresent the resulting cluster's contents — an independent reason
+that doesn't depend on peel existing.
 """
 from dataclasses import dataclass, field
 
@@ -40,7 +43,6 @@ class RepairedClusters:
     clusters: dict[int, list[Parcel]]
     n_split: int = 0
     n_merged: int = 0
-    n_peeled: int = 0
     clusters_before: int = 0
     clusters_after: int = 0
     max_depth_hit: bool = False
@@ -81,39 +83,17 @@ def _handling_key(parcel: Parcel) -> str | None:
     return None
 
 
-def _cluster_handling_key(parcels: list[Parcel]) -> str | None:
-    """The shared handling class of a cluster. Peeling groups parcels by exactly
-    this key and splitting only subdivides an already-homogeneous cluster, so by
-    the time merge runs every cluster is homogeneous — the first parcel's key
-    stands for the whole cluster."""
-    return _handling_key(parcels[0]) if parcels else None
-
-
-def _peel_special_handling(clusters: dict[int, list[Parcel]], next_id: int, audit: list[dict]):
-    peeled_groups: dict[str, list[Parcel]] = {}
-    n_peeled = 0
-    for cluster_id, parcels in list(clusters.items()):
-        keep = []
-        for parcel in parcels:
-            key = _handling_key(parcel)
-            if key is None:
-                keep.append(parcel)
-            else:
-                peeled_groups.setdefault(key, []).append(parcel)
-                n_peeled += 1
-        clusters[cluster_id] = keep
-
-    for key, parcels in peeled_groups.items():
-        clusters[next_id] = parcels
-        audit.append(
-            {"operation": "peel", "handling_class": key, "cluster_id": next_id, "parcel_count": len(parcels)}
-        )
-        next_id += 1
-
-    for cluster_id in [cid for cid, parcels in clusters.items() if not parcels]:
-        del clusters[cluster_id]
-
-    return clusters, next_id, n_peeled
+def _cluster_handling_key(parcels: list[Parcel]) -> frozenset:
+    """The exact set of handling classes present in a cluster (including
+    `None` for ordinary parcels, as a member of the set). Without peel
+    upstream (dropped in Fix Pass 3 G1), a cluster coming out of spatial
+    clustering or a geographic split can legitimately contain a mix of
+    hazmat/refrigerated/ordinary parcels -- so this can no longer assume
+    homogeneity and take a single representative key. Merge only combines
+    two clusters whose handling-class sets match *exactly*, so a merge can
+    never introduce a handling class that wasn't already present in both
+    sides."""
+    return frozenset(_handling_key(p) for p in parcels)
 
 
 def _split_oversize(
@@ -245,7 +225,6 @@ def repair_clusters(
     audit: list[dict] = []
     next_id = (max(clusters.keys()) + 1) if clusters else 0
 
-    clusters, next_id, n_peeled = _peel_special_handling(clusters, next_id, audit)
     clusters, next_id, n_split, max_depth_hit = _split_oversize(
         clusters, vehicle_catalog, config, depot_lat, depot_lon, next_id, audit
     )
@@ -261,7 +240,6 @@ def repair_clusters(
         clusters=clusters,
         n_split=n_split,
         n_merged=n_merged,
-        n_peeled=n_peeled,
         clusters_before=clusters_before,
         clusters_after=len(clusters),
         max_depth_hit=max_depth_hit,

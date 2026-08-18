@@ -4,8 +4,15 @@ Every generated plan must satisfy the 13 invariants listed in
 BACKEND_REMEDIATION_PROMPT.md Phase 6 (Conservation, Weight, Volume, Count,
 Dimensions, Fragility, Stack weight, Hazmat, Refrigeration, Placement
 validity, Load order completeness, LIFO consistency, Catalog fidelity), plus
-two this pass introduces: Shift window (A.6) and an extended Catalog
+two Fix Pass 2 introduced: Shift window (A.6) and an extended Catalog
 fidelity check covering the new A.4 fields.
+
+Fix Pass 3 G1 descoped hazmat and refrigeration from the optimizer entirely
+(commercial last-mile delivery; neither appears in the proposal's SOs/FRs)
+-- the two invariants covering them are removed, not just skipped, since
+`VehicleTypeSpec`/`catalog_snapshot` no longer carry the fields those
+checks read. **13 invariants remain**: the original 11 non-hazmat/
+refrigeration ones, plus Shift window and extended Catalog fidelity.
 
 `hypothesis` is not a project dependency (checked before writing this file),
 so per the remediation doc's own fallback ("otherwise a seeded loop of 50
@@ -59,11 +66,13 @@ def _seed_real_catalog(db_session):
 
 
 def _build_instance(db_session, seed: int, n: int = 16) -> list:
-    """A small, seeded, edge-case-rich parcel set: some hazardous, some
-    refrigerated, some fragile/non-stackable, tight staggered time windows,
-    varied weight/volume -- enough that invariants 6, 8, 9 are non-vacuous
+    """A small, seeded, edge-case-rich parcel set: some fragile/
+    non-stackable, tight staggered time windows, varied weight/volume --
+    enough that invariants 6/7 (fragility/stack weight) are non-vacuous
     instead of trivially satisfied by an instance with no edge cases at
-    all."""
+    all. Still carries hazardous/requires_refrigeration data (those columns
+    stay per Fix Pass 3 G1 -- only the optimizer's use of them is gone), but
+    the fraction is no longer tuned for any invariant that reads it."""
     rng = random.Random(seed)
     parcels = []
     for i in range(n):
@@ -177,25 +186,8 @@ def _assert_fragility_and_stack_weight(parcels_by_id, assignments):
                     )
 
 
-def _assert_hazmat_and_refrigeration(parcels_by_id, assignments, catalog_by_code, vehicle_by_id):
-    """8. Hazmat: hazardous parcels only on certified vehicles.
-    9. Refrigeration: refrigerated parcels only on refrigerated vehicles,
-    with compatible temperature ranges."""
-    for a in assignments:
-        parcel = parcels_by_id[a.parcel_id]
-        vehicle_row = catalog_by_code[vehicle_by_id[a.virtual_vehicle_id]]
-        if parcel.hazardous:
-            assert vehicle_row["is_hazmat_certified"], f"{a.parcel_id} is hazardous but its vehicle isn't certified"
-        if parcel.requires_refrigeration:
-            assert vehicle_row["is_refrigerated"], f"{a.parcel_id} requires refrigeration but its vehicle isn't"
-            if parcel.temp_min_celsius is not None and vehicle_row["temp_min_celsius"] is not None:
-                assert parcel.temp_min_celsius >= vehicle_row["temp_min_celsius"]
-            if parcel.temp_max_celsius is not None and vehicle_row["temp_max_celsius"] is not None:
-                assert parcel.temp_max_celsius <= vehicle_row["temp_max_celsius"]
-
-
 def _assert_placement_validity(assignments, catalog_by_code, vehicle_by_id):
-    """10. Placement validity: no two parcels overlap in placement
+    """8. Placement validity: no two parcels overlap in placement
     coordinates; nothing exceeds the cargo bay bounds. See module docstring
     for the documented simplification (bounds + no-exact-duplicate-point,
     not full rotated-rectangle overlap)."""
@@ -216,7 +208,7 @@ def _assert_placement_validity(assignments, catalog_by_code, vehicle_by_id):
 
 
 def _assert_load_order_completeness(assignments):
-    """11. Load order completeness: every parcel has a delivery_sequence and
+    """9. Load order completeness: every parcel has a delivery_sequence and
     load_sequence; both are contiguous 1..n within each vehicle."""
     by_vehicle: dict[str, list[ParcelAssignment]] = {}
     for a in assignments:
@@ -231,7 +223,7 @@ def _assert_load_order_completeness(assignments):
 
 
 def _assert_lifo_consistency(assignments, load_order_exceptions_by_vehicle):
-    """12. LIFO consistency: for every pair of parcels on the same vehicle,
+    """10. LIFO consistency: for every pair of parcels on the same vehicle,
     if A is delivered before B then A's placement depth (x) is no greater
     than B's, unless the pair is recorded in load_order_exceptions.
 
@@ -265,11 +257,13 @@ def _assert_lifo_consistency(assignments, load_order_exceptions_by_vehicle):
 
 
 def _assert_catalog_fidelity(vehicles: list[VirtualVehicle], catalog_by_code: dict[str, dict]):
-    """13. Catalog fidelity: every vehicle references a vehicle_type_code
-    present in catalog_snapshot, with capacities matching exactly.
-    15. Extended catalog fidelity (Fix Pass 2): the same check, extended to
-    the A.4 fields (vehicle_max_stack_weight_kg, available_from,
-    available_until) so it's genuinely additive over #13."""
+    """11. Catalog fidelity: every vehicle references a vehicle_type_code
+    present in catalog_snapshot, with capacities matching exactly --
+    extended (Fix Pass 2) to the A.4 fields (vehicle_max_stack_weight_kg,
+    available_from, available_until). is_refrigerated/is_hazmat_certified
+    are no longer part of VehicleTypeSpec's snapshot (Fix Pass 3 G1 --
+    dropped from the optimizer, though the columns stay on VirtualVehicle
+    itself for reporting), so this no longer cross-checks them here."""
     for vv in vehicles:
         assert vv.vehicle_type in catalog_by_code, f"{vv.vehicle_type} is not in this plan's catalog_snapshot"
         row = catalog_by_code[vv.vehicle_type]
@@ -278,14 +272,12 @@ def _assert_catalog_fidelity(vehicles: list[VirtualVehicle], catalog_by_code: di
         assert vv.cargo_length_cm == row["cargo_length_cm"]
         assert vv.cargo_width_cm == row["cargo_width_cm"]
         assert vv.cargo_height_cm == row["cargo_height_cm"]
-        assert vv.is_refrigerated == row["is_refrigerated"]
-        assert vv.is_hazmat_certified == row["is_hazmat_certified"]
         assert "vehicle_max_stack_weight_kg" in row
         assert "available_from" in row and "available_until" in row
 
 
 def _assert_shift_window(parcels_by_id, assignments, catalog_by_code, vehicle_by_id, config):
-    """14. Shift window (Fix Pass 2 A.6): every vehicle's tour return time
+    """12. Shift window (Fix Pass 2 A.6): every vehicle's tour return time
     is within its own available_until, including accumulated wait."""
     by_vehicle: dict[str, list[ParcelAssignment]] = {}
     for a in assignments:
@@ -301,8 +293,6 @@ def _assert_shift_window(parcels_by_id, assignments, catalog_by_code, vehicle_by
             cargo_height_cm=row["cargo_height_cm"], max_parcels=row["max_parcels"],
             max_stack_layers=row["max_stack_layers"], fixed_cost=row["fixed_cost"],
             cost_per_km=row["cost_per_km"], avg_speed_kmh=row["avg_speed_kmh"],
-            is_refrigerated=row["is_refrigerated"], temp_min_celsius=row["temp_min_celsius"],
-            temp_max_celsius=row["temp_max_celsius"], is_hazmat_certified=row["is_hazmat_certified"],
             has_tail_lift=row["has_tail_lift"], vehicle_max_stack_weight_kg=row["vehicle_max_stack_weight_kg"],
             available_from=row["available_from"], available_until=row["available_until"],
         )
@@ -340,7 +330,6 @@ def test_feasibility_invariants_hold(db_session, seed):
     _assert_weight_volume_count(virtual_vehicles)
     _assert_dimensions(parcels_by_id, assignments, catalog_by_code, vehicle_by_id)
     _assert_fragility_and_stack_weight(parcels_by_id, assignments)
-    _assert_hazmat_and_refrigeration(parcels_by_id, assignments, catalog_by_code, vehicle_by_id)
     _assert_placement_validity(assignments, catalog_by_code, vehicle_by_id)
     _assert_load_order_completeness(assignments)
     _assert_lifo_consistency(assignments, load_order_exceptions_by_vehicle)

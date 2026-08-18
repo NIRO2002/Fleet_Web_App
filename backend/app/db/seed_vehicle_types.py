@@ -1,11 +1,16 @@
 """Idempotently seed the vehicle_type_catalog table (FR03/SO3).
 
-Fix Pass 2 item A: replaces the four placeholder rows with ten real Sri
+Fix Pass 2 item A replaced the four placeholder rows with ten real Sri
 Lankan vehicle types -- seven sourced from field data (`source="field_data"`)
-plus three refrigerated variants of VAN_MED/TRUCK_2T/TRUCK_4T
-(`source="estimated_variant"`, since no field data exists for reefer
-capacity/cost and the figures here are a documented derivation -- see
-docs/DESIGN_DECISIONS.md).
+plus three refrigerated variants of VAN_MED/TRUCK_2T/TRUCK_4T. Fix Pass 3
+G1 dropped the three reefer variants: refrigeration (and hazmat) never
+appeared in any Specific Objective or Functional Requirement of the
+proposal -- this is commercial last-mile delivery, not cold chain -- so
+carrying three catalog rows whose capacities/costs were themselves only
+estimates (never field data) no longer earned their keep. The catalog is
+the 7 field-data rows only. `seed_vehicle_types()` deactivates the three
+dropped codes if a local dev DB already has them seeded from before. See
+docs/DESIGN_DECISIONS.md.
 
 `cost_per_trip_reference` is a bundled per-trip quote from the source data
 (e.g. "typical fare for a normal-distance job"). It is stored for provenance
@@ -22,7 +27,7 @@ expected to bind before weight/volume/dimensional constraints do.
 """
 from app.db.session import SessionLocal
 from app.schemas.vehicle_type import VehicleTypeCatalogIn
-from app.services.vehicle_catalog_service import upsert_type
+from app.services.vehicle_catalog_service import deactivate_type, upsert_type
 
 FIELD_DATA_VEHICLE_TYPES = [
     VehicleTypeCatalogIn(
@@ -215,95 +220,13 @@ FIELD_DATA_VEHICLE_TYPES = [
     ),
 ]
 
-# Reefer variants (Fix Pass 2 A.2, decision 1): ~10% volume reduction for
-# the chiller unit/insulation, ~50% fixed_cost premium, ~15% cost_per_km
-# premium over the base type they're derived from. Estimates, not field
-# data -- see docs/DESIGN_DECISIONS.md.
-ESTIMATED_VARIANT_VEHICLE_TYPES = [
-    VehicleTypeCatalogIn(
-        code="VAN_MED_REEFER",
-        display_name="Medium Commercial Van (Reefer)",
-        model_name="Toyota HiAce / Nissan KDH (Chiller)",
-        capacity_kg=1000.0,
-        capacity_m3=5.40,
-        cargo_length_cm=293.0,
-        cargo_width_cm=154.0,
-        cargo_height_cm=133.0,
-        max_parcels=110,
-        max_stack_layers=4,
-        fixed_cost=3000.0,
-        cost_per_km=210.0,
-        gross_vehicle_weight_kg=3100.0,
-        vehicle_max_stack_weight_kg=500.0,
-        avg_speed_kmh=50.0,
-        max_speed_kmh=90.0,
-        is_refrigerated=True,
-        temp_min_celsius=-18.0,
-        temp_max_celsius=8.0,
-        is_hazmat_certified=False,
-        has_tail_lift=False,
-        available_from="06:00",
-        available_until="20:00",
-        source_reference="Estimated derivation from VAN_MED -- see docs/DESIGN_DECISIONS.md",
-        source="estimated_variant",
-    ),
-    VehicleTypeCatalogIn(
-        code="TRUCK_2T_REEFER",
-        display_name="Light Commercial Truck (2T, Reefer)",
-        model_name="Isuzu Elf (NKR/NPR) (Reefer Box)",
-        capacity_kg=2300.0,
-        capacity_m3=11.20,
-        cargo_length_cm=365.0,
-        cargo_width_cm=190.0,
-        cargo_height_cm=180.0,
-        max_parcels=230,
-        max_stack_layers=5,
-        fixed_cost=5000.0,
-        cost_per_km=290.0,
-        gross_vehicle_weight_kg=5500.0,
-        vehicle_max_stack_weight_kg=1200.0,
-        avg_speed_kmh=45.0,
-        max_speed_kmh=80.0,
-        is_refrigerated=True,
-        temp_min_celsius=-18.0,
-        temp_max_celsius=8.0,
-        is_hazmat_certified=True,
-        has_tail_lift=False,
-        available_from="06:00",
-        available_until="18:00",
-        source_reference="Estimated derivation from TRUCK_2T -- see docs/DESIGN_DECISIONS.md",
-        source="estimated_variant",
-    ),
-    VehicleTypeCatalogIn(
-        code="TRUCK_4T_REEFER",
-        display_name="Medium Duty Truck (4T, Reefer)",
-        model_name="Isuzu Forward / Hino 300 (Reefer Box)",
-        capacity_kg=4200.0,
-        capacity_m3=21.60,
-        cargo_length_cm=520.0,
-        cargo_width_cm=220.0,
-        cargo_height_cm=210.0,
-        max_parcels=380,
-        max_stack_layers=6,
-        fixed_cost=8500.0,
-        cost_per_km=440.0,
-        gross_vehicle_weight_kg=8500.0,
-        vehicle_max_stack_weight_kg=2500.0,
-        avg_speed_kmh=40.0,
-        max_speed_kmh=70.0,
-        is_refrigerated=True,
-        temp_min_celsius=-18.0,
-        temp_max_celsius=8.0,
-        is_hazmat_certified=True,
-        has_tail_lift=False,
-        available_from="05:00",
-        available_until="19:00",
-        source_reference="Estimated derivation from TRUCK_4T -- see docs/DESIGN_DECISIONS.md",
-        source="estimated_variant",
-    ),
-]
+VEHICLE_TYPES = FIELD_DATA_VEHICLE_TYPES
 
-VEHICLE_TYPES = FIELD_DATA_VEHICLE_TYPES + ESTIMATED_VARIANT_VEHICLE_TYPES
+# Dropped in Fix Pass 3 G1 (hazmat/refrigeration descoped -- see module
+# docstring). Deactivated, not deleted, on seed: any local dev DB that
+# already has these rows from before must stop offering them to the
+# optimizer without silently losing the historical data.
+_DEACTIVATED_CODES = ["VAN_MED_REEFER", "TRUCK_2T_REEFER", "TRUCK_4T_REEFER"]
 
 
 def seed_vehicle_types() -> None:
@@ -311,6 +234,8 @@ def seed_vehicle_types() -> None:
     try:
         for payload in VEHICLE_TYPES:
             upsert_type(db, payload)
+        for code in _DEACTIVATED_CODES:
+            deactivate_type(db, code)
     finally:
         db.close()
 

@@ -1,6 +1,8 @@
 """Phase 2 gate: after repair_clusters, every cluster fits at least one
-vehicle type, no parcel is lost or duplicated, and split/merge/peel counts
-in the audit trail are internally consistent."""
+vehicle type, no parcel is lost or duplicated, and split/merge counts in
+the audit trail are internally consistent. Fix Pass 3 G1 dropped the
+"peel" operation (hazmat/refrigeration are out of scope for commercial
+last-mile delivery); this is split-and-merge only now."""
 from dataclasses import dataclass
 
 import pytest
@@ -81,23 +83,45 @@ def test_no_parcel_lost_or_duplicated_through_split_and_merge():
     assert len(result_ids) == len(set(result_ids))
 
 
-def test_hazardous_parcels_are_peeled_into_their_own_cluster():
-    normal = [_parcel(f"N{i}", cluster_id=0) for i in range(5)]
-    hazmat = [_parcel(f"H{i}", cluster_id=0, hazardous=True, hazmat_class="FLAMMABLE") for i in range(3)]
-    clusters = group_by_cluster(normal + hazmat)
-
-    repaired = repair_clusters(clusters, CATALOG, RepairConfig(), depot_lat=6.9271, depot_lon=79.8612)
-
-    assert repaired.n_peeled == 3
-    peeled_clusters = [
-        members for members in repaired.clusters.values()
-        if all(p.hazardous for p in members) and members
+def test_merge_never_combines_clusters_with_different_handling_classes():
+    """Without peel (dropped in Fix Pass 3 G1), a cluster coming out of
+    spatial clustering can already contain a mix of hazardous/ordinary
+    parcels -- `_cluster_handling_key` must compare the *exact set* of
+    handling classes present, not assume homogeneity, so merge never
+    combines two clusters whose handling-class mix differs."""
+    # cluster A: one hazardous + one ordinary parcel (mixed set); very close
+    # to cluster B, which is purely ordinary -- must NOT merge, since their
+    # handling-class sets differ ({None, "HAZMAT:..."} vs {None}).
+    mixed = [
+        _parcel("A-HAZ", cluster_id=0, lat=6.9000, lon=79.8500, hazardous=True, hazmat_class="FLAMMABLE"),
+        _parcel("A-ORD", cluster_id=0, lat=6.9000, lon=79.8500),
     ]
-    assert any(len(c) == 3 for c in peeled_clusters)
-    # no cluster should now mix hazardous and non-hazardous parcels
-    for members in repaired.clusters.values():
-        hazardous_flags = {p.hazardous for p in members}
-        assert len(hazardous_flags) <= 1
+    ordinary = [_parcel("B-ORD", cluster_id=1, lat=6.9001, lon=79.8501)]
+    clusters = group_by_cluster(mixed + ordinary)
+
+    repaired = repair_clusters(
+        clusters, [SMALL_VAN], RepairConfig(merge_max_centroid_km=5.0), depot_lat=6.9271, depot_lon=79.8612
+    )
+
+    assert repaired.n_merged == 0
+    assert repaired.clusters_after == 2
+
+    # two clusters with the *same* mixed composition may still merge.
+    mixed_a = [
+        _parcel("C-HAZ", cluster_id=2, lat=6.9100, lon=79.8600, hazardous=True, hazmat_class="FLAMMABLE"),
+        _parcel("C-ORD", cluster_id=2, lat=6.9100, lon=79.8600),
+    ]
+    mixed_b = [
+        _parcel("D-HAZ", cluster_id=3, lat=6.9101, lon=79.8601, hazardous=True, hazmat_class="FLAMMABLE"),
+        _parcel("D-ORD", cluster_id=3, lat=6.9101, lon=79.8601),
+    ]
+    matching_clusters = group_by_cluster(mixed_a + mixed_b)
+
+    repaired_matching = repair_clusters(
+        matching_clusters, [SMALL_VAN], RepairConfig(merge_max_centroid_km=5.0),
+        depot_lat=6.9271, depot_lon=79.8612,
+    )
+    assert repaired_matching.n_merged == 1
 
 
 def test_undersize_clusters_within_range_are_merged():

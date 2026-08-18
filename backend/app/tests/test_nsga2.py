@@ -46,8 +46,7 @@ def _test_vehicle_spec(avg_speed_kmh=30.0):
         code="TEST", capacity_kg=1000.0, capacity_m3=10.0,
         cargo_length_cm=300.0, cargo_width_cm=200.0, cargo_height_cm=200.0,
         max_parcels=100, max_stack_layers=4, fixed_cost=0.0, cost_per_km=0.0,
-        avg_speed_kmh=avg_speed_kmh, is_refrigerated=False, temp_min_celsius=None,
-        temp_max_celsius=None, is_hazmat_certified=False, has_tail_lift=False,
+        avg_speed_kmh=avg_speed_kmh, has_tail_lift=False,
     )
 
 
@@ -237,8 +236,7 @@ def test_overflow_repair_decodes_the_row_only_once_per_individual(monkeypatch):
         code="SMALL", capacity_kg=5.0, capacity_m3=5.0,
         cargo_length_cm=300.0, cargo_width_cm=200.0, cargo_height_cm=200.0,
         max_parcels=100, max_stack_layers=4, fixed_cost=0.0, cost_per_km=0.0,
-        avg_speed_kmh=30.0, is_refrigerated=False, temp_min_celsius=None,
-        temp_max_celsius=None, is_hazmat_certified=False, has_tail_lift=False,
+        avg_speed_kmh=30.0, has_tail_lift=False,
     )
     config = AssignmentConfig(depot_lat=DEPOT_LAT, depot_lon=DEPOT_LON)
     catalog = (small_vehicle,)
@@ -278,14 +276,12 @@ def _catalog_pair():
     small = VehicleTypeSpec(
         code="SMALL", capacity_kg=30.0, capacity_m3=0.3, cargo_length_cm=150.0, cargo_width_cm=100.0,
         cargo_height_cm=100.0, max_parcels=50, max_stack_layers=3, fixed_cost=100.0, cost_per_km=10.0,
-        avg_speed_kmh=25.0, is_refrigerated=False, temp_min_celsius=None, temp_max_celsius=None,
-        is_hazmat_certified=False, has_tail_lift=False,
+        avg_speed_kmh=25.0, has_tail_lift=False,
     )
     big = VehicleTypeSpec(
         code="BIG", capacity_kg=200.0, capacity_m3=2.0, cargo_length_cm=280.0, cargo_width_cm=170.0,
         cargo_height_cm=170.0, max_parcels=200, max_stack_layers=4, fixed_cost=500.0, cost_per_km=30.0,
-        avg_speed_kmh=28.0, is_refrigerated=False, temp_min_celsius=None, temp_max_celsius=None,
-        is_hazmat_certified=False, has_tail_lift=True,
+        avg_speed_kmh=28.0, has_tail_lift=True,
     )
     return (small, big)
 
@@ -335,8 +331,7 @@ def test_imputed_dimensions_get_a_safety_factor_before_the_fit_check():
         code="TEST", capacity_kg=1000.0, capacity_m3=10.0,
         cargo_length_cm=22.0, cargo_width_cm=22.0, cargo_height_cm=22.0,
         max_parcels=100, max_stack_layers=4, fixed_cost=0.0, cost_per_km=0.0,
-        avg_speed_kmh=30.0, is_refrigerated=False, temp_min_celsius=None,
-        temp_max_celsius=None, is_hazmat_certified=False, has_tail_lift=False,
+        avg_speed_kmh=30.0, has_tail_lift=False,
     )
     # volume 0.008 m^3 -> cbrt(8000) = a 20cm cube: fits the 22cm bay
     # untouched, but 20 * 1.5 (default safety factor) = 30cm does not.

@@ -64,10 +64,6 @@ class VehicleTypeSpec:
     fixed_cost: float
     cost_per_km: float
     avg_speed_kmh: float
-    is_refrigerated: bool
-    temp_min_celsius: float | None
-    temp_max_celsius: float | None
-    is_hazmat_certified: bool
     has_tail_lift: bool
     # Vehicle-level cap on cumulative weight stacked above the bay floor
     # (Fix Pass 2 A.5). None means unlimited -- kept optional so existing
@@ -109,10 +105,6 @@ def load_catalog_snapshot(
             fixed_cost=r.fixed_cost,
             cost_per_km=r.cost_per_km,
             avg_speed_kmh=r.avg_speed_kmh,
-            is_refrigerated=r.is_refrigerated,
-            temp_min_celsius=r.temp_min_celsius,
-            temp_max_celsius=r.temp_max_celsius,
-            is_hazmat_certified=r.is_hazmat_certified,
             has_tail_lift=r.has_tail_lift,
             vehicle_max_stack_weight_kg=r.vehicle_max_stack_weight_kg,
             available_from=r.available_from,
@@ -240,26 +232,6 @@ def _dimension_fits(parcel, vehicle: VehicleTypeSpec) -> bool:
     return all(d <= c for d, c in zip(dims, cargo))
 
 
-def _hazmat_ok(parcel, vehicle: VehicleTypeSpec) -> bool:
-    if not (parcel.hazardous or parcel.hazmat_class):
-        return True
-    return vehicle.is_hazmat_certified
-
-
-def _refrigeration_ok(parcel, vehicle: VehicleTypeSpec) -> bool:
-    if not parcel.requires_refrigeration:
-        return True
-    if not vehicle.is_refrigerated:
-        return False
-    if parcel.temp_min_celsius is not None and vehicle.temp_min_celsius is not None:
-        if parcel.temp_min_celsius < vehicle.temp_min_celsius:
-            return False
-    if parcel.temp_max_celsius is not None and vehicle.temp_max_celsius is not None:
-        if parcel.temp_max_celsius > vehicle.temp_max_celsius:
-            return False
-    return True
-
-
 def schedule_time_window_compliance(
     parcels_in_delivery_order: list, vehicle: VehicleTypeSpec, config: AssignmentConfig
 ) -> tuple[float, list[bool], float, float]:
@@ -353,7 +325,7 @@ def vehicle_metrics(parcel_objs: list, vehicle: VehicleTypeSpec, config: Assignm
 
 
 N_OBJECTIVES = 4
-N_CONSTRAINTS = 9
+N_CONSTRAINTS = 7
 
 
 #: Bound on the per-problem-instance slot caches (F5): large enough to cover
@@ -459,15 +431,13 @@ class AssignmentProblem(Problem):
         util_volume = volume / vehicle.capacity_m3 if vehicle.capacity_m3 else 0.0
         cost = vehicle.fixed_cost + vehicle.cost_per_km * distance
 
-        # Per-parcel dim/hazmat/refrig checks (constraints 4-6), computed
-        # exactly once per slot and reused below both for the B.2
-        # short-circuit decision and for evaluate_individual's g_dim/
-        # g_hazmat/g_refrig accumulation -- previously each parcel was
-        # checked twice (once here, once again in evaluate_individual).
+        # Per-parcel dimension check (constraint 4), computed exactly once
+        # per slot and reused below both for the B.2 short-circuit decision
+        # and for evaluate_individual's g_dim accumulation -- previously
+        # each parcel was checked twice (once here, once again in
+        # evaluate_individual).
         parcel_objs = [self.parcels[i] for i in parcel_indices]
         dim_violations = sum(1 for p in parcel_objs if not _dimension_fits(p, vehicle))
-        hazmat_violations = sum(1 for p in parcel_objs if not _hazmat_ok(p, vehicle))
-        refrig_violations = sum(1 for p in parcel_objs if not _refrigeration_ok(p, vehicle))
 
         # B.2: cheapest-first short-circuit -- skip the (expensive) placement
         # attempt entirely when the slot is already infeasible on grounds
@@ -479,8 +449,6 @@ class AssignmentProblem(Problem):
             or weight > vehicle.capacity_kg
             or volume > vehicle.capacity_m3
             or dim_violations > 0
-            or hazmat_violations > 0
-            or refrig_violations > 0
         )
         if cheaply_infeasible:
             self._short_circuit_count += 1
@@ -507,8 +475,6 @@ class AssignmentProblem(Problem):
             "return_time_minutes": return_time_minutes,
             "placement_ok": placement_ok,
             "dim_violations": dim_violations,
-            "hazmat_violations": hazmat_violations,
-            "refrig_violations": refrig_violations,
         }
         self._slot_cache[cache_key] = result
         if len(self._slot_cache) > SLOT_CACHE_MAXSIZE:
@@ -519,7 +485,7 @@ class AssignmentProblem(Problem):
         slots, type_of_slot = decode(row, self.n, self.K)
 
         used_metrics = []
-        g_weight = g_volume = g_count = g_dim = g_hazmat = g_refrig = g_stack = g_shift = 0.0
+        g_weight = g_volume = g_count = g_dim = g_stack = g_shift = 0.0
 
         for slot_idx, parcel_indices in slots.items():
             type_idx = int(np.clip(type_of_slot[slot_idx], 0, self.T - 1))
@@ -533,11 +499,9 @@ class AssignmentProblem(Problem):
             g_count += max(0.0, m["count"] - vehicle.max_parcels)
 
             # Computed once in _evaluate_slot and cached there -- see that
-            # method's docstring note on why these must not be
-            # recomputed per parcel here as well.
+            # method's docstring note on why this must not be recomputed
+            # per parcel here as well.
             g_dim += m["dim_violations"]
-            g_hazmat += m["hazmat_violations"]
-            g_refrig += m["refrig_violations"]
 
             if not m["placement_ok"]:
                 g_stack += m["count"]
@@ -561,13 +525,17 @@ class AssignmentProblem(Problem):
         total_cost = float(sum(m["cost"] for m in used_metrics))
 
         f = np.array([-mean_utilization, total_distance, -mean_compliance, total_cost])
-        # Constraint 8 (empty-slot consistency) is auto-satisfied by the
-        # encoding itself — a slot only exists in `slots` if it holds a
-        # parcel, and its type gene is always in [0, T-1] by construction
-        # of `xu`. Kept as an explicit always-zero column so
-        # `n_ieq_constr` matches the spec's numbered constraint list.
-        # Constraint 9 (Fix Pass 2 A.6): vehicle shift-window compliance.
-        g = np.array([g_weight, g_volume, g_count, g_dim, g_hazmat, g_refrig, g_stack, 0.0, g_shift])
+        # Constraints, in order: (1) weight, (2) volume, (3) count, (4)
+        # dimensional fit, (5) stacking/placement, (6) empty-slot
+        # consistency -- auto-satisfied by the encoding itself (a slot only
+        # exists in `slots` if it holds a parcel, and its type gene is
+        # always in [0, T-1] by construction of `xu`); kept as an explicit
+        # always-zero column so `n_ieq_constr` matches the numbered
+        # constraint list. (7) vehicle shift-window compliance (Fix Pass 2
+        # A.6). Hazmat/refrigeration constraints were dropped in Fix Pass 3
+        # G1 -- out of scope for commercial last-mile delivery; see
+        # docs/DESIGN_DECISIONS.md.
+        g = np.array([g_weight, g_volume, g_count, g_dim, g_stack, 0.0, g_shift])
         return f, g
 
 
@@ -622,8 +590,8 @@ class OverflowRepair(Repair):
     """Standard cheap repair for constrained assignment GAs (spec 3.3): if a
     slot overflows weight or volume capacity, move its lightest parcels to
     the least-loaded slot that has headroom for them. Does not touch
-    dimensional/hazmat/refrigeration/stacking feasibility — those remain
-    the constraint evaluator's job; this only relieves the two most common,
+    dimensional/stacking feasibility — those remain the constraint
+    evaluator's job; this only relieves the two most common,
     cheaply-fixable overflow constraints so the GA spends less time on
     trivially-infeasible individuals."""
 
