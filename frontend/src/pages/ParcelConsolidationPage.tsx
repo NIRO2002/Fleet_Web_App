@@ -61,15 +61,21 @@ export function ParcelConsolidationPage() {
 
   const refresh = async () => {
     setLoading(true)
+    setPageNotice(null)
+    // Fetched independently, not via Promise.all: the cluster summary can
+    // legitimately fail before anything has ever been trained, and that
+    // must not prevent the parcel list itself from rendering.
     try {
-      const [parcelList, summary] = await Promise.all([parcelService.list(), parcelService.getClusterSummary()])
-      setParcels(parcelList)
-      setClusterSummary(summary)
+      setParcels(await parcelService.list())
     } catch (err) {
       setPageNotice({ tone: 'error', text: err instanceof Error ? err.message : 'Failed to load parcels.' })
-    } finally {
-      setLoading(false)
     }
+    try {
+      setClusterSummary(await parcelService.getClusterSummary())
+    } catch {
+      setClusterSummary(null)
+    }
+    setLoading(false)
   }
 
   useEffect(() => {
