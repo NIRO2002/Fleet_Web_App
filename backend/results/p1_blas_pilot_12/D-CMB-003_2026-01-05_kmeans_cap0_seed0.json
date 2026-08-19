@@ -1,0 +1,18 @@
+{
+  "run_id": "D-CMB-003_2026-01-05_kmeans_cap0_seed0",
+  "depot_id": "D-CMB-003",
+  "delivery_date": "2026-01-05",
+  "method": "kmeans",
+  "capacity_aware": false,
+  "seed": 0,
+  "n_parcels": 400,
+  "mean_utilization": 0.13442547854608256,
+  "utilization_ceiling": 0.9992626435402154,
+  "total_distance_km": 493.49745898988675,
+  "mean_time_window_compliance": 0.738564858913696,
+  "total_fleet_cost": 235074.56521536238,
+  "n_vehicles": 15,
+  "hypervolume": 0.0,
+  "runtime_seconds": 433.9247771000082,
+  "repair_audit": null
+}

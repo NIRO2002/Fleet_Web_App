@@ -40,3 +40,13 @@ def test_no_duplicate_parcel_ids_and_no_missing_core_fields():
     df = pd.read_csv(DATASET_PATH)
     assert df["parcel_id"].duplicated().sum() == 0
     assert df[["weight_kg", "length_cm", "width_cm", "height_cm", "volume_m3"]].isna().sum().sum() == 0
+
+
+def test_zero_stack_headroom_is_only_the_non_stackable_sentinel():
+    df = pd.read_csv(DATASET_PATH)
+    zero_headroom = df["max_stack_weight_kg"].eq(0)
+    non_stackable = ~df["stackable"].astype(bool)
+
+    assert zero_headroom.sum() == 15_000
+    assert zero_headroom.equals(non_stackable)
+    assert not (df["fragile"].astype(bool) & ~non_stackable).any()

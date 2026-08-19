@@ -1,0 +1,18 @@
+{
+  "run_id": "D-CMB-001_2026-01-05_hdbscan_cap0_seed2",
+  "depot_id": "D-CMB-001",
+  "delivery_date": "2026-01-05",
+  "method": "hdbscan",
+  "capacity_aware": false,
+  "seed": 2,
+  "n_parcels": 400,
+  "mean_utilization": 0.2328742735569552,
+  "utilization_ceiling": 0.9996079881188118,
+  "total_distance_km": 633.4165114441116,
+  "mean_time_window_compliance": 0.8900158460820226,
+  "total_fleet_cost": 180566.7527281399,
+  "n_vehicles": 34,
+  "hypervolume": 34451.276400022725,
+  "runtime_seconds": 784.7998615000106,
+  "repair_audit": null
+}

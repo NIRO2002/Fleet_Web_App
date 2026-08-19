@@ -15,6 +15,16 @@ Neither layer is the full Phase 5/6 metrics/statistics suite from
 BACKEND_REMEDIATION_PROMPT.md -- `statistics.py` (Fix Pass 4 S8) is the
 analysis layer on top of this harness's output.
 """
+import os
+
+# Set before joblib/numpy/scikit-learn (or any app module importing them).
+# Each evaluation run is already parallelized at the process level; allowing
+# every worker to create another BLAS thread pool causes oversubscription.
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+
 import json
 import time
 import uuid
@@ -23,7 +33,7 @@ from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
 
-from joblib import Parallel, delayed
+from joblib import Parallel, delayed, parallel_config
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -154,7 +164,8 @@ def run_batch(configs: list[RunConfig], *, n_jobs: int = -1, out_dir: str | Path
             (out_path / f"{cfg.run_id}.json").write_text(json.dumps(result, indent=2))
         return result
 
-    return Parallel(n_jobs=n_jobs)(delayed(_run_and_write)(cfg) for cfg in configs)
+    with parallel_config(backend="loky", inner_max_num_threads=1):
+        return Parallel(n_jobs=n_jobs)(delayed(_run_and_write)(cfg) for cfg in configs)
 
 
 def merge_results(out_dir: str | Path) -> list[dict]:
@@ -280,6 +291,7 @@ def run_pipeline_batch(
         return result
 
     if pending:
-        Parallel(n_jobs=n_jobs)(delayed(_run_and_write)(cfg) for cfg in pending)
+        with parallel_config(backend="loky", inner_max_num_threads=1):
+            Parallel(n_jobs=n_jobs)(delayed(_run_and_write)(cfg) for cfg in pending)
 
     return [json.loads((out_path / f"{cfg.run_id}.json").read_text()) for cfg in configs]

@@ -7,6 +7,28 @@ result.
 
 ## Placement (Fix Pass 4, item S1)
 
+### Decision 7 — zero stack headroom is intentional for non-stackable parcels
+
+The dataset generator is not included in this repository, so its exact random
+drawing rule cannot be audited from source. The committed 36,000-row dataset
+was therefore checked directly. Exactly 15,000 parcels (41.67%) are
+non-stackable and those same 15,000 rows, with no exceptions, have
+`max_stack_weight_kg == 0`. No stackable parcel has zero headroom; their
+minimum is 2.57 kg and median is 22.33 kg. All 4,805 fragile parcels are
+non-stackable. The zero mass is consequently a sentinel for a property that
+is meaningless on non-stackable parcels, not evidence of zero support being
+drawn for stackable cartons.
+
+**Decision**: retain the dataset unchanged. On `D-CMB-001/2026-01-05`, the
+production placement routine accepts the first 74 real parcels in a
+`TRUCK_4T` and fails from 75 through 100 (with two earlier non-monotonic
+failures at 62 and 63 caused by the heuristic reordering the changed set).
+The capacity-only 99.96% figure therefore remains a theoretical aggregate
+bound and is not physically reachable evidence. Results must additionally
+report `compute_placement_aware_ceiling`, which runs every claimed load
+through the production placement routine. Its result is labelled an
+attainable reference, not a mathematically proven global upper bound.
+
 ### Decision 5 — the placement fix is reported as partial, not papered over
 
 Real-data verification (`data/parcels_sample_36000.csv`) confirmed the placement
