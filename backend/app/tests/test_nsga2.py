@@ -8,6 +8,7 @@ this pipeline stage (per the remediation spec's own note that file is
 disposable once this one exists)."""
 import random
 from datetime import date
+from types import SimpleNamespace
 
 import numpy as np
 
@@ -16,10 +17,12 @@ from app.evaluation.real_data import real_instance_payloads
 from app.optimization.assignment_problem import (
     AssignmentConfig,
     AssignmentProblem,
+    OverflowRepair,
     VehicleTypeSpec,
     _dimension_fits,
     schedule_time_window_compliance,
     slot_budget,
+    decode,
 )
 from app.schemas.parcel import ParcelIn
 from app.schemas.vehicle_type import VehicleTypeCatalogIn
@@ -32,6 +35,18 @@ DELIVERY_DATE = date(2026, 8, 20)
 DEPOT_LAT, DEPOT_LON = 6.9271, 79.8612
 
 FAST_CONFIG = AssignmentConfig(population=30, generations=25, max_vehicle_slots=8)
+
+
+def test_overflow_repair_can_close_a_nearly_empty_slot(parcel_factory):
+    parcels = [SimpleNamespace(**p) for p in parcel_factory(n=2, seed=4)]
+    vehicle = _test_vehicle_spec()
+    problem = AssignmentProblem(parcels, (vehicle,), FAST_CONFIG, n_slots=2)
+    row = np.array([0, 1, 0, 0], dtype=float)
+
+    repaired = OverflowRepair()._do(problem, np.array([row]))[0]
+    slots, _ = decode(repaired, problem.n, problem.K)
+
+    assert len([members for members in slots.values() if members]) == 1
 
 
 class _FakeParcel:

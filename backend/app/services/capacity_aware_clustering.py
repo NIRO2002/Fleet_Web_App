@@ -28,6 +28,7 @@ from sklearn.cluster import KMeans
 
 from app.core.config import settings
 from app.models.parcel import Parcel
+from app.optimization.placement import attempt_placement
 from app.services.clustering_common import project_to_metric
 from app.utils_time import minutes
 
@@ -35,7 +36,10 @@ from app.utils_time import minutes
 @dataclass
 class RepairConfig:
     merge_max_centroid_km: float = 2.0
-    max_split_recursion_depth: int = 6
+    # A balanced split of a 400-parcel instance can require nine levels in
+    # the worst case. Ten preserves a safety bound without prematurely
+    # returning a cluster that the placement-aware predicate just rejected.
+    max_split_recursion_depth: int = 10
 
 
 @dataclass
@@ -68,11 +72,33 @@ def _fits_some_vehicle(parcels: list[Parcel], vehicle_catalog) -> bool:
     for vehicle in vehicle_catalog:
         if total_weight > vehicle.capacity_kg or total_volume > vehicle.capacity_m3:
             continue
+        if vehicle.max_parcels is not None and len(parcels) > vehicle.max_parcels:
+            continue
         cargo_longest = max(vehicle.cargo_length_cm, vehicle.cargo_width_cm, vehicle.cargo_height_cm)
         if longest_side > cargo_longest:
             continue
-        return True
+        if attempt_placement(parcels, vehicle, collect_exceptions=False) is not None:
+            return True
     return False
+
+
+def _split_decision_inputs(parcels, vehicle_catalog) -> dict:
+    largest = max(vehicle_catalog, key=lambda v: (v.capacity_kg, v.capacity_m3))
+    return {
+        "parcel_count": len(parcels),
+        "total_weight_kg": sum(p.weight_kg for p in parcels),
+        "total_volume_m3": sum(p.volume_m3 for p in parcels),
+        "longest_parcel_dimension_cm": max(
+            (max(p.length_cm or 0.0, p.width_cm or 0.0, p.height_cm or 0.0) for p in parcels), default=0.0
+        ),
+        "largest_vehicle_code": largest.code,
+        "largest_capacity_kg": largest.capacity_kg,
+        "largest_capacity_m3": largest.capacity_m3,
+        "largest_max_parcels": largest.max_parcels,
+        "largest_cargo_dimension_cm": max(
+            largest.cargo_length_cm, largest.cargo_width_cm, largest.cargo_height_cm
+        ),
+    }
 
 
 def _handling_key(parcel: Parcel) -> str | None:
@@ -112,7 +138,15 @@ def _split_oversize(
 
     while queue:
         cluster_id, parcels, depth = queue.pop(0)
-        if len(parcels) <= 1 or _fits_some_vehicle(parcels, vehicle_catalog):
+        fits = len(parcels) <= 1 or _fits_some_vehicle(parcels, vehicle_catalog)
+        audit.append({
+            "operation": "split_check",
+            "cluster_id": cluster_id,
+            "depth": depth,
+            "fits_some_vehicle": fits,
+            **_split_decision_inputs(parcels, vehicle_catalog),
+        })
+        if fits:
             result[cluster_id] = parcels
             continue
         if depth >= config.max_split_recursion_depth:

@@ -7,6 +7,63 @@ result.
 
 ## Placement (Fix Pass 4, item S1)
 
+### Decision 8 — clustering seeds one whole-instance assignment problem
+
+Fix Pass 5 re-audited the evaluation call chain after a report suggested
+that each cluster was optimized independently. That report did not match
+the implementation: `run_pipeline_one` passes all 400 parcels to one
+`optimize_load` call, while repaired clusters are used only to construct
+warm-start rows. `LoadPlan.n_vehicles` counts used slots from that single
+selected solution. The slot budget is also dynamic, not fixed at 12; for
+`D-CMB-001/2026-01-05` it was 29 because warm-start cluster count is a
+lower bound on the available search slots.
+
+At seed 0 before consolidation repair, the final feasible population/front
+grew from 20/7 at 25 generations to 100/77 at 100 and 100/100 at 200. The
+front therefore did not collapse to one point. The real defect was that
+overflow repair only spread parcels outward: at 200 generations the
+selected solution used all 29 slots, including two one-parcel loads
+(min/median/max 1/12/35). Fleet fixed cost was correctly charged once per
+used slot. Repair now makes one bounded attempt to empty a least-loaded
+slot into already feasible loads. At 25 generations this reduced the
+selected plan from 29 to 23 used slots while increasing the feasible final
+population from 20 to 100; the front contained 22 distinct points.
+
+### Decision 9 — the K-Means capacity-aware arm is a measured pass-through
+
+The capacity-aware flag is wired identically for HDBSCAN and K-Means. In
+both complete 36-run pilots, however, every K-Means repair audit was
+`n_split=0, n_merged=0`; therefore its on/off metrics were byte-identical.
+K-Means chooses its cluster count from total volume divided by mean catalog
+vehicle volume, so those clusters already satisfy the current aggregate
+split and proximity/time merge rules. This is correct no-op behavior, not
+evidence that the flag failed to reach repair. Evaluation rows now emit an
+explicit enabled/disabled audit so this distinction remains visible.
+
+This finding describes the pre-I5 aggregate-only predicate and is
+superseded by Decision 10 below; it is retained because it explains why
+the earlier pilot arms were identical.
+
+### Decision 10 — split includes parcel count and physical placement
+
+Across the three pilot instances, two methods and three seeds, 282 clusters
+were inspected before changing the split predicate. None exceeded any
+vehicle by aggregate weight/volume/dimension, but 36 passed those aggregate
+checks and failed the production placement routine. The largest cluster
+held 378 parcels; the closest observed ratios to `TRUCK_4T` were 61.5% by
+weight, 91.1% by volume and 28.8% by longest dimension. Aggregate-only
+splitting therefore moved placement infeasibility downstream into NSGA-II.
+
+**Decision**: a cluster fits only when at least one active catalog vehicle
+also accepts its parcel count and passes `attempt_placement`. Every split
+check records demand and largest-vehicle limits in the audit. The default
+recursion cap is 10 rather than 6 because a balanced split of a 400-parcel
+instance can require nine levels. Afterward, seed-0 HDBSCAN produced 4/7/4
+splits across the three depots; K-Means produced 15/21/14. No depth cap was
+hit and every repaired cluster passed the same placement-aware predicate.
+The contribution is consequently split-and-merge in measured practice,
+not merge-only.
+
 ### Decision 7 — zero stack headroom is intentional for non-stackable parcels
 
 The dataset generator is not included in this repository, so its exact random

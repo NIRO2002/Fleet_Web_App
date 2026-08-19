@@ -1,0 +1,62 @@
+[
+  {
+    "depot": "D-CMB-001",
+    "method": "hdbscan",
+    "before": 34,
+    "after": 30,
+    "split": 4,
+    "merged": 8,
+    "depth_cap": false,
+    "all_fit": true
+  },
+  {
+    "depot": "D-CMB-001",
+    "method": "kmeans",
+    "before": 2,
+    "after": 12,
+    "split": 15,
+    "merged": 5,
+    "depth_cap": false,
+    "all_fit": true
+  },
+  {
+    "depot": "D-CMB-002",
+    "method": "hdbscan",
+    "before": 31,
+    "after": 28,
+    "split": 7,
+    "merged": 10,
+    "depth_cap": false,
+    "all_fit": true
+  },
+  {
+    "depot": "D-CMB-002",
+    "method": "kmeans",
+    "before": 3,
+    "after": 23,
+    "split": 21,
+    "merged": 1,
+    "depth_cap": false,
+    "all_fit": true
+  },
+  {
+    "depot": "D-CMB-003",
+    "method": "hdbscan",
+    "before": 21,
+    "after": 23,
+    "split": 4,
+    "merged": 2,
+    "depth_cap": false,
+    "all_fit": true
+  },
+  {
+    "depot": "D-CMB-003",
+    "method": "kmeans",
+    "before": 3,
+    "after": 14,
+    "split": 14,
+    "merged": 3,
+    "depth_cap": false,
+    "all_fit": true
+  }
+]

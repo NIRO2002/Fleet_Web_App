@@ -1,0 +1,2804 @@
+{
+  "summary": {
+    "runs": 18,
+    "total_clusters": 282,
+    "aggregate_oversize": 0,
+    "placement_infeasible_aggregate_fit": 36,
+    "max_cluster_n": 378,
+    "max_weight_ratio": 0.6149631111111111,
+    "max_volume_ratio": 0.9109231018734388,
+    "max_dimension_ratio": 0.2882692307692308
+  },
+  "runs": [
+    {
+      "depot": "D-CMB-001",
+      "date": "2026-01-05",
+      "method": "hdbscan",
+      "seed": 0,
+      "clusters": 34,
+      "placement_bad": 1,
+      "max_n": 94,
+      "max_weight_ratio": 0.1838122222222222,
+      "max_volume_ratio": 0.2770908134054954,
+      "max_dimension_ratio": 0.2619230769230769,
+      "details": [
+        {
+          "id": 6,
+          "n": 35,
+          "weight_ratio": 0.06405422222222222,
+          "volume_ratio": 0.08846547785179018,
+          "dimension_ratio": 0.17365384615384616,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 4,
+          "n": 21,
+          "weight_ratio": 0.05001911111111111,
+          "volume_ratio": 0.08615999071606995,
+          "dimension_ratio": 0.2619230769230769,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 3,
+          "n": 22,
+          "weight_ratio": 0.026878444444444444,
+          "volume_ratio": 0.03433390695253955,
+          "dimension_ratio": 0.12615384615384614,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 9,
+          "n": 65,
+          "weight_ratio": 0.09962533333333334,
+          "volume_ratio": 0.16255142601998335,
+          "dimension_ratio": 0.24538461538461537,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 8,
+          "n": 94,
+          "weight_ratio": 0.1838122222222222,
+          "volume_ratio": 0.2770908134054954,
+          "dimension_ratio": 0.2567307692307692,
+          "aggregate_fit": true,
+          "placement_fit": false
+        },
+        {
+          "id": 7,
+          "n": 47,
+          "weight_ratio": 0.05710266666666666,
+          "volume_ratio": 0.0697030398417985,
+          "dimension_ratio": 0.14538461538461536,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 0,
+          "n": 39,
+          "weight_ratio": 0.04718555555555556,
+          "volume_ratio": 0.07266759721065778,
+          "dimension_ratio": 0.2544230769230769,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 2,
+          "n": 26,
+          "weight_ratio": 0.044368444444444446,
+          "volume_ratio": 0.045033969650291425,
+          "dimension_ratio": 0.17403846153846153,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 1,
+          "n": 15,
+          "weight_ratio": 0.02176622222222222,
+          "volume_ratio": 0.04429355020815987,
+          "dimension_ratio": 0.24576923076923077,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 10,
+          "n": 1,
+          "weight_ratio": 0.006590444444444445,
+          "volume_ratio": 0.006833570024979183,
+          "dimension_ratio": 0.1323076923076923,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 11,
+          "n": 1,
+          "weight_ratio": 0.001552,
+          "volume_ratio": 0.001827623646960866,
+          "dimension_ratio": 0.09192307692307691,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 12,
+          "n": 1,
+          "weight_ratio": 0.0020815555555555557,
+          "volume_ratio": 0.0016089986677768526,
+          "dimension_ratio": 0.08711538461538461,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 13,
+          "n": 1,
+          "weight_ratio": 0.00014155555555555555,
+          "volume_ratio": 0.0002942373022481266,
+          "dimension_ratio": 0.04730769230769231,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 5,
+          "n": 12,
+          "weight_ratio": 0.013229555555555555,
+          "volume_ratio": 0.01742914429641965,
+          "dimension_ratio": 0.1371153846153846,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 14,
+          "n": 1,
+          "weight_ratio": 0.0015511111111111112,
+          "volume_ratio": 0.005656826477935055,
+          "dimension_ratio": 0.1776923076923077,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 15,
+          "n": 1,
+          "weight_ratio": 0.0004948888888888889,
+          "volume_ratio": 0.000556258784346378,
+          "dimension_ratio": 0.06423076923076923,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 16,
+          "n": 1,
+          "weight_ratio": 0.0007586666666666667,
+          "volume_ratio": 0.0022561321398834305,
+          "dimension_ratio": 0.13788461538461538,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 17,
+          "n": 1,
+          "weight_ratio": 0.001305111111111111,
+          "volume_ratio": 0.0011617460865945047,
+          "dimension_ratio": 0.07826923076923077,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 18,
+          "n": 1,
+          "weight_ratio": 0.0016584444444444444,
+          "volume_ratio": 0.0018518817651956704,
+          "dimension_ratio": 0.06865384615384616,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 19,
+          "n": 1,
+          "weight_ratio": 0.0005184444444444445,
+          "volume_ratio": 0.0008570722731057452,
+          "dimension_ratio": 0.08423076923076922,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 20,
+          "n": 1,
+          "weight_ratio": 0.0008686666666666667,
+          "volume_ratio": 0.002368019275603664,
+          "dimension_ratio": 0.0975,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 21,
+          "n": 1,
+          "weight_ratio": 0.0002986666666666667,
+          "volume_ratio": 0.00010165129059117403,
+          "dimension_ratio": 0.060384615384615384,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 22,
+          "n": 1,
+          "weight_ratio": 0.0020557777777777775,
+          "volume_ratio": 0.0017131973355537053,
+          "dimension_ratio": 0.08365384615384615,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 23,
+          "n": 1,
+          "weight_ratio": 0.0017902222222222221,
+          "volume_ratio": 0.0015903947543713574,
+          "dimension_ratio": 0.08961538461538462,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 24,
+          "n": 1,
+          "weight_ratio": 0.0006455555555555555,
+          "volume_ratio": 0.00160016253122398,
+          "dimension_ratio": 0.07250000000000001,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 25,
+          "n": 1,
+          "weight_ratio": 0.001276888888888889,
+          "volume_ratio": 0.0018845972106577853,
+          "dimension_ratio": 0.08096153846153846,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 26,
+          "n": 1,
+          "weight_ratio": 0.0004486666666666667,
+          "volume_ratio": 0.0004922078268109908,
+          "dimension_ratio": 0.06096153846153846,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 27,
+          "n": 1,
+          "weight_ratio": 0.004282888888888889,
+          "volume_ratio": 0.0021924965029142384,
+          "dimension_ratio": 0.0878846153846154,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 28,
+          "n": 1,
+          "weight_ratio": 0.0026671111111111114,
+          "volume_ratio": 0.02420102447960033,
+          "dimension_ratio": 0.21884615384615383,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 29,
+          "n": 1,
+          "weight_ratio": 0.003431111111111111,
+          "volume_ratio": 0.01218982098251457,
+          "dimension_ratio": 0.16826923076923078,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 30,
+          "n": 1,
+          "weight_ratio": 0.0008255555555555555,
+          "volume_ratio": 0.0014088064945878434,
+          "dimension_ratio": 0.09192307692307691,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 31,
+          "n": 1,
+          "weight_ratio": 0.0016366666666666667,
+          "volume_ratio": 0.0014185054121565361,
+          "dimension_ratio": 0.07211538461538461,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 32,
+          "n": 1,
+          "weight_ratio": 0.0063315555555555555,
+          "volume_ratio": 0.02656778068276436,
+          "dimension_ratio": 0.19461538461538463,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 33,
+          "n": 1,
+          "weight_ratio": 0.009725555555555555,
+          "volume_ratio": 0.010401503705245629,
+          "dimension_ratio": 0.16557692307692307,
+          "aggregate_fit": true,
+          "placement_fit": true
+        }
+      ]
+    },
+    {
+      "depot": "D-CMB-001",
+      "date": "2026-01-05",
+      "method": "hdbscan",
+      "seed": 1,
+      "clusters": 34,
+      "placement_bad": 1,
+      "max_n": 94,
+      "max_weight_ratio": 0.1838122222222222,
+      "max_volume_ratio": 0.2770908134054954,
+      "max_dimension_ratio": 0.2619230769230769,
+      "details": [
+        {
+          "id": 6,
+          "n": 35,
+          "weight_ratio": 0.06405422222222222,
+          "volume_ratio": 0.08846547785179018,
+          "dimension_ratio": 0.17365384615384616,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 4,
+          "n": 21,
+          "weight_ratio": 0.05001911111111111,
+          "volume_ratio": 0.08615999071606995,
+          "dimension_ratio": 0.2619230769230769,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 3,
+          "n": 22,
+          "weight_ratio": 0.026878444444444444,
+          "volume_ratio": 0.03433390695253955,
+          "dimension_ratio": 0.12615384615384614,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 9,
+          "n": 65,
+          "weight_ratio": 0.09962533333333334,
+          "volume_ratio": 0.16255142601998335,
+          "dimension_ratio": 0.24538461538461537,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 8,
+          "n": 94,
+          "weight_ratio": 0.1838122222222222,
+          "volume_ratio": 0.2770908134054954,
+          "dimension_ratio": 0.2567307692307692,
+          "aggregate_fit": true,
+          "placement_fit": false
+        },
+        {
+          "id": 7,
+          "n": 47,
+          "weight_ratio": 0.05710266666666666,
+          "volume_ratio": 0.0697030398417985,
+          "dimension_ratio": 0.14538461538461536,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 0,
+          "n": 39,
+          "weight_ratio": 0.04718555555555556,
+          "volume_ratio": 0.07266759721065778,
+          "dimension_ratio": 0.2544230769230769,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 2,
+          "n": 26,
+          "weight_ratio": 0.044368444444444446,
+          "volume_ratio": 0.045033969650291425,
+          "dimension_ratio": 0.17403846153846153,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 1,
+          "n": 15,
+          "weight_ratio": 0.02176622222222222,
+          "volume_ratio": 0.04429355020815987,
+          "dimension_ratio": 0.24576923076923077,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 10,
+          "n": 1,
+          "weight_ratio": 0.006590444444444445,
+          "volume_ratio": 0.006833570024979183,
+          "dimension_ratio": 0.1323076923076923,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 11,
+          "n": 1,
+          "weight_ratio": 0.001552,
+          "volume_ratio": 0.001827623646960866,
+          "dimension_ratio": 0.09192307692307691,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 12,
+          "n": 1,
+          "weight_ratio": 0.0020815555555555557,
+          "volume_ratio": 0.0016089986677768526,
+          "dimension_ratio": 0.08711538461538461,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 13,
+          "n": 1,
+          "weight_ratio": 0.00014155555555555555,
+          "volume_ratio": 0.0002942373022481266,
+          "dimension_ratio": 0.04730769230769231,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 5,
+          "n": 12,
+          "weight_ratio": 0.013229555555555555,
+          "volume_ratio": 0.01742914429641965,
+          "dimension_ratio": 0.1371153846153846,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 14,
+          "n": 1,
+          "weight_ratio": 0.0015511111111111112,
+          "volume_ratio": 0.005656826477935055,
+          "dimension_ratio": 0.1776923076923077,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 15,
+          "n": 1,
+          "weight_ratio": 0.0004948888888888889,
+          "volume_ratio": 0.000556258784346378,
+          "dimension_ratio": 0.06423076923076923,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 16,
+          "n": 1,
+          "weight_ratio": 0.0007586666666666667,
+          "volume_ratio": 0.0022561321398834305,
+          "dimension_ratio": 0.13788461538461538,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 17,
+          "n": 1,
+          "weight_ratio": 0.001305111111111111,
+          "volume_ratio": 0.0011617460865945047,
+          "dimension_ratio": 0.07826923076923077,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 18,
+          "n": 1,
+          "weight_ratio": 0.0016584444444444444,
+          "volume_ratio": 0.0018518817651956704,
+          "dimension_ratio": 0.06865384615384616,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 19,
+          "n": 1,
+          "weight_ratio": 0.0005184444444444445,
+          "volume_ratio": 0.0008570722731057452,
+          "dimension_ratio": 0.08423076923076922,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 20,
+          "n": 1,
+          "weight_ratio": 0.0008686666666666667,
+          "volume_ratio": 0.002368019275603664,
+          "dimension_ratio": 0.0975,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 21,
+          "n": 1,
+          "weight_ratio": 0.0002986666666666667,
+          "volume_ratio": 0.00010165129059117403,
+          "dimension_ratio": 0.060384615384615384,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 22,
+          "n": 1,
+          "weight_ratio": 0.0020557777777777775,
+          "volume_ratio": 0.0017131973355537053,
+          "dimension_ratio": 0.08365384615384615,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 23,
+          "n": 1,
+          "weight_ratio": 0.0017902222222222221,
+          "volume_ratio": 0.0015903947543713574,
+          "dimension_ratio": 0.08961538461538462,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 24,
+          "n": 1,
+          "weight_ratio": 0.0006455555555555555,
+          "volume_ratio": 0.00160016253122398,
+          "dimension_ratio": 0.07250000000000001,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 25,
+          "n": 1,
+          "weight_ratio": 0.001276888888888889,
+          "volume_ratio": 0.0018845972106577853,
+          "dimension_ratio": 0.08096153846153846,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 26,
+          "n": 1,
+          "weight_ratio": 0.0004486666666666667,
+          "volume_ratio": 0.0004922078268109908,
+          "dimension_ratio": 0.06096153846153846,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 27,
+          "n": 1,
+          "weight_ratio": 0.004282888888888889,
+          "volume_ratio": 0.0021924965029142384,
+          "dimension_ratio": 0.0878846153846154,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 28,
+          "n": 1,
+          "weight_ratio": 0.0026671111111111114,
+          "volume_ratio": 0.02420102447960033,
+          "dimension_ratio": 0.21884615384615383,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 29,
+          "n": 1,
+          "weight_ratio": 0.003431111111111111,
+          "volume_ratio": 0.01218982098251457,
+          "dimension_ratio": 0.16826923076923078,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 30,
+          "n": 1,
+          "weight_ratio": 0.0008255555555555555,
+          "volume_ratio": 0.0014088064945878434,
+          "dimension_ratio": 0.09192307692307691,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 31,
+          "n": 1,
+          "weight_ratio": 0.0016366666666666667,
+          "volume_ratio": 0.0014185054121565361,
+          "dimension_ratio": 0.07211538461538461,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 32,
+          "n": 1,
+          "weight_ratio": 0.0063315555555555555,
+          "volume_ratio": 0.02656778068276436,
+          "dimension_ratio": 0.19461538461538463,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 33,
+          "n": 1,
+          "weight_ratio": 0.009725555555555555,
+          "volume_ratio": 0.010401503705245629,
+          "dimension_ratio": 0.16557692307692307,
+          "aggregate_fit": true,
+          "placement_fit": true
+        }
+      ]
+    },
+    {
+      "depot": "D-CMB-001",
+      "date": "2026-01-05",
+      "method": "hdbscan",
+      "seed": 2,
+      "clusters": 34,
+      "placement_bad": 1,
+      "max_n": 94,
+      "max_weight_ratio": 0.1838122222222222,
+      "max_volume_ratio": 0.2770908134054954,
+      "max_dimension_ratio": 0.2619230769230769,
+      "details": [
+        {
+          "id": 6,
+          "n": 35,
+          "weight_ratio": 0.06405422222222222,
+          "volume_ratio": 0.08846547785179018,
+          "dimension_ratio": 0.17365384615384616,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 4,
+          "n": 21,
+          "weight_ratio": 0.05001911111111111,
+          "volume_ratio": 0.08615999071606995,
+          "dimension_ratio": 0.2619230769230769,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 3,
+          "n": 22,
+          "weight_ratio": 0.026878444444444444,
+          "volume_ratio": 0.03433390695253955,
+          "dimension_ratio": 0.12615384615384614,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 9,
+          "n": 65,
+          "weight_ratio": 0.09962533333333334,
+          "volume_ratio": 0.16255142601998335,
+          "dimension_ratio": 0.24538461538461537,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 8,
+          "n": 94,
+          "weight_ratio": 0.1838122222222222,
+          "volume_ratio": 0.2770908134054954,
+          "dimension_ratio": 0.2567307692307692,
+          "aggregate_fit": true,
+          "placement_fit": false
+        },
+        {
+          "id": 7,
+          "n": 47,
+          "weight_ratio": 0.05710266666666666,
+          "volume_ratio": 0.0697030398417985,
+          "dimension_ratio": 0.14538461538461536,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 0,
+          "n": 39,
+          "weight_ratio": 0.04718555555555556,
+          "volume_ratio": 0.07266759721065778,
+          "dimension_ratio": 0.2544230769230769,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 2,
+          "n": 26,
+          "weight_ratio": 0.044368444444444446,
+          "volume_ratio": 0.045033969650291425,
+          "dimension_ratio": 0.17403846153846153,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 1,
+          "n": 15,
+          "weight_ratio": 0.02176622222222222,
+          "volume_ratio": 0.04429355020815987,
+          "dimension_ratio": 0.24576923076923077,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 10,
+          "n": 1,
+          "weight_ratio": 0.006590444444444445,
+          "volume_ratio": 0.006833570024979183,
+          "dimension_ratio": 0.1323076923076923,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 11,
+          "n": 1,
+          "weight_ratio": 0.001552,
+          "volume_ratio": 0.001827623646960866,
+          "dimension_ratio": 0.09192307692307691,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 12,
+          "n": 1,
+          "weight_ratio": 0.0020815555555555557,
+          "volume_ratio": 0.0016089986677768526,
+          "dimension_ratio": 0.08711538461538461,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 13,
+          "n": 1,
+          "weight_ratio": 0.00014155555555555555,
+          "volume_ratio": 0.0002942373022481266,
+          "dimension_ratio": 0.04730769230769231,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 5,
+          "n": 12,
+          "weight_ratio": 0.013229555555555555,
+          "volume_ratio": 0.01742914429641965,
+          "dimension_ratio": 0.1371153846153846,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 14,
+          "n": 1,
+          "weight_ratio": 0.0015511111111111112,
+          "volume_ratio": 0.005656826477935055,
+          "dimension_ratio": 0.1776923076923077,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 15,
+          "n": 1,
+          "weight_ratio": 0.0004948888888888889,
+          "volume_ratio": 0.000556258784346378,
+          "dimension_ratio": 0.06423076923076923,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 16,
+          "n": 1,
+          "weight_ratio": 0.0007586666666666667,
+          "volume_ratio": 0.0022561321398834305,
+          "dimension_ratio": 0.13788461538461538,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 17,
+          "n": 1,
+          "weight_ratio": 0.001305111111111111,
+          "volume_ratio": 0.0011617460865945047,
+          "dimension_ratio": 0.07826923076923077,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 18,
+          "n": 1,
+          "weight_ratio": 0.0016584444444444444,
+          "volume_ratio": 0.0018518817651956704,
+          "dimension_ratio": 0.06865384615384616,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 19,
+          "n": 1,
+          "weight_ratio": 0.0005184444444444445,
+          "volume_ratio": 0.0008570722731057452,
+          "dimension_ratio": 0.08423076923076922,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 20,
+          "n": 1,
+          "weight_ratio": 0.0008686666666666667,
+          "volume_ratio": 0.002368019275603664,
+          "dimension_ratio": 0.0975,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 21,
+          "n": 1,
+          "weight_ratio": 0.0002986666666666667,
+          "volume_ratio": 0.00010165129059117403,
+          "dimension_ratio": 0.060384615384615384,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 22,
+          "n": 1,
+          "weight_ratio": 0.0020557777777777775,
+          "volume_ratio": 0.0017131973355537053,
+          "dimension_ratio": 0.08365384615384615,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 23,
+          "n": 1,
+          "weight_ratio": 0.0017902222222222221,
+          "volume_ratio": 0.0015903947543713574,
+          "dimension_ratio": 0.08961538461538462,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 24,
+          "n": 1,
+          "weight_ratio": 0.0006455555555555555,
+          "volume_ratio": 0.00160016253122398,
+          "dimension_ratio": 0.07250000000000001,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 25,
+          "n": 1,
+          "weight_ratio": 0.001276888888888889,
+          "volume_ratio": 0.0018845972106577853,
+          "dimension_ratio": 0.08096153846153846,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 26,
+          "n": 1,
+          "weight_ratio": 0.0004486666666666667,
+          "volume_ratio": 0.0004922078268109908,
+          "dimension_ratio": 0.06096153846153846,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 27,
+          "n": 1,
+          "weight_ratio": 0.004282888888888889,
+          "volume_ratio": 0.0021924965029142384,
+          "dimension_ratio": 0.0878846153846154,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 28,
+          "n": 1,
+          "weight_ratio": 0.0026671111111111114,
+          "volume_ratio": 0.02420102447960033,
+          "dimension_ratio": 0.21884615384615383,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 29,
+          "n": 1,
+          "weight_ratio": 0.003431111111111111,
+          "volume_ratio": 0.01218982098251457,
+          "dimension_ratio": 0.16826923076923078,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 30,
+          "n": 1,
+          "weight_ratio": 0.0008255555555555555,
+          "volume_ratio": 0.0014088064945878434,
+          "dimension_ratio": 0.09192307692307691,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 31,
+          "n": 1,
+          "weight_ratio": 0.0016366666666666667,
+          "volume_ratio": 0.0014185054121565361,
+          "dimension_ratio": 0.07211538461538461,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 32,
+          "n": 1,
+          "weight_ratio": 0.0063315555555555555,
+          "volume_ratio": 0.02656778068276436,
+          "dimension_ratio": 0.19461538461538463,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 33,
+          "n": 1,
+          "weight_ratio": 0.009725555555555555,
+          "volume_ratio": 0.010401503705245629,
+          "dimension_ratio": 0.16557692307692307,
+          "aggregate_fit": true,
+          "placement_fit": true
+        }
+      ]
+    },
+    {
+      "depot": "D-CMB-001",
+      "date": "2026-01-05",
+      "method": "kmeans",
+      "seed": 0,
+      "clusters": 2,
+      "placement_bad": 1,
+      "max_n": 378,
+      "max_weight_ratio": 0.6149631111111111,
+      "max_volume_ratio": 0.9109231018734388,
+      "max_dimension_ratio": 0.2619230769230769,
+      "details": [
+        {
+          "id": 0,
+          "n": 378,
+          "weight_ratio": 0.6149631111111111,
+          "volume_ratio": 0.9109231018734388,
+          "dimension_ratio": 0.2619230769230769,
+          "aggregate_fit": true,
+          "placement_fit": false
+        },
+        {
+          "id": 1,
+          "n": 22,
+          "weight_ratio": 0.04601577777777778,
+          "volume_ratio": 0.09784032993338886,
+          "dimension_ratio": 0.21884615384615383,
+          "aggregate_fit": true,
+          "placement_fit": true
+        }
+      ]
+    },
+    {
+      "depot": "D-CMB-001",
+      "date": "2026-01-05",
+      "method": "kmeans",
+      "seed": 1,
+      "clusters": 2,
+      "placement_bad": 1,
+      "max_n": 378,
+      "max_weight_ratio": 0.6149631111111111,
+      "max_volume_ratio": 0.9109231018734388,
+      "max_dimension_ratio": 0.2619230769230769,
+      "details": [
+        {
+          "id": 0,
+          "n": 378,
+          "weight_ratio": 0.6149631111111111,
+          "volume_ratio": 0.9109231018734388,
+          "dimension_ratio": 0.2619230769230769,
+          "aggregate_fit": true,
+          "placement_fit": false
+        },
+        {
+          "id": 1,
+          "n": 22,
+          "weight_ratio": 0.04601577777777778,
+          "volume_ratio": 0.09784032993338886,
+          "dimension_ratio": 0.21884615384615383,
+          "aggregate_fit": true,
+          "placement_fit": true
+        }
+      ]
+    },
+    {
+      "depot": "D-CMB-001",
+      "date": "2026-01-05",
+      "method": "kmeans",
+      "seed": 2,
+      "clusters": 2,
+      "placement_bad": 1,
+      "max_n": 378,
+      "max_weight_ratio": 0.6149631111111111,
+      "max_volume_ratio": 0.9109231018734388,
+      "max_dimension_ratio": 0.2619230769230769,
+      "details": [
+        {
+          "id": 1,
+          "n": 378,
+          "weight_ratio": 0.6149631111111111,
+          "volume_ratio": 0.9109231018734388,
+          "dimension_ratio": 0.2619230769230769,
+          "aggregate_fit": true,
+          "placement_fit": false
+        },
+        {
+          "id": 0,
+          "n": 22,
+          "weight_ratio": 0.04601577777777778,
+          "volume_ratio": 0.09784032993338886,
+          "dimension_ratio": 0.21884615384615383,
+          "aggregate_fit": true,
+          "placement_fit": true
+        }
+      ]
+    },
+    {
+      "depot": "D-CMB-002",
+      "date": "2026-01-05",
+      "method": "hdbscan",
+      "seed": 0,
+      "clusters": 31,
+      "placement_bad": 2,
+      "max_n": 86,
+      "max_weight_ratio": 0.17105111111111113,
+      "max_volume_ratio": 0.2814457148209825,
+      "max_dimension_ratio": 0.2832692307692308,
+      "details": [
+        {
+          "id": 9,
+          "n": 1,
+          "weight_ratio": 9.755555555555555e-05,
+          "volume_ratio": 6.0485595337218984e-05,
+          "dimension_ratio": 0.05307692307692308,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 7,
+          "n": 64,
+          "weight_ratio": 0.12001866666666668,
+          "volume_ratio": 0.18297857901748543,
+          "dimension_ratio": 0.21884615384615383,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 1,
+          "n": 53,
+          "weight_ratio": 0.11758244444444443,
+          "volume_ratio": 0.18567055899250626,
+          "dimension_ratio": 0.26576923076923076,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 6,
+          "n": 86,
+          "weight_ratio": 0.17105111111111113,
+          "volume_ratio": 0.2656950149875104,
+          "dimension_ratio": 0.2832692307692308,
+          "aggregate_fit": true,
+          "placement_fit": false
+        },
+        {
+          "id": 10,
+          "n": 1,
+          "weight_ratio": 0.009168444444444444,
+          "volume_ratio": 0.027347344712739384,
+          "dimension_ratio": 0.2598076923076923,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 8,
+          "n": 72,
+          "weight_ratio": 0.1592351111111111,
+          "volume_ratio": 0.2814457148209825,
+          "dimension_ratio": 0.2767307692307692,
+          "aggregate_fit": true,
+          "placement_fit": false
+        },
+        {
+          "id": 4,
+          "n": 34,
+          "weight_ratio": 0.05910311111111111,
+          "volume_ratio": 0.08163056606994172,
+          "dimension_ratio": 0.20153846153846153,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 2,
+          "n": 14,
+          "weight_ratio": 0.030142666666666665,
+          "volume_ratio": 0.03536784079933389,
+          "dimension_ratio": 0.14461538461538462,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 5,
+          "n": 13,
+          "weight_ratio": 0.019791999999999997,
+          "volume_ratio": 0.03790839462947544,
+          "dimension_ratio": 0.18865384615384614,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 0,
+          "n": 16,
+          "weight_ratio": 0.024004,
+          "volume_ratio": 0.02490138880099917,
+          "dimension_ratio": 0.12634615384615386,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 3,
+          "n": 26,
+          "weight_ratio": 0.07294066666666667,
+          "volume_ratio": 0.08374933472106579,
+          "dimension_ratio": 0.24365384615384617,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 11,
+          "n": 1,
+          "weight_ratio": 0.000382,
+          "volume_ratio": 0.0005314807243963364,
+          "dimension_ratio": 0.07326923076923077,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 12,
+          "n": 1,
+          "weight_ratio": 0.0019113333333333335,
+          "volume_ratio": 0.001411014154870941,
+          "dimension_ratio": 0.09,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 13,
+          "n": 1,
+          "weight_ratio": 0.0017720000000000001,
+          "volume_ratio": 0.006160072855953372,
+          "dimension_ratio": 0.12346153846153847,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 14,
+          "n": 1,
+          "weight_ratio": 0.006058,
+          "volume_ratio": 0.024591746419650295,
+          "dimension_ratio": 0.26557692307692304,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 15,
+          "n": 1,
+          "weight_ratio": 0.000876888888888889,
+          "volume_ratio": 0.0009278774354704413,
+          "dimension_ratio": 0.08,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 16,
+          "n": 1,
+          "weight_ratio": 0.0012913333333333334,
+          "volume_ratio": 0.001269837801831807,
+          "dimension_ratio": 0.09576923076923076,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 17,
+          "n": 1,
+          "weight_ratio": 0.0008351111111111111,
+          "volume_ratio": 0.001224104912572856,
+          "dimension_ratio": 0.08653846153846154,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 18,
+          "n": 1,
+          "weight_ratio": 0.0012697777777777779,
+          "volume_ratio": 0.0014917488759367194,
+          "dimension_ratio": 0.08307692307692308,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 19,
+          "n": 1,
+          "weight_ratio": 0.0035273333333333333,
+          "volume_ratio": 0.0027084408409658615,
+          "dimension_ratio": 0.10019230769230769,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 20,
+          "n": 1,
+          "weight_ratio": 0.001666,
+          "volume_ratio": 0.0016391960033305577,
+          "dimension_ratio": 0.09019230769230768,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 21,
+          "n": 1,
+          "weight_ratio": 0.00020333333333333333,
+          "volume_ratio": 0.0002333015820149875,
+          "dimension_ratio": 0.08134615384615385,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 22,
+          "n": 1,
+          "weight_ratio": 0.0016777777777777778,
+          "volume_ratio": 0.0015094090757701915,
+          "dimension_ratio": 0.08519230769230769,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 23,
+          "n": 1,
+          "weight_ratio": 0.000562,
+          "volume_ratio": 0.00034742048293089095,
+          "dimension_ratio": 0.05076923076923077,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 24,
+          "n": 1,
+          "weight_ratio": 0.010012222222222223,
+          "volume_ratio": 0.023380827643630312,
+          "dimension_ratio": 0.24134615384615385,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 25,
+          "n": 1,
+          "weight_ratio": 0.00025555555555555553,
+          "volume_ratio": 0.0004629937552039967,
+          "dimension_ratio": 0.07403846153846154,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 26,
+          "n": 1,
+          "weight_ratio": 0.0005082222222222222,
+          "volume_ratio": 0.0003971323896752706,
+          "dimension_ratio": 0.07230769230769231,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 27,
+          "n": 1,
+          "weight_ratio": 0.005586444444444444,
+          "volume_ratio": 0.0027222935054121563,
+          "dimension_ratio": 0.09365384615384616,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 28,
+          "n": 1,
+          "weight_ratio": 0.00030355555555555556,
+          "volume_ratio": 0.0007670368026644463,
+          "dimension_ratio": 0.06999999999999999,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 29,
+          "n": 1,
+          "weight_ratio": 0.000493111111111111,
+          "volume_ratio": 0.0015584912572855956,
+          "dimension_ratio": 0.06923076923076923,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 30,
+          "n": 1,
+          "weight_ratio": 0.00106,
+          "volume_ratio": 0.0010235810158201498,
+          "dimension_ratio": 0.07038461538461539,
+          "aggregate_fit": true,
+          "placement_fit": true
+        }
+      ]
+    },
+    {
+      "depot": "D-CMB-002",
+      "date": "2026-01-05",
+      "method": "hdbscan",
+      "seed": 1,
+      "clusters": 31,
+      "placement_bad": 2,
+      "max_n": 86,
+      "max_weight_ratio": 0.17105111111111113,
+      "max_volume_ratio": 0.2814457148209825,
+      "max_dimension_ratio": 0.2832692307692308,
+      "details": [
+        {
+          "id": 9,
+          "n": 1,
+          "weight_ratio": 9.755555555555555e-05,
+          "volume_ratio": 6.0485595337218984e-05,
+          "dimension_ratio": 0.05307692307692308,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 7,
+          "n": 64,
+          "weight_ratio": 0.12001866666666668,
+          "volume_ratio": 0.18297857901748543,
+          "dimension_ratio": 0.21884615384615383,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 1,
+          "n": 53,
+          "weight_ratio": 0.11758244444444443,
+          "volume_ratio": 0.18567055899250626,
+          "dimension_ratio": 0.26576923076923076,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 6,
+          "n": 86,
+          "weight_ratio": 0.17105111111111113,
+          "volume_ratio": 0.2656950149875104,
+          "dimension_ratio": 0.2832692307692308,
+          "aggregate_fit": true,
+          "placement_fit": false
+        },
+        {
+          "id": 10,
+          "n": 1,
+          "weight_ratio": 0.009168444444444444,
+          "volume_ratio": 0.027347344712739384,
+          "dimension_ratio": 0.2598076923076923,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 8,
+          "n": 72,
+          "weight_ratio": 0.1592351111111111,
+          "volume_ratio": 0.2814457148209825,
+          "dimension_ratio": 0.2767307692307692,
+          "aggregate_fit": true,
+          "placement_fit": false
+        },
+        {
+          "id": 4,
+          "n": 34,
+          "weight_ratio": 0.05910311111111111,
+          "volume_ratio": 0.08163056606994172,
+          "dimension_ratio": 0.20153846153846153,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 2,
+          "n": 14,
+          "weight_ratio": 0.030142666666666665,
+          "volume_ratio": 0.03536784079933389,
+          "dimension_ratio": 0.14461538461538462,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 5,
+          "n": 13,
+          "weight_ratio": 0.019791999999999997,
+          "volume_ratio": 0.03790839462947544,
+          "dimension_ratio": 0.18865384615384614,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 0,
+          "n": 16,
+          "weight_ratio": 0.024004,
+          "volume_ratio": 0.02490138880099917,
+          "dimension_ratio": 0.12634615384615386,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 3,
+          "n": 26,
+          "weight_ratio": 0.07294066666666667,
+          "volume_ratio": 0.08374933472106579,
+          "dimension_ratio": 0.24365384615384617,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 11,
+          "n": 1,
+          "weight_ratio": 0.000382,
+          "volume_ratio": 0.0005314807243963364,
+          "dimension_ratio": 0.07326923076923077,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 12,
+          "n": 1,
+          "weight_ratio": 0.0019113333333333335,
+          "volume_ratio": 0.001411014154870941,
+          "dimension_ratio": 0.09,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 13,
+          "n": 1,
+          "weight_ratio": 0.0017720000000000001,
+          "volume_ratio": 0.006160072855953372,
+          "dimension_ratio": 0.12346153846153847,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 14,
+          "n": 1,
+          "weight_ratio": 0.006058,
+          "volume_ratio": 0.024591746419650295,
+          "dimension_ratio": 0.26557692307692304,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 15,
+          "n": 1,
+          "weight_ratio": 0.000876888888888889,
+          "volume_ratio": 0.0009278774354704413,
+          "dimension_ratio": 0.08,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 16,
+          "n": 1,
+          "weight_ratio": 0.0012913333333333334,
+          "volume_ratio": 0.001269837801831807,
+          "dimension_ratio": 0.09576923076923076,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 17,
+          "n": 1,
+          "weight_ratio": 0.0008351111111111111,
+          "volume_ratio": 0.001224104912572856,
+          "dimension_ratio": 0.08653846153846154,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 18,
+          "n": 1,
+          "weight_ratio": 0.0012697777777777779,
+          "volume_ratio": 0.0014917488759367194,
+          "dimension_ratio": 0.08307692307692308,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 19,
+          "n": 1,
+          "weight_ratio": 0.0035273333333333333,
+          "volume_ratio": 0.0027084408409658615,
+          "dimension_ratio": 0.10019230769230769,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 20,
+          "n": 1,
+          "weight_ratio": 0.001666,
+          "volume_ratio": 0.0016391960033305577,
+          "dimension_ratio": 0.09019230769230768,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 21,
+          "n": 1,
+          "weight_ratio": 0.00020333333333333333,
+          "volume_ratio": 0.0002333015820149875,
+          "dimension_ratio": 0.08134615384615385,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 22,
+          "n": 1,
+          "weight_ratio": 0.0016777777777777778,
+          "volume_ratio": 0.0015094090757701915,
+          "dimension_ratio": 0.08519230769230769,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 23,
+          "n": 1,
+          "weight_ratio": 0.000562,
+          "volume_ratio": 0.00034742048293089095,
+          "dimension_ratio": 0.05076923076923077,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 24,
+          "n": 1,
+          "weight_ratio": 0.010012222222222223,
+          "volume_ratio": 0.023380827643630312,
+          "dimension_ratio": 0.24134615384615385,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 25,
+          "n": 1,
+          "weight_ratio": 0.00025555555555555553,
+          "volume_ratio": 0.0004629937552039967,
+          "dimension_ratio": 0.07403846153846154,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 26,
+          "n": 1,
+          "weight_ratio": 0.0005082222222222222,
+          "volume_ratio": 0.0003971323896752706,
+          "dimension_ratio": 0.07230769230769231,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 27,
+          "n": 1,
+          "weight_ratio": 0.005586444444444444,
+          "volume_ratio": 0.0027222935054121563,
+          "dimension_ratio": 0.09365384615384616,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 28,
+          "n": 1,
+          "weight_ratio": 0.00030355555555555556,
+          "volume_ratio": 0.0007670368026644463,
+          "dimension_ratio": 0.06999999999999999,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 29,
+          "n": 1,
+          "weight_ratio": 0.000493111111111111,
+          "volume_ratio": 0.0015584912572855956,
+          "dimension_ratio": 0.06923076923076923,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 30,
+          "n": 1,
+          "weight_ratio": 0.00106,
+          "volume_ratio": 0.0010235810158201498,
+          "dimension_ratio": 0.07038461538461539,
+          "aggregate_fit": true,
+          "placement_fit": true
+        }
+      ]
+    },
+    {
+      "depot": "D-CMB-002",
+      "date": "2026-01-05",
+      "method": "hdbscan",
+      "seed": 2,
+      "clusters": 31,
+      "placement_bad": 2,
+      "max_n": 86,
+      "max_weight_ratio": 0.17105111111111113,
+      "max_volume_ratio": 0.2814457148209825,
+      "max_dimension_ratio": 0.2832692307692308,
+      "details": [
+        {
+          "id": 9,
+          "n": 1,
+          "weight_ratio": 9.755555555555555e-05,
+          "volume_ratio": 6.0485595337218984e-05,
+          "dimension_ratio": 0.05307692307692308,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 7,
+          "n": 64,
+          "weight_ratio": 0.12001866666666668,
+          "volume_ratio": 0.18297857901748543,
+          "dimension_ratio": 0.21884615384615383,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 1,
+          "n": 53,
+          "weight_ratio": 0.11758244444444443,
+          "volume_ratio": 0.18567055899250626,
+          "dimension_ratio": 0.26576923076923076,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 6,
+          "n": 86,
+          "weight_ratio": 0.17105111111111113,
+          "volume_ratio": 0.2656950149875104,
+          "dimension_ratio": 0.2832692307692308,
+          "aggregate_fit": true,
+          "placement_fit": false
+        },
+        {
+          "id": 10,
+          "n": 1,
+          "weight_ratio": 0.009168444444444444,
+          "volume_ratio": 0.027347344712739384,
+          "dimension_ratio": 0.2598076923076923,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 8,
+          "n": 72,
+          "weight_ratio": 0.1592351111111111,
+          "volume_ratio": 0.2814457148209825,
+          "dimension_ratio": 0.2767307692307692,
+          "aggregate_fit": true,
+          "placement_fit": false
+        },
+        {
+          "id": 4,
+          "n": 34,
+          "weight_ratio": 0.05910311111111111,
+          "volume_ratio": 0.08163056606994172,
+          "dimension_ratio": 0.20153846153846153,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 2,
+          "n": 14,
+          "weight_ratio": 0.030142666666666665,
+          "volume_ratio": 0.03536784079933389,
+          "dimension_ratio": 0.14461538461538462,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 5,
+          "n": 13,
+          "weight_ratio": 0.019791999999999997,
+          "volume_ratio": 0.03790839462947544,
+          "dimension_ratio": 0.18865384615384614,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 0,
+          "n": 16,
+          "weight_ratio": 0.024004,
+          "volume_ratio": 0.02490138880099917,
+          "dimension_ratio": 0.12634615384615386,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 3,
+          "n": 26,
+          "weight_ratio": 0.07294066666666667,
+          "volume_ratio": 0.08374933472106579,
+          "dimension_ratio": 0.24365384615384617,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 11,
+          "n": 1,
+          "weight_ratio": 0.000382,
+          "volume_ratio": 0.0005314807243963364,
+          "dimension_ratio": 0.07326923076923077,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 12,
+          "n": 1,
+          "weight_ratio": 0.0019113333333333335,
+          "volume_ratio": 0.001411014154870941,
+          "dimension_ratio": 0.09,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 13,
+          "n": 1,
+          "weight_ratio": 0.0017720000000000001,
+          "volume_ratio": 0.006160072855953372,
+          "dimension_ratio": 0.12346153846153847,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 14,
+          "n": 1,
+          "weight_ratio": 0.006058,
+          "volume_ratio": 0.024591746419650295,
+          "dimension_ratio": 0.26557692307692304,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 15,
+          "n": 1,
+          "weight_ratio": 0.000876888888888889,
+          "volume_ratio": 0.0009278774354704413,
+          "dimension_ratio": 0.08,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 16,
+          "n": 1,
+          "weight_ratio": 0.0012913333333333334,
+          "volume_ratio": 0.001269837801831807,
+          "dimension_ratio": 0.09576923076923076,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 17,
+          "n": 1,
+          "weight_ratio": 0.0008351111111111111,
+          "volume_ratio": 0.001224104912572856,
+          "dimension_ratio": 0.08653846153846154,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 18,
+          "n": 1,
+          "weight_ratio": 0.0012697777777777779,
+          "volume_ratio": 0.0014917488759367194,
+          "dimension_ratio": 0.08307692307692308,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 19,
+          "n": 1,
+          "weight_ratio": 0.0035273333333333333,
+          "volume_ratio": 0.0027084408409658615,
+          "dimension_ratio": 0.10019230769230769,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 20,
+          "n": 1,
+          "weight_ratio": 0.001666,
+          "volume_ratio": 0.0016391960033305577,
+          "dimension_ratio": 0.09019230769230768,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 21,
+          "n": 1,
+          "weight_ratio": 0.00020333333333333333,
+          "volume_ratio": 0.0002333015820149875,
+          "dimension_ratio": 0.08134615384615385,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 22,
+          "n": 1,
+          "weight_ratio": 0.0016777777777777778,
+          "volume_ratio": 0.0015094090757701915,
+          "dimension_ratio": 0.08519230769230769,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 23,
+          "n": 1,
+          "weight_ratio": 0.000562,
+          "volume_ratio": 0.00034742048293089095,
+          "dimension_ratio": 0.05076923076923077,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 24,
+          "n": 1,
+          "weight_ratio": 0.010012222222222223,
+          "volume_ratio": 0.023380827643630312,
+          "dimension_ratio": 0.24134615384615385,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 25,
+          "n": 1,
+          "weight_ratio": 0.00025555555555555553,
+          "volume_ratio": 0.0004629937552039967,
+          "dimension_ratio": 0.07403846153846154,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 26,
+          "n": 1,
+          "weight_ratio": 0.0005082222222222222,
+          "volume_ratio": 0.0003971323896752706,
+          "dimension_ratio": 0.07230769230769231,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 27,
+          "n": 1,
+          "weight_ratio": 0.005586444444444444,
+          "volume_ratio": 0.0027222935054121563,
+          "dimension_ratio": 0.09365384615384616,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 28,
+          "n": 1,
+          "weight_ratio": 0.00030355555555555556,
+          "volume_ratio": 0.0007670368026644463,
+          "dimension_ratio": 0.06999999999999999,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 29,
+          "n": 1,
+          "weight_ratio": 0.000493111111111111,
+          "volume_ratio": 0.0015584912572855956,
+          "dimension_ratio": 0.06923076923076923,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 30,
+          "n": 1,
+          "weight_ratio": 0.00106,
+          "volume_ratio": 0.0010235810158201498,
+          "dimension_ratio": 0.07038461538461539,
+          "aggregate_fit": true,
+          "placement_fit": true
+        }
+      ]
+    },
+    {
+      "depot": "D-CMB-002",
+      "date": "2026-01-05",
+      "method": "kmeans",
+      "seed": 0,
+      "clusters": 3,
+      "placement_bad": 3,
+      "max_n": 202,
+      "max_weight_ratio": 0.41723200000000005,
+      "max_volume_ratio": 0.6395270897585346,
+      "max_dimension_ratio": 0.2832692307692308,
+      "details": [
+        {
+          "id": 2,
+          "n": 75,
+          "weight_ratio": 0.16321644444444444,
+          "volume_ratio": 0.2623552412572856,
+          "dimension_ratio": 0.26576923076923076,
+          "aggregate_fit": true,
+          "placement_fit": false
+        },
+        {
+          "id": 0,
+          "n": 202,
+          "weight_ratio": 0.41723200000000005,
+          "volume_ratio": 0.6395270897585346,
+          "dimension_ratio": 0.2767307692307692,
+          "aggregate_fit": true,
+          "placement_fit": false
+        },
+        {
+          "id": 1,
+          "n": 123,
+          "weight_ratio": 0.24293933333333334,
+          "volume_ratio": 0.3792308996669442,
+          "dimension_ratio": 0.2832692307692308,
+          "aggregate_fit": true,
+          "placement_fit": false
+        }
+      ]
+    },
+    {
+      "depot": "D-CMB-002",
+      "date": "2026-01-05",
+      "method": "kmeans",
+      "seed": 1,
+      "clusters": 3,
+      "placement_bad": 3,
+      "max_n": 202,
+      "max_weight_ratio": 0.41723200000000005,
+      "max_volume_ratio": 0.6395270897585346,
+      "max_dimension_ratio": 0.2832692307692308,
+      "details": [
+        {
+          "id": 0,
+          "n": 75,
+          "weight_ratio": 0.16321644444444444,
+          "volume_ratio": 0.2623552412572856,
+          "dimension_ratio": 0.26576923076923076,
+          "aggregate_fit": true,
+          "placement_fit": false
+        },
+        {
+          "id": 2,
+          "n": 202,
+          "weight_ratio": 0.41723200000000005,
+          "volume_ratio": 0.6395270897585346,
+          "dimension_ratio": 0.2767307692307692,
+          "aggregate_fit": true,
+          "placement_fit": false
+        },
+        {
+          "id": 1,
+          "n": 123,
+          "weight_ratio": 0.24293933333333334,
+          "volume_ratio": 0.3792308996669442,
+          "dimension_ratio": 0.2832692307692308,
+          "aggregate_fit": true,
+          "placement_fit": false
+        }
+      ]
+    },
+    {
+      "depot": "D-CMB-002",
+      "date": "2026-01-05",
+      "method": "kmeans",
+      "seed": 2,
+      "clusters": 3,
+      "placement_bad": 3,
+      "max_n": 202,
+      "max_weight_ratio": 0.41723200000000005,
+      "max_volume_ratio": 0.6395270897585346,
+      "max_dimension_ratio": 0.2832692307692308,
+      "details": [
+        {
+          "id": 0,
+          "n": 75,
+          "weight_ratio": 0.16321644444444444,
+          "volume_ratio": 0.2623552412572856,
+          "dimension_ratio": 0.26576923076923076,
+          "aggregate_fit": true,
+          "placement_fit": false
+        },
+        {
+          "id": 2,
+          "n": 202,
+          "weight_ratio": 0.41723200000000005,
+          "volume_ratio": 0.6395270897585346,
+          "dimension_ratio": 0.2767307692307692,
+          "aggregate_fit": true,
+          "placement_fit": false
+        },
+        {
+          "id": 1,
+          "n": 123,
+          "weight_ratio": 0.24293933333333334,
+          "volume_ratio": 0.3792308996669442,
+          "dimension_ratio": 0.2832692307692308,
+          "aggregate_fit": true,
+          "placement_fit": false
+        }
+      ]
+    },
+    {
+      "depot": "D-CMB-003",
+      "date": "2026-01-05",
+      "method": "hdbscan",
+      "seed": 0,
+      "clusters": 21,
+      "placement_bad": 3,
+      "max_n": 121,
+      "max_weight_ratio": 0.21057199999999998,
+      "max_volume_ratio": 0.350318918734388,
+      "max_dimension_ratio": 0.2882692307692308,
+      "details": [
+        {
+          "id": 3,
+          "n": 24,
+          "weight_ratio": 0.03837911111111111,
+          "volume_ratio": 0.08620654750208159,
+          "dimension_ratio": 0.25461538461538463,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 1,
+          "n": 31,
+          "weight_ratio": 0.052950000000000004,
+          "volume_ratio": 0.09160868855120734,
+          "dimension_ratio": 0.26692307692307693,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 4,
+          "n": 121,
+          "weight_ratio": 0.21057199999999998,
+          "volume_ratio": 0.28774886378018316,
+          "dimension_ratio": 0.25096153846153846,
+          "aggregate_fit": true,
+          "placement_fit": false
+        },
+        {
+          "id": 2,
+          "n": 25,
+          "weight_ratio": 0.03912688888888889,
+          "volume_ratio": 0.08101343139050791,
+          "dimension_ratio": 0.26269230769230767,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 0,
+          "n": 50,
+          "weight_ratio": 0.093942,
+          "volume_ratio": 0.15391713209825145,
+          "dimension_ratio": 0.2717307692307693,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 5,
+          "n": 69,
+          "weight_ratio": 0.16300911111111113,
+          "volume_ratio": 0.350318918734388,
+          "dimension_ratio": 0.2882692307692308,
+          "aggregate_fit": true,
+          "placement_fit": false
+        },
+        {
+          "id": 6,
+          "n": 66,
+          "weight_ratio": 0.12479199999999999,
+          "volume_ratio": 0.22642119666944216,
+          "dimension_ratio": 0.2675,
+          "aggregate_fit": true,
+          "placement_fit": false
+        },
+        {
+          "id": 7,
+          "n": 1,
+          "weight_ratio": 0.0017722222222222221,
+          "volume_ratio": 0.0017400701915070776,
+          "dimension_ratio": 0.09346153846153847,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 8,
+          "n": 1,
+          "weight_ratio": 0.00018666666666666666,
+          "volume_ratio": 7.820212323064114e-05,
+          "dimension_ratio": 0.047115384615384615,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 9,
+          "n": 1,
+          "weight_ratio": 0.007803555555555556,
+          "volume_ratio": 0.009480483597002497,
+          "dimension_ratio": 0.14769230769230768,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 10,
+          "n": 1,
+          "weight_ratio": 0.0004971111111111111,
+          "volume_ratio": 0.001415251873438801,
+          "dimension_ratio": 0.1125,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 11,
+          "n": 1,
+          "weight_ratio": 0.0010088888888888888,
+          "volume_ratio": 0.0018429579517069109,
+          "dimension_ratio": 0.10423076923076924,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 12,
+          "n": 1,
+          "weight_ratio": 0.001973777777777778,
+          "volume_ratio": 0.0018496179850124896,
+          "dimension_ratio": 0.0996153846153846,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 13,
+          "n": 1,
+          "weight_ratio": 0.0006537777777777779,
+          "volume_ratio": 0.0006318606994171524,
+          "dimension_ratio": 0.07192307692307692,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 14,
+          "n": 1,
+          "weight_ratio": 0.0009162222222222222,
+          "volume_ratio": 0.001045674104912573,
+          "dimension_ratio": 0.08673076923076924,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 15,
+          "n": 1,
+          "weight_ratio": 0.00069,
+          "volume_ratio": 0.0009547862198168194,
+          "dimension_ratio": 0.08057692307692307,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 16,
+          "n": 1,
+          "weight_ratio": 0.0005922222222222223,
+          "volume_ratio": 0.001619698251457119,
+          "dimension_ratio": 0.08384615384615385,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 17,
+          "n": 1,
+          "weight_ratio": 0.0007737777777777779,
+          "volume_ratio": 0.001394162198168193,
+          "dimension_ratio": 0.08692307692307692,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 18,
+          "n": 1,
+          "weight_ratio": 0.004030444444444444,
+          "volume_ratio": 0.004773456786011657,
+          "dimension_ratio": 0.13596153846153847,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 19,
+          "n": 1,
+          "weight_ratio": 0.0007548888888888888,
+          "volume_ratio": 0.002074894920899251,
+          "dimension_ratio": 0.08038461538461537,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 20,
+          "n": 1,
+          "weight_ratio": 0.007189333333333332,
+          "volume_ratio": 0.007632392589508743,
+          "dimension_ratio": 0.1521153846153846,
+          "aggregate_fit": true,
+          "placement_fit": true
+        }
+      ]
+    },
+    {
+      "depot": "D-CMB-003",
+      "date": "2026-01-05",
+      "method": "hdbscan",
+      "seed": 1,
+      "clusters": 21,
+      "placement_bad": 3,
+      "max_n": 121,
+      "max_weight_ratio": 0.21057199999999998,
+      "max_volume_ratio": 0.350318918734388,
+      "max_dimension_ratio": 0.2882692307692308,
+      "details": [
+        {
+          "id": 3,
+          "n": 24,
+          "weight_ratio": 0.03837911111111111,
+          "volume_ratio": 0.08620654750208159,
+          "dimension_ratio": 0.25461538461538463,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 1,
+          "n": 31,
+          "weight_ratio": 0.052950000000000004,
+          "volume_ratio": 0.09160868855120734,
+          "dimension_ratio": 0.26692307692307693,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 4,
+          "n": 121,
+          "weight_ratio": 0.21057199999999998,
+          "volume_ratio": 0.28774886378018316,
+          "dimension_ratio": 0.25096153846153846,
+          "aggregate_fit": true,
+          "placement_fit": false
+        },
+        {
+          "id": 2,
+          "n": 25,
+          "weight_ratio": 0.03912688888888889,
+          "volume_ratio": 0.08101343139050791,
+          "dimension_ratio": 0.26269230769230767,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 0,
+          "n": 50,
+          "weight_ratio": 0.093942,
+          "volume_ratio": 0.15391713209825145,
+          "dimension_ratio": 0.2717307692307693,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 5,
+          "n": 69,
+          "weight_ratio": 0.16300911111111113,
+          "volume_ratio": 0.350318918734388,
+          "dimension_ratio": 0.2882692307692308,
+          "aggregate_fit": true,
+          "placement_fit": false
+        },
+        {
+          "id": 6,
+          "n": 66,
+          "weight_ratio": 0.12479199999999999,
+          "volume_ratio": 0.22642119666944216,
+          "dimension_ratio": 0.2675,
+          "aggregate_fit": true,
+          "placement_fit": false
+        },
+        {
+          "id": 7,
+          "n": 1,
+          "weight_ratio": 0.0017722222222222221,
+          "volume_ratio": 0.0017400701915070776,
+          "dimension_ratio": 0.09346153846153847,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 8,
+          "n": 1,
+          "weight_ratio": 0.00018666666666666666,
+          "volume_ratio": 7.820212323064114e-05,
+          "dimension_ratio": 0.047115384615384615,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 9,
+          "n": 1,
+          "weight_ratio": 0.007803555555555556,
+          "volume_ratio": 0.009480483597002497,
+          "dimension_ratio": 0.14769230769230768,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 10,
+          "n": 1,
+          "weight_ratio": 0.0004971111111111111,
+          "volume_ratio": 0.001415251873438801,
+          "dimension_ratio": 0.1125,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 11,
+          "n": 1,
+          "weight_ratio": 0.0010088888888888888,
+          "volume_ratio": 0.0018429579517069109,
+          "dimension_ratio": 0.10423076923076924,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 12,
+          "n": 1,
+          "weight_ratio": 0.001973777777777778,
+          "volume_ratio": 0.0018496179850124896,
+          "dimension_ratio": 0.0996153846153846,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 13,
+          "n": 1,
+          "weight_ratio": 0.0006537777777777779,
+          "volume_ratio": 0.0006318606994171524,
+          "dimension_ratio": 0.07192307692307692,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 14,
+          "n": 1,
+          "weight_ratio": 0.0009162222222222222,
+          "volume_ratio": 0.001045674104912573,
+          "dimension_ratio": 0.08673076923076924,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 15,
+          "n": 1,
+          "weight_ratio": 0.00069,
+          "volume_ratio": 0.0009547862198168194,
+          "dimension_ratio": 0.08057692307692307,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 16,
+          "n": 1,
+          "weight_ratio": 0.0005922222222222223,
+          "volume_ratio": 0.001619698251457119,
+          "dimension_ratio": 0.08384615384615385,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 17,
+          "n": 1,
+          "weight_ratio": 0.0007737777777777779,
+          "volume_ratio": 0.001394162198168193,
+          "dimension_ratio": 0.08692307692307692,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 18,
+          "n": 1,
+          "weight_ratio": 0.004030444444444444,
+          "volume_ratio": 0.004773456786011657,
+          "dimension_ratio": 0.13596153846153847,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 19,
+          "n": 1,
+          "weight_ratio": 0.0007548888888888888,
+          "volume_ratio": 0.002074894920899251,
+          "dimension_ratio": 0.08038461538461537,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 20,
+          "n": 1,
+          "weight_ratio": 0.007189333333333332,
+          "volume_ratio": 0.007632392589508743,
+          "dimension_ratio": 0.1521153846153846,
+          "aggregate_fit": true,
+          "placement_fit": true
+        }
+      ]
+    },
+    {
+      "depot": "D-CMB-003",
+      "date": "2026-01-05",
+      "method": "hdbscan",
+      "seed": 2,
+      "clusters": 21,
+      "placement_bad": 3,
+      "max_n": 121,
+      "max_weight_ratio": 0.21057199999999998,
+      "max_volume_ratio": 0.350318918734388,
+      "max_dimension_ratio": 0.2882692307692308,
+      "details": [
+        {
+          "id": 3,
+          "n": 24,
+          "weight_ratio": 0.03837911111111111,
+          "volume_ratio": 0.08620654750208159,
+          "dimension_ratio": 0.25461538461538463,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 1,
+          "n": 31,
+          "weight_ratio": 0.052950000000000004,
+          "volume_ratio": 0.09160868855120734,
+          "dimension_ratio": 0.26692307692307693,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 4,
+          "n": 121,
+          "weight_ratio": 0.21057199999999998,
+          "volume_ratio": 0.28774886378018316,
+          "dimension_ratio": 0.25096153846153846,
+          "aggregate_fit": true,
+          "placement_fit": false
+        },
+        {
+          "id": 2,
+          "n": 25,
+          "weight_ratio": 0.03912688888888889,
+          "volume_ratio": 0.08101343139050791,
+          "dimension_ratio": 0.26269230769230767,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 0,
+          "n": 50,
+          "weight_ratio": 0.093942,
+          "volume_ratio": 0.15391713209825145,
+          "dimension_ratio": 0.2717307692307693,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 5,
+          "n": 69,
+          "weight_ratio": 0.16300911111111113,
+          "volume_ratio": 0.350318918734388,
+          "dimension_ratio": 0.2882692307692308,
+          "aggregate_fit": true,
+          "placement_fit": false
+        },
+        {
+          "id": 6,
+          "n": 66,
+          "weight_ratio": 0.12479199999999999,
+          "volume_ratio": 0.22642119666944216,
+          "dimension_ratio": 0.2675,
+          "aggregate_fit": true,
+          "placement_fit": false
+        },
+        {
+          "id": 7,
+          "n": 1,
+          "weight_ratio": 0.0017722222222222221,
+          "volume_ratio": 0.0017400701915070776,
+          "dimension_ratio": 0.09346153846153847,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 8,
+          "n": 1,
+          "weight_ratio": 0.00018666666666666666,
+          "volume_ratio": 7.820212323064114e-05,
+          "dimension_ratio": 0.047115384615384615,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 9,
+          "n": 1,
+          "weight_ratio": 0.007803555555555556,
+          "volume_ratio": 0.009480483597002497,
+          "dimension_ratio": 0.14769230769230768,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 10,
+          "n": 1,
+          "weight_ratio": 0.0004971111111111111,
+          "volume_ratio": 0.001415251873438801,
+          "dimension_ratio": 0.1125,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 11,
+          "n": 1,
+          "weight_ratio": 0.0010088888888888888,
+          "volume_ratio": 0.0018429579517069109,
+          "dimension_ratio": 0.10423076923076924,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 12,
+          "n": 1,
+          "weight_ratio": 0.001973777777777778,
+          "volume_ratio": 0.0018496179850124896,
+          "dimension_ratio": 0.0996153846153846,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 13,
+          "n": 1,
+          "weight_ratio": 0.0006537777777777779,
+          "volume_ratio": 0.0006318606994171524,
+          "dimension_ratio": 0.07192307692307692,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 14,
+          "n": 1,
+          "weight_ratio": 0.0009162222222222222,
+          "volume_ratio": 0.001045674104912573,
+          "dimension_ratio": 0.08673076923076924,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 15,
+          "n": 1,
+          "weight_ratio": 0.00069,
+          "volume_ratio": 0.0009547862198168194,
+          "dimension_ratio": 0.08057692307692307,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 16,
+          "n": 1,
+          "weight_ratio": 0.0005922222222222223,
+          "volume_ratio": 0.001619698251457119,
+          "dimension_ratio": 0.08384615384615385,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 17,
+          "n": 1,
+          "weight_ratio": 0.0007737777777777779,
+          "volume_ratio": 0.001394162198168193,
+          "dimension_ratio": 0.08692307692307692,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 18,
+          "n": 1,
+          "weight_ratio": 0.004030444444444444,
+          "volume_ratio": 0.004773456786011657,
+          "dimension_ratio": 0.13596153846153847,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 19,
+          "n": 1,
+          "weight_ratio": 0.0007548888888888888,
+          "volume_ratio": 0.002074894920899251,
+          "dimension_ratio": 0.08038461538461537,
+          "aggregate_fit": true,
+          "placement_fit": true
+        },
+        {
+          "id": 20,
+          "n": 1,
+          "weight_ratio": 0.007189333333333332,
+          "volume_ratio": 0.007632392589508743,
+          "dimension_ratio": 0.1521153846153846,
+          "aggregate_fit": true,
+          "placement_fit": true
+        }
+      ]
+    },
+    {
+      "depot": "D-CMB-003",
+      "date": "2026-01-05",
+      "method": "kmeans",
+      "seed": 0,
+      "clusters": 3,
+      "placement_bad": 2,
+      "max_n": 203,
+      "max_weight_ratio": 0.39532866666666666,
+      "max_volume_ratio": 0.7775092887593671,
+      "max_dimension_ratio": 0.2882692307692308,
+      "details": [
+        {
+          "id": 2,
+          "n": 203,
+          "weight_ratio": 0.350856,
+          "volume_ratio": 0.5298559003746878,
+          "dimension_ratio": 0.2717307692307693,
+          "aggregate_fit": true,
+          "placement_fit": false
+        },
+        {
+          "id": 1,
+          "n": 191,
+          "weight_ratio": 0.39532866666666666,
+          "volume_ratio": 0.7775092887593671,
+          "dimension_ratio": 0.2882692307692308,
+          "aggregate_fit": true,
+          "placement_fit": false
+        },
+        {
+          "id": 0,
+          "n": 6,
+          "weight_ratio": 0.005429333333333333,
+          "volume_ratio": 0.006403099084096585,
+          "dimension_ratio": 0.10423076923076924,
+          "aggregate_fit": true,
+          "placement_fit": true
+        }
+      ]
+    },
+    {
+      "depot": "D-CMB-003",
+      "date": "2026-01-05",
+      "method": "kmeans",
+      "seed": 1,
+      "clusters": 3,
+      "placement_bad": 2,
+      "max_n": 203,
+      "max_weight_ratio": 0.39532866666666666,
+      "max_volume_ratio": 0.7775092887593671,
+      "max_dimension_ratio": 0.2882692307692308,
+      "details": [
+        {
+          "id": 0,
+          "n": 203,
+          "weight_ratio": 0.350856,
+          "volume_ratio": 0.5298559003746878,
+          "dimension_ratio": 0.2717307692307693,
+          "aggregate_fit": true,
+          "placement_fit": false
+        },
+        {
+          "id": 1,
+          "n": 191,
+          "weight_ratio": 0.39532866666666666,
+          "volume_ratio": 0.7775092887593671,
+          "dimension_ratio": 0.2882692307692308,
+          "aggregate_fit": true,
+          "placement_fit": false
+        },
+        {
+          "id": 2,
+          "n": 6,
+          "weight_ratio": 0.005429333333333333,
+          "volume_ratio": 0.006403099084096585,
+          "dimension_ratio": 0.10423076923076924,
+          "aggregate_fit": true,
+          "placement_fit": true
+        }
+      ]
+    },
+    {
+      "depot": "D-CMB-003",
+      "date": "2026-01-05",
+      "method": "kmeans",
+      "seed": 2,
+      "clusters": 3,
+      "placement_bad": 2,
+      "max_n": 203,
+      "max_weight_ratio": 0.39532866666666666,
+      "max_volume_ratio": 0.7775092887593671,
+      "max_dimension_ratio": 0.2882692307692308,
+      "details": [
+        {
+          "id": 1,
+          "n": 203,
+          "weight_ratio": 0.350856,
+          "volume_ratio": 0.5298559003746878,
+          "dimension_ratio": 0.2717307692307693,
+          "aggregate_fit": true,
+          "placement_fit": false
+        },
+        {
+          "id": 2,
+          "n": 191,
+          "weight_ratio": 0.39532866666666666,
+          "volume_ratio": 0.7775092887593671,
+          "dimension_ratio": 0.2882692307692308,
+          "aggregate_fit": true,
+          "placement_fit": false
+        },
+        {
+          "id": 0,
+          "n": 6,
+          "weight_ratio": 0.005429333333333333,
+          "volume_ratio": 0.006403099084096585,
+          "dimension_ratio": 0.10423076923076924,
+          "aggregate_fit": true,
+          "placement_fit": true
+        }
+      ]
+    }
+  ]
+}

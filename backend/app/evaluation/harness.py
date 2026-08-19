@@ -43,7 +43,7 @@ from app.db.database import Base
 from app.db.seed_vehicle_types import VEHICLE_TYPES
 from app.evaluation.real_data import real_instance_payloads
 from app.evaluation.synthetic_data import generate_synthetic_parcels
-from app.evaluation.utilization_ceiling import compute_utilization_ceiling
+from app.evaluation.utilization_ceiling import compute_placement_aware_ceiling, compute_utilization_ceiling
 from app.models.load_plan import LoadPlan
 from app.optimization.assignment_problem import AssignmentConfig, load_catalog_snapshot, run_nsga2
 from app.schemas.parcel import ParcelIn
@@ -55,6 +55,18 @@ from app.services.optimization_service import optimize_load
 from app.services.vehicle_catalog_service import list_available_types
 
 DEPOT_LAT, DEPOT_LON = 6.9271, 79.8612
+
+
+def _prepare_warm_clusters(clusters, catalog_rows, capacity_aware: bool):
+    """Apply the ablation switch and always return an explicit audit."""
+    if not capacity_aware:
+        return clusters, {"enabled": False, "n_split": 0, "n_merged": 0}
+    repaired = repair_clusters(clusters, catalog_rows, RepairConfig(), DEPOT_LAT, DEPOT_LON)
+    return repaired.clusters, {
+        "enabled": True,
+        "n_split": repaired.n_split,
+        "n_merged": repaired.n_merged,
+    }
 
 
 def _parcel_namespace(payload: dict) -> SimpleNamespace:
@@ -227,13 +239,7 @@ def run_pipeline_one(cfg: PipelineRunConfig) -> dict:
         cluster_fn(parcels, cfg.seed, clustering_config)
         clusters = group_by_cluster(parcels)
 
-        repair_audit = None
-        if cfg.capacity_aware:
-            repaired = repair_clusters(clusters, catalog_rows, RepairConfig(), DEPOT_LAT, DEPOT_LON)
-            warm_clusters = repaired.clusters
-            repair_audit = {"n_split": repaired.n_split, "n_merged": repaired.n_merged}
-        else:
-            warm_clusters = clusters
+        warm_clusters, repair_audit = _prepare_warm_clusters(clusters, catalog_rows, cfg.capacity_aware)
 
         ga_config = AssignmentConfig(
             depot_lat=DEPOT_LAT, depot_lon=DEPOT_LON, population=cfg.population, generations=cfg.generations,
@@ -249,7 +255,14 @@ def run_pipeline_one(cfg: PipelineRunConfig) -> dict:
 
         total_weight = sum(p.weight_kg for p in parcels)
         total_volume = sum(p.volume_m3 for p in parcels)
-        ceiling = compute_utilization_ceiling(total_weight, total_volume, catalog)
+        capacity_ceiling = compute_utilization_ceiling(total_weight, total_volume, catalog)
+        placement_ceiling = compute_placement_aware_ceiling(parcels, catalog)
+        achieved_vs_placement = (
+            plan.mean_utilization / placement_ceiling.utilization if placement_ceiling.utilization else 0.0
+        )
+        achieved_vs_capacity = (
+            plan.mean_utilization / capacity_ceiling.utilization if capacity_ceiling.utilization else 0.0
+        )
 
         return {
             "run_id": cfg.run_id,
@@ -260,12 +273,21 @@ def run_pipeline_one(cfg: PipelineRunConfig) -> dict:
             "seed": cfg.seed,
             "n_parcels": len(parcels),
             "mean_utilization": plan.mean_utilization,
-            "utilization_ceiling": ceiling.utilization,
+            # Legacy alias retained so existing pilot files remain readable.
+            "utilization_ceiling": capacity_ceiling.utilization,
+            "utilization_ceiling_capacity": capacity_ceiling.utilization,
+            "utilization_ceiling_placement": placement_ceiling.utilization,
+            "achieved_vs_placement_ceiling": achieved_vs_placement,
+            "achieved_vs_capacity_ceiling": achieved_vs_capacity,
             "total_distance_km": plan.total_distance_km,
             "mean_time_window_compliance": plan.mean_time_window_compliance,
             "total_fleet_cost": plan.total_fleet_cost,
             "n_vehicles": plan.n_vehicles,
             "hypervolume": plan.hypervolume,
+            "pareto_front_size": result["pareto_front_size"],
+            "feasible_individuals_final": result["feasible_individuals_final"],
+            "slot_budget": result["slot_budget"],
+            "parcels_per_slot": result["parcels_per_slot"],
             "runtime_seconds": elapsed,
             "repair_audit": repair_audit,
         }

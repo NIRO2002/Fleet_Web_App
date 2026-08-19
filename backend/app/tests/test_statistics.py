@@ -18,6 +18,8 @@ def _row(depot_id, delivery_date, method, capacity_aware, seed, **metrics):
     base = {
         "mean_utilization": 0.5, "total_distance_km": 100.0, "mean_time_window_compliance": 0.9,
         "total_fleet_cost": 1000.0, "n_vehicles": 5, "hypervolume": 0.1, "runtime_seconds": 60.0,
+        "utilization_ceiling_capacity": 0.95, "utilization_ceiling_placement": 0.6,
+        "achieved_vs_placement_ceiling": 0.5 / 0.6,
     }
     base.update(metrics)
     return {

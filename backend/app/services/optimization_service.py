@@ -20,6 +20,7 @@ import time
 import uuid
 from dataclasses import asdict
 
+import numpy as np
 from sqlalchemy.orm import Session
 
 from app.core.reproducibility import run_manifest
@@ -88,6 +89,11 @@ def optimize_load(
     selected_row = X[idx]
     slots, type_of_slot = decode(selected_row, problem.n, problem.K)
     used_slots = {sidx: members for sidx, members in slots.items() if members}
+    slot_parcel_counts = sorted(len(members) for members in used_slots.values())
+    final_population_g = res.pop.get("G") if res.pop is not None else np.empty((0, 0))
+    feasible_individuals_final = int(
+        np.sum(np.all(final_population_g <= 1e-12, axis=1))
+    ) if len(final_population_g) else 0
 
     plan_id = f"PLAN-{uuid.uuid4().hex[:10].upper()}"
     vehicles_summary = []
@@ -226,6 +232,11 @@ def optimize_load(
             for row in F.tolist()
         ],
         "hypervolume": front_hypervolume,
+        "slot_budget": problem.K,
+        "pareto_front_size": len(F),
+        "feasible_individuals_final": feasible_individuals_final,
+        "selected_constraint_violation": float(np.maximum(G[idx], 0.0).sum()),
+        "parcels_per_slot": slot_parcel_counts,
     }
     return result, virtual_vehicles
 

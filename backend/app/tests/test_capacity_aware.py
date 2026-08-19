@@ -3,7 +3,7 @@ vehicle type, no parcel is lost or duplicated, and split/merge counts in
 the audit trail are internally consistent. Fix Pass 3 G1 dropped the
 "peel" operation (hazmat/refrigeration are out of scope for commercial
 last-mile delivery); this is split-and-merge only now."""
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import pytest
 
@@ -24,11 +24,31 @@ class FakeVehicleType:
     cargo_length_cm: float
     cargo_width_cm: float
     cargo_height_cm: float
+    max_parcels: int = 500
+    max_stack_layers: int = 6
+    vehicle_max_stack_weight_kg: float = 10_000.0
+    has_tail_lift: bool = True
 
 
 SMALL_VAN = FakeVehicleType("SMALL", 100.0, 1.0, 150.0, 100.0, 100.0)
 LARGE_LORRY = FakeVehicleType("LARGE", 5000.0, 25.0, 550.0, 220.0, 220.0)
 CATALOG = [SMALL_VAN, LARGE_LORRY]
+
+
+def test_aggregate_fit_but_placement_infeasible_cluster_is_split():
+    one_layer_van = replace(SMALL_VAN, max_stack_layers=1)
+    parcels = [
+        _parcel(f"PLACE-{i}", cluster_id=0, weight=1.0, volume=0.004, lat=6.90 + i * 0.0001)
+        for i in range(50)
+    ]
+
+    repaired = repair_clusters(group_by_cluster(parcels), [one_layer_van], RepairConfig())
+
+    assert repaired.n_split > 0
+    assert all(_fits_some_vehicle(members, [one_layer_van]) for members in repaired.clusters.values())
+    checks = [row for row in repaired.audit if row["operation"] == "split_check"]
+    assert checks
+    assert {"total_weight_kg", "total_volume_m3", "longest_parcel_dimension_cm"} <= checks[0].keys()
 
 
 def _parcel(pid, cluster_id, weight=2.0, volume=0.01, lat=6.90, lon=79.85, **overrides):

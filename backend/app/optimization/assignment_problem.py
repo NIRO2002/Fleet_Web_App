@@ -687,7 +687,10 @@ class OverflowRepair(Repair):
     slot fails placement, drop parcels until it succeeds. Fix Pass 4 S3.2
     extends this from weight/volume only to the full chain -- the GA's own
     constraint evaluator remains the authority on feasibility; this only
-    gives it fewer trivially-infeasible individuals to spend time on.
+    gives it fewer trivially-infeasible individuals to spend time on. Fix
+    Pass 5 adds the reverse operation: after outward repairs, try to close
+    one least-loaded slot by moving all of its parcels into feasible
+    existing slots. Without this, repair was a one-way spreading ratchet.
 
     Decode once per row (F6): every repair pass below shares one live,
     incrementally-updated `slots` mapping and running per-slot weight/
@@ -725,6 +728,67 @@ class OverflowRepair(Repair):
         self._repair_count(problem, slots, type_of_slot, slot_weight, slot_volume, move)
         self._repair_dimensional_fit(problem, row, slots, type_of_slot, move)
         self._repair_placement(problem, row, slots, type_of_slot, slot_weight, slot_volume, move)
+        self._consolidate_one_slot(problem, slots, type_of_slot, slot_weight, slot_volume, move)
+
+    def _consolidate_one_slot(self, problem, slots, type_of_slot, slot_weight, slot_volume, move):
+        """Empty at most one least-loaded slot when every move stays feasible.
+
+        The operation is deliberately bounded to one source slot per repair
+        call because placement is expensive. A failed attempt is rolled back
+        completely, so repair never turns a feasible row infeasible merely
+        to reduce its vehicle count.
+        """
+        sources = sorted(
+            (s for s, members in slots.items() if members),
+            key=lambda s: (len(slots[s]), slot_weight[s], slot_volume[s]),
+        )
+        for source in sources[:1]:
+            original_members = list(slots[source])
+            moves: list[tuple[int, int]] = []
+            success = True
+            # Place the hardest parcels first and prefer the fullest target.
+            members = sorted(
+                original_members,
+                key=lambda i: (problem.parcels[i].weight_kg, problem.parcels[i].volume_m3),
+                reverse=True,
+            )
+            for idx in members:
+                parcel = problem.parcels[idx]
+                targets = sorted(
+                    (s for s, current in slots.items() if s != source and current),
+                    key=lambda s: max(
+                        slot_weight[s] / problem.catalog[type_of_slot[s]].capacity_kg,
+                        slot_volume[s] / problem.catalog[type_of_slot[s]].capacity_m3,
+                    ),
+                    reverse=True,
+                )
+                target = None
+                for candidate in targets:
+                    vehicle = problem.catalog[type_of_slot[candidate]]
+                    combined = slots[candidate] + [idx]
+                    if len(combined) > vehicle.max_parcels:
+                        continue
+                    if slot_weight[candidate] + parcel.weight_kg > vehicle.capacity_kg:
+                        continue
+                    if slot_volume[candidate] + parcel.volume_m3 > vehicle.capacity_m3:
+                        continue
+                    metrics = problem._evaluate_slot(tuple(combined), int(type_of_slot[candidate]))
+                    if metrics["dim_violations"] or not metrics["placement_ok"]:
+                        continue
+                    if metrics["return_time_minutes"] > minutes(vehicle.available_until):
+                        continue
+                    target = candidate
+                    break
+                if target is None:
+                    success = False
+                    break
+                move(idx, source, target)
+                moves.append((idx, target))
+
+            if success and not slots[source]:
+                return
+            for idx, target in reversed(moves):
+                move(idx, target, source)
 
     def _repair_weight_volume(self, problem, slots, type_of_slot, slot_weight, slot_volume, move):
         for slot_idx, parcel_indices in list(slots.items()):

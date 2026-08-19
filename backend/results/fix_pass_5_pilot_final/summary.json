@@ -1,0 +1,9 @@
+{
+  "runs": 36,
+  "wall_seconds": 3338.8195734000183,
+  "mean_run_seconds": 517.6052087833426,
+  "min_run_seconds": 347.28937960002804,
+  "max_run_seconds": 857.5568729999941,
+  "runs_per_hour": 38.81611364462695,
+  "projected_10800_hours": 278.23496445000154
+}

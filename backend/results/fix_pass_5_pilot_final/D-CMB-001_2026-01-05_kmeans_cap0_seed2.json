@@ -1,0 +1,39 @@
+{
+  "run_id": "D-CMB-001_2026-01-05_kmeans_cap0_seed2",
+  "depot_id": "D-CMB-001",
+  "delivery_date": "2026-01-05",
+  "method": "kmeans",
+  "capacity_aware": false,
+  "seed": 2,
+  "n_parcels": 400,
+  "mean_utilization": 0.14732081860801763,
+  "utilization_ceiling": 0.9996079881188118,
+  "utilization_ceiling_capacity": 0.9996079881188118,
+  "utilization_ceiling_placement": 0.22435645955555555,
+  "achieved_vs_placement_ceiling": 0.6566372945082858,
+  "achieved_vs_capacity_ceiling": 0.14737859276741525,
+  "total_distance_km": 362.6960144853666,
+  "mean_time_window_compliance": 0.7780862993195802,
+  "total_fleet_cost": 176256.07453925879,
+  "n_vehicles": 8,
+  "hypervolume": 1543.220350370531,
+  "pareto_front_size": 93,
+  "feasible_individuals_final": 100,
+  "slot_budget": 12,
+  "parcels_per_slot": [
+    37,
+    41,
+    42,
+    44,
+    52,
+    52,
+    62,
+    70
+  ],
+  "runtime_seconds": 680.7542263000505,
+  "repair_audit": {
+    "enabled": false,
+    "n_split": 0,
+    "n_merged": 0
+  }
+}
