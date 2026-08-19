@@ -34,9 +34,12 @@ export const parseClusterKey = (key: string): number | null => (key === 'None' ?
 
 const VEHICLE_TONE: Record<VehicleType, string> = {
   BIKE: 'bg-slate-100 text-slate-700',
-  THREE_WHEEL: 'bg-cyan-50 text-cyan-700',
-  VAN: 'bg-blue-50 text-blue-700',
-  LORRY: 'bg-indigo-50 text-indigo-700',
+  APE_CARGO: 'bg-cyan-50 text-cyan-700',
+  TVS_KING: 'bg-cyan-50 text-cyan-700',
+  MICRO_VAN: 'bg-blue-50 text-blue-700',
+  VAN_MED: 'bg-blue-50 text-blue-700',
+  TRUCK_2T: 'bg-indigo-50 text-indigo-700',
+  TRUCK_4T: 'bg-indigo-50 text-indigo-700',
 }
 
 export const vehicleToneClass = (type: VehicleType) => VEHICLE_TONE[type]

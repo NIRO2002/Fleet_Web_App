@@ -7,13 +7,14 @@ import type { ClusterPrediction, ClusterSummary, ClusteringTrainResult, CsvUploa
 // instance and never falls back to the whole table. Every parcel this UI
 // creates, and every clustering call it makes, uses this one fixed instance
 // so the two sides actually line up.
-export const DEMO_DEPOT_ID = 'DEPOT-1'
-export const demoDeliveryDate = () => new Date().toISOString().slice(0, 10)
+// This matches one real 400-parcel planning instance in the bundled dataset.
+export const DEMO_DEPOT_ID = 'D-CMB-001'
+export const demoDeliveryDate = () => '2026-01-05'
 
 const instanceQuery = () => `depot_id=${encodeURIComponent(DEMO_DEPOT_ID)}&delivery_date=${demoDeliveryDate()}`
 
 export const parcelService = {
-  list: () => api.get<Parcel[]>('/parcels'),
+  list: () => api.get<Parcel[]>(`/parcels?${instanceQuery()}`),
   create: (payload: ParcelInput) =>
     api.post<Parcel>('/parcels', { ...payload, depot_id: DEMO_DEPOT_ID, delivery_date: demoDeliveryDate() }),
 

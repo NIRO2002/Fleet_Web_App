@@ -7,6 +7,7 @@ import {
   DataTable,
   EmptyState,
   InlineAlert,
+  LoadingState,
   MetricCard,
   PageHeader,
   ParcelFieldsFieldset,
@@ -79,7 +80,8 @@ export function ParcelConsolidationPage() {
   }
 
   useEffect(() => {
-    refresh()
+    const timer = window.setTimeout(() => void refresh(), 0)
+    return () => window.clearTimeout(timer)
   }, [])
 
   const handleAddSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -394,7 +396,7 @@ export function ParcelConsolidationPage() {
       <div className="mt-4">
         {loading ? (
           <Card>
-            <p className="text-sm font-semibold text-fleet-muted">Loading parcels…</p>
+            <LoadingState message="Please wait while parcels are loading…" />
           </Card>
         ) : filteredParcels.length === 0 ? (
           <EmptyState

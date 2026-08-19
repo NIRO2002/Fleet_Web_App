@@ -18,6 +18,23 @@ from app.schemas.vehicle_type import VehicleTypeCatalogIn
 from app.services import vehicle_catalog_service
 
 
+def test_parcel_list_can_be_scoped_to_one_planning_instance(client, parcel_factory):
+    for payload in parcel_factory(n=4, depot_id="DEPOT-A", delivery_date="2026-01-05"):
+        assert client.post("/api/v1/parcels", json=payload).status_code == 200
+    for payload in parcel_factory(n=3, depot_id="DEPOT-B", delivery_date="2026-01-06"):
+        payload["parcel_id"] = f"B-{payload['parcel_id']}"
+        assert client.post("/api/v1/parcels", json=payload).status_code == 200
+
+    response = client.get(
+        "/api/v1/parcels",
+        params={"depot_id": "DEPOT-A", "delivery_date": "2026-01-05"},
+    )
+
+    assert response.status_code == 200
+    assert len(response.json()) == 4
+    assert {row["depot_id"] for row in response.json()} == {"DEPOT-A"}
+
+
 def test_full_pipeline_smoke(client, db_session, parcel_factory):
     vehicle_catalog_service.upsert_type(
         db_session,

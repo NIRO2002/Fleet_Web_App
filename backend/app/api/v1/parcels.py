@@ -18,8 +18,17 @@ def create_parcel(payload: ParcelIn, db: Session = Depends(get_db)):
     return upsert_parcel(db, payload)
 
 @router.get("", response_model=list[ParcelResponse])
-def list_parcels(db: Session = Depends(get_db)):
-    return db.query(Parcel).order_by(Parcel.created_at.desc()).all()
+def list_parcels(
+    depot_id: str | None = Query(default=None),
+    delivery_date: date | None = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    query = db.query(Parcel)
+    if depot_id is not None:
+        query = query.filter(Parcel.depot_id == depot_id)
+    if delivery_date is not None:
+        query = query.filter(Parcel.delivery_date == delivery_date)
+    return query.order_by(Parcel.created_at.desc()).all()
 
 @router.post("/upload-csv", response_model=CSVUploadResponse)
 async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)):

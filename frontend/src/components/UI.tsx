@@ -98,9 +98,22 @@ export function PrimaryButton({
       onClick={onClick}
       type={type}
     >
-      {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-      {children}
+      {loading ? (
+        <>
+          <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
+          <span>Please wait…</span>
+        </>
+      ) : children}
     </button>
+  )
+}
+
+export function LoadingState({ message = 'Please wait…' }: { message?: string }) {
+  return (
+    <div aria-live="polite" className="flex items-center justify-center gap-3 rounded-xl bg-slate-50 px-5 py-8 text-sm font-semibold text-fleet-muted" role="status">
+      <Loader2 aria-hidden="true" className="h-6 w-6 animate-spin text-fleet-blue" />
+      <span>{message}</span>
+    </div>
   )
 }
 

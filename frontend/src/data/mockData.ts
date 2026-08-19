@@ -6,10 +6,13 @@ import type { User, VehicleType } from '../types'
  * remains the backend (app/services/optimization_service.py VEHICLES, app/core/config.py).
  */
 export const VEHICLE_CATALOG: { type: VehicleType; label: string; capacity_kg: number; capacity_m3: number }[] = [
-  { type: 'BIKE', label: 'Bike', capacity_kg: 25, capacity_m3: 0.08 },
-  { type: 'THREE_WHEEL', label: 'Three-Wheeler', capacity_kg: 150, capacity_m3: 0.8 },
-  { type: 'VAN', label: 'Van', capacity_kg: 1000, capacity_m3: 8 },
-  { type: 'LORRY', label: 'Lorry', capacity_kg: 5000, capacity_m3: 25 },
+  { type: 'BIKE', label: 'Bike', capacity_kg: 25, capacity_m3: 0.07 },
+  { type: 'APE_CARGO', label: 'Ape Cargo', capacity_kg: 496, capacity_m3: 2.9 },
+  { type: 'TVS_KING', label: 'TVS King', capacity_kg: 450, capacity_m3: 3.4 },
+  { type: 'MICRO_VAN', label: 'Micro Van', capacity_kg: 350, capacity_m3: 2.98 },
+  { type: 'VAN_MED', label: 'Medium Van', capacity_kg: 1100, capacity_m3: 6 },
+  { type: 'TRUCK_2T', label: '2T Truck', capacity_kg: 2500, capacity_m3: 12.48 },
+  { type: 'TRUCK_4T', label: '4T Truck', capacity_kg: 4500, capacity_m3: 24.02 },
 ]
 
 export const DEFAULT_DEPOT = {

@@ -6,6 +6,7 @@ import {
   DataTable,
   EmptyState,
   InlineAlert,
+  LoadingState,
   MetricCard,
   PageHeader,
   PrimaryButton,
@@ -45,7 +46,8 @@ export function VehicleTypesPage() {
   }
 
   useEffect(() => {
-    refresh()
+    const timer = window.setTimeout(() => void refresh(), 0)
+    return () => window.clearTimeout(timer)
   }, [])
 
   const startEdit = (capability: VehicleCapability) => {
@@ -180,7 +182,7 @@ export function VehicleTypesPage() {
       <div className="mt-4">
         {loading ? (
           <Card>
-            <p className="text-sm font-semibold text-fleet-muted">Loading vehicle types…</p>
+            <LoadingState message="Please wait while vehicle types are loading…" />
           </Card>
         ) : filtered.length === 0 ? (
           <EmptyState

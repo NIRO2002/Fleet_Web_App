@@ -10,6 +10,7 @@ import {
   DataTable,
   EmptyState,
   InlineAlert,
+  LoadingState,
   LabeledInput,
   MetricCard,
   PageHeader,
@@ -51,9 +52,12 @@ interface NavState {
 
 const VEHICLE_ICON: Record<VehicleType, LucideIcon> = {
   BIKE: Bike,
-  THREE_WHEEL: Car,
-  VAN: Truck,
-  LORRY: Container,
+  APE_CARGO: Car,
+  TVS_KING: Car,
+  MICRO_VAN: Truck,
+  VAN_MED: Truck,
+  TRUCK_2T: Container,
+  TRUCK_4T: Container,
 }
 
 export function LoadOptimizationPage() {
@@ -102,8 +106,11 @@ export function LoadOptimizationPage() {
   }
 
   useEffect(() => {
-    refreshClusters()
-    refreshVehicles()
+    const timer = window.setTimeout(() => {
+      void refreshClusters()
+      void refreshVehicles()
+    }, 0)
+    return () => window.clearTimeout(timer)
   }, [])
 
   const clusterChoices = useMemo(() => {
@@ -148,7 +155,7 @@ export function LoadOptimizationPage() {
       setResult(response)
       setRunNotice({
         tone: 'success',
-        text: `Selected ${response.selected_vehicle.vehicle_type.replace('_', ' ')} — virtual vehicle ${response.virtual_vehicle_id} created.`,
+        text: `Optimization created ${response.virtual_vehicle_ids.length} virtual vehicle${response.virtual_vehicle_ids.length === 1 ? '' : 's'}.`,
       })
       await refreshVehicles()
     } catch (err) {
@@ -318,9 +325,9 @@ export function LoadOptimizationPage() {
             </div>
             <div className="mt-5 flex flex-wrap items-center gap-2">
               <StatusBadge tone="blue">{result.optimization_id}</StatusBadge>
-              <StatusBadge tone="green">{result.virtual_vehicle_id}</StatusBadge>
+              {result.virtual_vehicle_ids.map((id) => <StatusBadge key={id} tone="green">{id}</StatusBadge>)}
               {result.cluster_id !== null && <StatusBadge tone="slate">{clusterLabel(result.cluster_id)}</StatusBadge>}
-              <StatusBadge tone="slate">Fitness score {result.selected_vehicle.score.toFixed(3)}</StatusBadge>
+              <StatusBadge tone="slate">Fleet cost {formatNumber(result.selected_vehicle.fleet_cost)}</StatusBadge>
             </div>
             <div className="mt-4 flex flex-wrap gap-1.5">
               {result.parcel_ids.slice(0, 24).map((id) => (
@@ -334,10 +341,10 @@ export function LoadOptimizationPage() {
             </div>
           </Card>
 
-          <Card title="Pareto Front — Feasible Vehicle Options">
-            <DataTable headers={['Vehicle Type', 'Capacity', 'Load', 'Weight Util', 'Volume Util', 'Distance', 'Compliance', 'Score']}>
-              {result.pareto_solutions.map((option) => (
-                <ParetoRow key={option.vehicle_type} option={option} selected={option.vehicle_type === result.selected_vehicle.vehicle_type} />
+          <Card title="Assigned Virtual Vehicle Loads">
+            <DataTable headers={['Vehicle Type', 'Capacity', 'Load', 'Weight Util', 'Volume Util', 'Distance', 'Compliance', 'Cost']}>
+              {result.vehicles.map((option, index) => (
+                <ParetoRow key={option.virtual_vehicle_id} option={option} selected={index === 0} />
               ))}
             </DataTable>
           </Card>
@@ -359,7 +366,7 @@ export function LoadOptimizationPage() {
           </div>
         )}
         {vehiclesLoading ? (
-          <p className="text-sm font-semibold text-fleet-muted">Loading virtual vehicles…</p>
+          <LoadingState message="Please wait while virtual vehicles are loading…" />
         ) : vehicles.length === 0 ? (
           <EmptyState
             description="Run an optimization above to generate the first virtual vehicle load."
@@ -463,7 +470,7 @@ function ParetoRow({ option, selected }: { option: VehicleOption; selected: bool
       <td className="px-5 py-4 font-semibold">{formatPercent(option.utilization_volume)}</td>
       <td className="px-5 py-4 font-semibold">{option.estimated_distance_km.toFixed(1)} km</td>
       <td className="px-5 py-4 font-semibold">{formatPercent(option.time_window_compliance)}</td>
-      <td className="px-5 py-4 font-black">{option.score.toFixed(3)}</td>
+      <td className="px-5 py-4 font-black">{formatNumber(option.fleet_cost)}</td>
     </tr>
   )
 }

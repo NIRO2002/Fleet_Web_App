@@ -60,7 +60,7 @@ export interface CsvUploadResult {
 
 // --- Optimization (mirrors backend app/schemas/optimization.py) ----------
 
-export type VehicleType = 'BIKE' | 'THREE_WHEEL' | 'VAN' | 'LORRY'
+export type VehicleType = 'BIKE' | 'APE_CARGO' | 'TVS_KING' | 'MICRO_VAN' | 'VAN_MED' | 'TRUCK_2T' | 'TRUCK_4T'
 
 export interface OptimizationRunRequest {
   cluster_id?: number
@@ -79,16 +79,18 @@ export interface VehicleOption {
   utilization_volume: number
   estimated_distance_km: number
   time_window_compliance: number
-  score: number
+  fleet_cost: number
+  virtual_vehicle_id: string
 }
 
 export interface OptimizationResult {
   optimization_id: string
   selected_vehicle: VehicleOption
+  vehicles: VehicleOption[]
   parcel_ids: string[]
   cluster_id: number | null
-  pareto_solutions: VehicleOption[]
-  virtual_vehicle_id: string
+  virtual_vehicle_id: string | null
+  virtual_vehicle_ids: string[]
 }
 
 export interface VirtualVehicle {
