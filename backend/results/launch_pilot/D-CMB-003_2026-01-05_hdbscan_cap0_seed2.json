@@ -1,0 +1,43 @@
+{
+  "run_id": "D-CMB-003_2026-01-05_hdbscan_cap0_seed2",
+  "depot_id": "D-CMB-003",
+  "delivery_date": "2026-01-05",
+  "method": "hdbscan",
+  "capacity_aware": false,
+  "seed": 2,
+  "n_parcels": 400,
+  "mean_utilization": 0.1955966308879793,
+  "utilization_ceiling": 0.9992626435402154,
+  "utilization_ceiling_capacity": 0.9992626435402154,
+  "utilization_greedy_reference": 0.23906601729545457,
+  "achieved_vs_greedy_reference": 0.8181699477857919,
+  "achieved_vs_capacity_ceiling": 0.1957409617505705,
+  "total_distance_km": 441.25018053271145,
+  "mean_time_window_compliance": 0.7128772585799009,
+  "total_fleet_cost": 187233.63480576777,
+  "n_vehicles": 12,
+  "hypervolume": 44842.00337157948,
+  "pareto_front_size": 82,
+  "feasible_individuals_final": 100,
+  "slot_budget": 21,
+  "parcels_per_slot": [
+    24,
+    25,
+    25,
+    25,
+    26,
+    27,
+    31,
+    31,
+    35,
+    47,
+    50,
+    54
+  ],
+  "runtime_seconds": 418.81249929999467,
+  "repair_audit": {
+    "enabled": false,
+    "n_split": 0,
+    "n_merged": 0
+  }
+}
