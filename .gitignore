@@ -21,6 +21,13 @@ backend/artifacts/*.joblib
 
 # Claude
 .claude/scheduled_tasks.lock
+.claude/
+
+# Disposable pre-launch determinism runs
+backend/results/det_a/
+backend/results/det_b/
+backend/results/det_parallel_a/
+backend/results/det_parallel_b/
 
 # OS
 .DS_Store
