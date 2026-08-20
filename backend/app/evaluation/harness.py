@@ -276,8 +276,8 @@ def run_pipeline_one(cfg: PipelineRunConfig) -> dict:
             # Legacy alias retained so existing pilot files remain readable.
             "utilization_ceiling": capacity_ceiling.utilization,
             "utilization_ceiling_capacity": capacity_ceiling.utilization,
-            "utilization_ceiling_placement": placement_ceiling.utilization,
-            "achieved_vs_placement_ceiling": achieved_vs_placement,
+            "utilization_greedy_reference": placement_ceiling.utilization,
+            "achieved_vs_greedy_reference": achieved_vs_placement,
             "achieved_vs_capacity_ceiling": achieved_vs_capacity,
             "total_distance_km": plan.total_distance_km,
             "mean_time_window_compliance": plan.mean_time_window_compliance,

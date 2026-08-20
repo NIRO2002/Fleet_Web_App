@@ -23,8 +23,8 @@ from scipy.stats import wilcoxon
 #: to carry these keys (matches harness.run_pipeline_one's output).
 METRICS = {
     "mean_utilization": "Utilization",
-    "achieved_vs_placement_ceiling": "Achieved / placement-aware reference",
-    "utilization_ceiling_placement": "Placement-aware attainable reference",
+    "achieved_vs_greedy_reference": "Achieved / greedy reference",
+    "utilization_greedy_reference": "Greedy attainable reference",
     "utilization_ceiling_capacity": "Capacity-only theoretical maximum",
     "total_distance_km": "Distance (km)",
     "mean_time_window_compliance": "Compliance",

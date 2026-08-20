@@ -32,8 +32,11 @@ class PlacementAwareCeiling(UtilizationCeiling):
     """A physically attainable reference produced by actual placement.
 
     Unlike :class:`UtilizationCeiling`, this is not a mathematical upper
-    bound. It is a conservative achievable benchmark: every reported load
-    has passed the production LIFO placement routine.
+    bound. It is a conservative greedy baseline -- every reported load has
+    passed the production LIFO placement routine, but the packing order is
+    a single stable-ID greedy sweep, not an optimized one. A good optimizer
+    is expected to beat it; a reported achieved/reference ratio above 100%
+    is the expected outcome, not an error.
     """
 
     vehicle_loads: list[list[str]]

@@ -13,6 +13,9 @@ node_modules/
 dist/
 frontend/dist/
 
+# Trained model artifacts (regenerated on every run)
+backend/artifacts/*.joblib
+
 # Env
 .env
 
