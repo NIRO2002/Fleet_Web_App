@@ -25,7 +25,7 @@ def _seed_plan(db_session):
     )
     vehicle = VirtualVehicle(
         virtual_vehicle_id="VV-EXPORT", plan_id=plan.plan_id, depot_id=plan.depot_id,
-        delivery_date=plan.delivery_date, vehicle_type="TRUCK_4T",
+        delivery_date=plan.delivery_date, vehicle_type_code="TRUCK_4T",
         capacity_kg=4500, capacity_m3=24.02, used_weight_kg=12.5,
         used_volume_m3=0.08, parcel_count=1, cargo_length_cm=520,
         cargo_width_cm=220, cargo_height_cm=210,
@@ -35,7 +35,9 @@ def _seed_plan(db_session):
         parcel_id=parcel.parcel_id, delivery_sequence=1, load_sequence=1,
         stack_layer=0, load_position_x=10, load_position_y=20, load_position_z=0,
     )
-    db_session.add_all([plan, parcel, vehicle, assignment])
+    vehicle.assignments.append(assignment)
+    plan.vehicles.append(vehicle)
+    db_session.add_all([plan, parcel])
     db_session.commit()
 
 

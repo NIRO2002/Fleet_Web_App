@@ -1,8 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-
-from app.db.session import get_db
-from app.models.virtual_vehicle import VirtualVehicle
+from fastapi import APIRouter, HTTPException
+from app.models.load_plan import LoadPlan
 from app.schemas.parcel import ParcelIn
 from app.services.data_service import upsert_parcel
 from app.services.optimization_service import try_insert
@@ -10,19 +7,19 @@ from app.services.optimization_service import try_insert
 router = APIRouter(prefix="/virtual-vehicles", tags=["virtual-vehicles"])
 
 @router.get("")
-def list_virtual_vehicles(db: Session = Depends(get_db)):
-    return db.query(VirtualVehicle).order_by(VirtualVehicle.updated_at.desc()).all()
+async def list_virtual_vehicles():
+    plans = await LoadPlan.find_all().sort("-created_at").to_list()
+    return [vehicle for plan in plans for vehicle in plan.vehicles]
 
 @router.post("/{virtual_vehicle_id}/insert-parcel")
-def insert_parcel(virtual_vehicle_id: str, payload: ParcelIn, db: Session = Depends(get_db)):
-    vehicle = db.query(VirtualVehicle).filter(
-        VirtualVehicle.virtual_vehicle_id == virtual_vehicle_id
-    ).first()
+async def insert_parcel(virtual_vehicle_id: str, payload: ParcelIn):
+    plan = await LoadPlan.find_one({"vehicles.virtual_vehicle_id": virtual_vehicle_id})
+    vehicle = next((v for v in plan.vehicles if v.virtual_vehicle_id == virtual_vehicle_id), None) if plan else None
     if vehicle is None:
         raise HTTPException(status_code=404, detail="Virtual vehicle not found")
 
-    parcel = upsert_parcel(db, payload)
-    inserted, reason = try_insert(db, vehicle, parcel)
+    parcel = await upsert_parcel(payload)
+    inserted, reason = await try_insert(plan, vehicle, parcel)
     return {
         "virtual_vehicle_id": virtual_vehicle_id,
         "inserted": inserted,

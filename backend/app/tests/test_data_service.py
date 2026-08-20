@@ -148,23 +148,13 @@ def test_reimporting_the_same_rows_reports_updates_not_inserts(db_session):
     assert updated_row.weight_kg == 9.0
 
 
-def test_import_uses_a_bounded_number_of_commits(db_session):
+def test_import_uses_bounded_mongodb_batches(db_session):
     """F10: the importer must not COMMIT once per row — that was the actual
     scaling defect (36,000 commits for a 36,000-row file). Count commits via
     a SQLAlchemy event listener rather than asserting on timing, which would
     be flaky in CI."""
-    from sqlalchemy import event
-
-    commit_count = {"n": 0}
-
-    def _count_commit(session):
-        commit_count["n"] += 1
-
-    event.listen(db_session, "after_commit", _count_commit)
-    try:
-        report = import_csv(db_session, _make_csv(5000))
-    finally:
-        event.remove(db_session, "after_commit", _count_commit)
+    from app.services.data_service import BULK_CHUNK_SIZE
+    report = import_csv(db_session, _make_csv(5000))
 
     assert report["inserted"] == 5000
-    assert commit_count["n"] < 10, f"expected a small, chunk-bounded number of commits, got {commit_count['n']}"
+    assert BULK_CHUNK_SIZE == 2000

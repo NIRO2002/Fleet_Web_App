@@ -1,64 +1,41 @@
-from sqlalchemy.orm import Session
-
 from app.models.vehicle_capability import VehicleCapability
 from app.schemas.vehicle_capability import VehicleCapabilityIn
+from app.utils_datetime import utcnow
 
-class DuplicateVehicleCapabilityError(Exception):
-    pass
+class DuplicateVehicleCapabilityError(Exception): pass
+class VehicleCapabilityInUseError(Exception): pass
 
-class VehicleCapabilityInUseError(Exception):
-    pass
-
-def _check_duplicate_name(db: Session, name: str, exclude_id: int | None = None):
-    query = db.query(VehicleCapability).filter(VehicleCapability.name == name)
+async def _check_duplicate_name(name, exclude_id=None):
+    query = {"name": name}
     if exclude_id is not None:
-        query = query.filter(VehicleCapability.id != exclude_id)
-    if query.first() is not None:
+        query["capability_id"] = {"$ne": exclude_id}
+    if await VehicleCapability.find_one(query):
         raise DuplicateVehicleCapabilityError(f"A vehicle type named '{name}' already exists.")
 
-def create_capability(db: Session, payload: VehicleCapabilityIn) -> VehicleCapability:
-    _check_duplicate_name(db, payload.name)
-    obj = VehicleCapability(**payload.model_dump())
-    db.add(obj)
-    db.commit()
-    db.refresh(obj)
+async def create_capability(payload: VehicleCapabilityIn):
+    await _check_duplicate_name(payload.name)
+    latest = await VehicleCapability.find_all().sort("-capability_id").first_or_none()
+    obj = VehicleCapability(capability_id=(latest.capability_id + 1 if latest else 1), **payload.model_dump())
+    await obj.insert()
     return obj
 
-def list_capabilities(db: Session, status: str | None = None) -> list[VehicleCapability]:
-    query = db.query(VehicleCapability)
-    if status is not None:
-        query = query.filter(VehicleCapability.status == status)
-    return query.order_by(VehicleCapability.name).all()
+async def list_capabilities(status=None):
+    query = {"status": status} if status else {}
+    return await VehicleCapability.find(query).sort("name").to_list()
 
-def get_capability(db: Session, capability_id: int) -> VehicleCapability | None:
-    return db.query(VehicleCapability).filter(VehicleCapability.id == capability_id).first()
+async def get_capability(capability_id):
+    return await VehicleCapability.find_one(VehicleCapability.capability_id == capability_id)
 
-def update_capability(db: Session, obj: VehicleCapability, payload: VehicleCapabilityIn) -> VehicleCapability:
-    _check_duplicate_name(db, payload.name, exclude_id=obj.id)
-    for field, value in payload.model_dump().items():
-        setattr(obj, field, value)
-    db.commit()
-    db.refresh(obj)
+async def update_capability(obj, payload):
+    await _check_duplicate_name(payload.name, obj.capability_id)
+    for field, value in payload.model_dump().items(): setattr(obj, field, value)
+    obj.updated_at = utcnow()
+    await obj.save()
     return obj
 
-def delete_capability(db: Session, obj: VehicleCapability) -> None:
-    # No Registered Vehicle entity exists yet, so there is nothing to guard against
-    # today. Once Registered Vehicles reference a VehicleCapability by id, add a
-    # lookup here and raise VehicleCapabilityInUseError instead of deleting.
-    db.delete(obj)
-    db.commit()
+async def delete_capability(obj):
+    await obj.delete()
 
-def optimization_ready_capabilities(db: Session) -> list[dict]:
-    """Active vehicle-type capability definitions shaped for the NSGA-II optimizer to
-    consume as candidate vehicle types (weight/volume ceilings only — availability on a
-    given day still depends on Registered Vehicles, which don't exist yet)."""
-    capabilities = list_capabilities(db, status="ACTIVE")
-    return [
-        {
-            "id": c.id,
-            "name": c.name,
-            "max_weight_kg": c.max_weight_kg,
-            "max_volume_m3": c.max_volume_m3,
-        }
-        for c in capabilities
-    ]
+async def optimization_ready_capabilities():
+    return [{"id": c.id, "name": c.name, "max_weight_kg": c.max_weight_kg, "max_volume_m3": c.max_volume_m3}
+            for c in await list_capabilities("ACTIVE")]

@@ -1,11 +1,1 @@
-from sqlalchemy.orm import sessionmaker
-from app.db.database import engine
-
-SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+"""MongoDB uses Beanie's process-wide Motor client; no request session is needed."""

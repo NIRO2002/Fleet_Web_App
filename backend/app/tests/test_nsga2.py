@@ -694,7 +694,7 @@ def test_load_plan_and_parcel_assignments_are_persisted(db_session):
     assert plan.catalog_snapshot, "catalog_snapshot must record what the optimizer actually saw"
     assert plan.n_parcels == len(parcels)
 
-    assignments = db_session.query(ParcelAssignment).filter(ParcelAssignment.plan_id == plan.plan_id).all()
+    assignments = db_session.query(ParcelAssignment).filter_by(plan_id=plan.plan_id).all()
     assert len(assignments) == len(parcels)
     assigned_parcel_ids = {a.parcel_id for a in assignments}
     assert assigned_parcel_ids == {p.parcel_id for p in parcels}

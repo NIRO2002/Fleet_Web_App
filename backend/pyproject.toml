@@ -13,7 +13,8 @@ dependencies = [
   "uvicorn[standard]>=0.35,<0.36",
   "pydantic>=2.11,<3",
   "pydantic-settings>=2.10,<3",
-  "sqlalchemy>=2.0,<3",
+  "beanie>=1.30,<2",
+  "motor>=3.7,<4",
   "numpy>=2.3,<3",
   "pandas>=2.3,<3",
   "scikit-learn>=1.7,<2",
@@ -30,7 +31,7 @@ dependencies = [
 dev = [
   "pytest>=8.4,<9",
   "httpx>=0.28,<0.29",
-  "alembic>=1.16,<2",
+  "mongomock-motor>=0.0.36,<0.1",
 ]
 
 [tool.setuptools.packages.find]
@@ -38,4 +39,7 @@ include = ["app*"]
 
 [tool.pytest.ini_options]
 testpaths = ["app/tests"]
-filterwarnings = ["error::DeprecationWarning"]
+filterwarnings = [
+  "error::DeprecationWarning",
+  "ignore:Accessing the 'model_fields' attribute on the instance is deprecated.*:pydantic.warnings.PydanticDeprecatedSince211",
+]

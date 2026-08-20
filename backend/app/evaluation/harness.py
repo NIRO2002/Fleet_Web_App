@@ -26,6 +26,7 @@ os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 
 import json
+import asyncio
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -34,12 +35,11 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from joblib import Parallel, delayed, parallel_config
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
+from beanie import init_beanie
+from mongomock_motor import AsyncMongoMockClient
 
 from app.core.reproducibility import set_seeds
-from app.db.database import Base
+from app.db.database import DOCUMENT_MODELS
 from app.db.seed_vehicle_types import VEHICLE_TYPES
 from app.evaluation.real_data import real_instance_payloads
 from app.evaluation.synthetic_data import generate_synthetic_parcels
@@ -75,30 +75,31 @@ def _parcel_namespace(payload: dict) -> SimpleNamespace:
     return SimpleNamespace(**payload)
 
 
-def _scratch_db():
-    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool)
-    Base.metadata.create_all(bind=engine)
-    session = sessionmaker(bind=engine, autoflush=False, autocommit=False)()
-    return engine, session
+async def _scratch_db():
+    client = AsyncMongoMockClient()
+    await init_beanie(database=client[f"evaluation_{uuid.uuid4().hex}"], document_models=DOCUMENT_MODELS)
+    return client
 
 
-def _seed_catalog(session) -> None:
+async def _seed_catalog() -> None:
     for payload in VEHICLE_TYPES:
-        vehicle_catalog_service.upsert_type(session, payload)
+        await vehicle_catalog_service.upsert_type(payload)
 
+
+async def _evaluation_catalog_snapshot():
+    """Exact seeded catalog used by evaluation runs, for batch manifests."""
+    client = await _scratch_db()
+    try:
+        await _seed_catalog()
+        return await load_catalog_snapshot(depot_id=None)
+    finally:
+        client.close()
 
 def evaluation_catalog_snapshot():
-    """Exact seeded catalog used by evaluation runs, for batch manifests."""
-    engine, session = _scratch_db()
-    try:
-        _seed_catalog(session)
-        return load_catalog_snapshot(session, depot_id=None)
-    finally:
-        session.close()
-        engine.dispose()
+    return asyncio.run(_evaluation_catalog_snapshot())
 
 
-def _build_catalog_and_parcels(
+async def _build_catalog_and_parcels_async(
     n_parcels: int, seed: int, n_clusters: int, *, synthetic: bool = False,
     depot_id: str = "D-CMB-001", delivery_date: str = "2026-01-05",
 ):
@@ -110,13 +111,12 @@ def _build_catalog_and_parcels(
     `n_parcels`/`n_clusters`/`seed` are ignored in that case (an instance is
     exactly 400 real parcels; pass `synthetic=True` for the old
     parameterized synthetic generator instead)."""
-    engine, session = _scratch_db()
+    client = await _scratch_db()
     try:
-        _seed_catalog(session)
-        catalog = load_catalog_snapshot(session, depot_id=None)
+        await _seed_catalog()
+        catalog = await load_catalog_snapshot(depot_id=None)
     finally:
-        session.close()
-        engine.dispose()
+        client.close()
 
     if synthetic:
         payloads = generate_synthetic_parcels(
@@ -127,6 +127,9 @@ def _build_catalog_and_parcels(
         payloads = real_instance_payloads(depot_id, delivery_date)
     parcels = [_parcel_namespace(p) for p in payloads]
     return catalog, parcels
+
+def _build_catalog_and_parcels(*args, **kwargs):
+    return asyncio.run(_build_catalog_and_parcels_async(*args, **kwargs))
 
 
 @dataclass
@@ -230,21 +233,20 @@ class PipelineRunConfig:
         return f"{self.depot_id}_{self.delivery_date}_{self.method}_{cap}_seed{self.seed}"
 
 
-def run_pipeline_one(cfg: PipelineRunConfig) -> dict:
+async def _run_pipeline_one(cfg: PipelineRunConfig) -> dict:
     """One full pipeline run: real instance -> clustering (method) ->
     capacity-aware repair (if capacity_aware) -> NSGA-II (warm-started from
     the resulting clusters) -> persisted LoadPlan. Returns one tidy result
     row -- no pre-aggregation, that's `statistics.py`'s job (S8)."""
     set_seeds(cfg.seed)
-    engine, session = _scratch_db()
+    client = await _scratch_db()
     try:
-        _seed_catalog(session)
-        catalog_rows = list_available_types(session, depot_id=None)
-        catalog = load_catalog_snapshot(session, depot_id=None)
+        await _seed_catalog()
+        catalog_rows = await list_available_types(depot_id=None)
+        catalog = await load_catalog_snapshot(depot_id=None)
 
         payloads = real_instance_payloads(cfg.depot_id, cfg.delivery_date)
-        parcels = [upsert_parcel(session, ParcelIn(**p)) for p in payloads]
-        session.commit()
+        parcels = [await upsert_parcel(ParcelIn(**p)) for p in payloads]
         delivery_date = date.fromisoformat(cfg.delivery_date)
 
         mean_capacity_m3 = sum(r.capacity_m3 for r in catalog_rows) / len(catalog_rows)
@@ -266,14 +268,14 @@ def run_pipeline_one(cfg: PipelineRunConfig) -> dict:
             depot_lat=DEPOT_LAT, depot_lon=DEPOT_LON, population=cfg.population, generations=cfg.generations,
             enforce_weight_order=cfg.enforce_weight_order,
         )
-        result, _virtual_vehicles = optimize_load(
-            session, parcels,
+        result, _virtual_vehicles = await optimize_load(
+            parcels,
             depot_id=cfg.depot_id, depot_lat=DEPOT_LAT, depot_lon=DEPOT_LON, delivery_date=delivery_date,
             clustering_method=cfg.method, seed=cfg.seed, config=ga_config, warm_start_clusters=warm_clusters,
         )
         elapsed = time.perf_counter() - started
 
-        plan = session.query(LoadPlan).filter_by(plan_id=result["plan_id"]).first()
+        plan = await LoadPlan.find_one(LoadPlan.plan_id == result["plan_id"])
 
         total_weight = sum(p.weight_kg for p in parcels)
         total_volume = sum(p.volume_m3 for p in parcels)
@@ -319,8 +321,10 @@ def run_pipeline_one(cfg: PipelineRunConfig) -> dict:
             "repair_audit": repair_audit,
         }
     finally:
-        session.close()
-        engine.dispose()
+        client.close()
+
+def run_pipeline_one(cfg: PipelineRunConfig) -> dict:
+    return asyncio.run(_run_pipeline_one(cfg))
 
 
 def run_pipeline_batch(

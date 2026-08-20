@@ -13,7 +13,6 @@ from pathlib import Path
 
 import hdbscan
 import joblib
-from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.parcel import Parcel
@@ -72,8 +71,7 @@ def _model_path(depot_id: str, delivery_date) -> Path:
     return model_dir / f"hdbscan_{depot_id}_{delivery_date}.joblib"
 
 
-def train_hdbscan(
-    db: Session,
+async def train_hdbscan(
     depot_id: str,
     delivery_date,
     seed: int = 0,
@@ -83,10 +81,14 @@ def train_hdbscan(
     planning instance. Persists the fitted HDBSCAN model *and* the scaler
     it was fit with, so `predict_cluster` transforms new parcels
     consistently instead of re-fitting a scaler on a single row."""
-    parcels = get_planning_instance(db, depot_id, delivery_date)
+    parcels = await get_planning_instance(depot_id, delivery_date)
     config = config or ClusteringConfig()
     result = cluster(parcels, seed, config)
-    db.commit()
+    if parcels:
+        await Parcel.get_motor_collection().bulk_write([
+            __import__("pymongo").UpdateOne({"parcel_id": p.parcel_id}, {"$set": {"cluster_id": p.cluster_id, "cluster_probability": p.cluster_probability, "is_noise": p.is_noise}})
+            for p in parcels
+        ])
 
     joblib.dump(
         {"model": result.metadata["model"], "scaler": result.metadata["scaler"], "config": config},
@@ -116,14 +118,11 @@ def predict_cluster(payload, depot_id: str, delivery_date):
     }
 
 
-def cluster_summary(db: Session, depot_id: str, delivery_date) -> dict:
-    rows = (
-        db.query(Parcel.cluster_id)
-        .filter(Parcel.depot_id == depot_id, Parcel.delivery_date == delivery_date)
-        .all()
-    )
+async def cluster_summary(depot_id: str, delivery_date) -> dict:
+    rows = await Parcel.find({"depot_id": depot_id, "delivery_date": delivery_date}).to_list()
     summary: dict[str, int] = {}
-    for (cluster_id,) in rows:
+    for row in rows:
+        cluster_id = row.cluster_id
         key = str(cluster_id)
         summary[key] = summary.get(key, 0) + 1
     return summary

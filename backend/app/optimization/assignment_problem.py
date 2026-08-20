@@ -30,7 +30,6 @@ from pymoo.operators.mutation.pm import PM
 from pymoo.operators.repair.rounding import RoundingRepair
 from pymoo.operators.sampling.rnd import IntegerRandomSampling
 from pymoo.optimize import minimize
-from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.optimization.placement import attempt_placement
@@ -75,8 +74,7 @@ class VehicleTypeSpec:
     available_until: str = "23:59"
 
 
-def load_catalog_snapshot(
-    db: Session,
+async def _load_catalog_snapshot(
     depot_id: str | None,
     delivery_date=None,
     *,
@@ -85,7 +83,7 @@ def load_catalog_snapshot(
     """The only way `app/optimization/` obtains vehicle data. Raises rather
     than silently falling back to a built-in default if the catalog is
     empty for this depot (spec 3.1)."""
-    rows = list_available_types(db, depot_id, delivery_date, cache=cache)
+    rows = await list_available_types(depot_id, delivery_date, cache=cache)
     if not rows:
         raise ValueError(
             f"No active vehicle types available for depot_id={depot_id!r}. "
@@ -112,6 +110,11 @@ def load_catalog_snapshot(
         )
         for r in rows
     )
+
+def load_catalog_snapshot(*args, **kwargs):
+    if args and hasattr(args[0], "run"):
+        return args[0].run(_load_catalog_snapshot(*args[1:], **kwargs))
+    return _load_catalog_snapshot(*args, **kwargs)
 
 
 @dataclass

@@ -12,7 +12,6 @@ from typing import Literal
 
 import numpy as np
 from sklearn.preprocessing import StandardScaler
-from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.parcel import Parcel
@@ -141,8 +140,8 @@ def transform_with_scaler(
     return scaled * _weight_vector(config.feature_weights)
 
 
-def get_planning_instance(
-    db: Session, depot_id: str, delivery_date, *, include_carryover: bool = True
+async def _get_planning_instance(
+    depot_id: str, delivery_date, *, include_carryover: bool = True
 ) -> list[Parcel]:
     """The only sanctioned way to load parcels for clustering/optimization —
     always scoped to one (depot_id, delivery_date) instance. Replaces the
@@ -160,32 +159,25 @@ def get_planning_instance(
     customer-facing decision this system does not make, so a now-unreachable
     window shows up honestly as a compliance cost (objective f3) instead of
     being silently rewritten."""
-    same_day = (
-        db.query(Parcel)
-        .filter(
-            Parcel.depot_id == depot_id,
-            Parcel.delivery_date == delivery_date,
-            Parcel.status == "PENDING",
-        )
-        .all()
-    )
+    same_day_filter = {"depot_id": depot_id, "delivery_date": delivery_date, "status": "PENDING"}
+    if not include_carryover:
+        same_day_filter["carried_over_from_date"] = None
+    same_day = await Parcel.find(same_day_filter).to_list()
 
     carryover: list[Parcel] = []
     if include_carryover:
-        carryover = (
-            db.query(Parcel)
-            .filter(
-                Parcel.depot_id == depot_id,
-                Parcel.delivery_date < delivery_date,
-                Parcel.status.in_(["PENDING", "FAILED"]),
-            )
-            .all()
-        )
+        carryover = await Parcel.find({"depot_id": depot_id, "delivery_date": {"$lt": delivery_date}, "status": {"$in": ["PENDING", "FAILED"]}}).to_list()
         for parcel in carryover:
             parcel.carried_over_from_date = parcel.delivery_date
             parcel.delivery_date = delivery_date
+            await parcel.save()
 
     return sorted(same_day + carryover, key=lambda p: p.parcel_id)
+
+def get_planning_instance(*args, **kwargs):
+    if args and hasattr(args[0], "run"):
+        return args[0].run(_get_planning_instance(*args[1:], **kwargs))
+    return _get_planning_instance(*args, **kwargs)
 
 
 def handle_noise(

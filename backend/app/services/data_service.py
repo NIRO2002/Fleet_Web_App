@@ -12,13 +12,19 @@ import logging
 from typing import Optional
 
 from pydantic import ValidationError
-from sqlalchemy.orm import Session
+from beanie.odm.utils.encoder import Encoder
 
 from app.core.config import settings
 from app.models.parcel import Parcel
 from app.schemas.parcel import ParcelIn
 
 logger = logging.getLogger(__name__)
+
+def _mongo_update_fields(parcel: Parcel) -> dict:
+    data = Encoder().encode(parcel)
+    data.pop("_id", None)
+    data.pop("revision_id", None)
+    return data
 
 # Maps upstream/rich-dataset column names onto this schema's canonical field
 # names. Columns already matching a canonical name (e.g. length_cm,
@@ -244,21 +250,19 @@ def _process_row(
     return payload
 
 
-def upsert_parcel(db: Session, payload: ParcelIn) -> Parcel:
-    obj = db.query(Parcel).filter(Parcel.parcel_id == payload.parcel_id).first()
+async def _upsert_parcel(payload: ParcelIn) -> Parcel:
+    obj = await Parcel.find_one(Parcel.parcel_id == payload.parcel_id)
     if obj is None:
-        obj = Parcel(parcel_id=payload.parcel_id)
-        db.add(obj)
+        obj = Parcel(**payload.model_dump())
+    else:
+        for field, value in payload.model_dump(exclude={"parcel_id"}).items():
+            setattr(obj, field, value)
 
-    for field, value in payload.model_dump(exclude={"parcel_id"}).items():
-        setattr(obj, field, value)
-
-    db.commit()
-    db.refresh(obj)
+    await obj.save()
     return obj
 
 
-def _bulk_upsert_parcels(db: Session, payloads: list[ParcelIn]) -> tuple[int, int]:
+async def _bulk_upsert_parcels(payloads: list[ParcelIn]) -> tuple[int, int]:
     """Bulk insert/update path used by `import_csv` (F10). `upsert_parcel`
     ran one SELECT and one COMMIT per row — 36,000 of each on the project's
     real dataset, making the importer unusable at that scale. This instead
@@ -272,34 +276,34 @@ def _bulk_upsert_parcels(db: Session, payloads: list[ParcelIn]) -> tuple[int, in
         return 0, 0
 
     parcel_ids = [p.parcel_id for p in payloads]
-    id_by_parcel_id: dict[str, int] = {}
+    existing_ids: set[str] = set()
     for i in range(0, len(parcel_ids), BULK_CHUNK_SIZE):
         chunk = parcel_ids[i : i + BULK_CHUNK_SIZE]
-        rows = db.query(Parcel.id, Parcel.parcel_id).filter(Parcel.parcel_id.in_(chunk)).all()
-        id_by_parcel_id.update({parcel_id: row_id for row_id, parcel_id in rows})
+        rows = await Parcel.find({"parcel_id": {"$in": chunk}}).to_list()
+        existing_ids.update(row.parcel_id for row in rows)
 
-    inserts: list[dict] = []
-    updates: list[dict] = []
+    inserts: list[Parcel] = []
+    updates: list[Parcel] = []
     for payload in payloads:
         data = payload.model_dump()
-        existing_id = id_by_parcel_id.get(payload.parcel_id)
-        if existing_id is None:
-            inserts.append(data)
+        if payload.parcel_id not in existing_ids:
+            inserts.append(Parcel(**data))
         else:
-            data["id"] = existing_id
-            updates.append(data)
+            updates.append(Parcel(**data))
 
     for i in range(0, len(inserts), BULK_CHUNK_SIZE):
-        db.bulk_insert_mappings(Parcel, inserts[i : i + BULK_CHUNK_SIZE])
-        db.commit()
+        await Parcel.insert_many(inserts[i : i + BULK_CHUNK_SIZE])
     for i in range(0, len(updates), BULK_CHUNK_SIZE):
-        db.bulk_update_mappings(Parcel, updates[i : i + BULK_CHUNK_SIZE])
-        db.commit()
+        chunk = updates[i : i + BULK_CHUNK_SIZE]
+        await Parcel.get_motor_collection().bulk_write([
+            __import__("pymongo").UpdateOne({"parcel_id": p.parcel_id}, {"$set": _mongo_update_fields(p)})
+            for p in chunk
+        ])
 
     return len(inserts), len(updates)
 
 
-def import_csv(db: Session, content: bytes, bounds: dict | None = None) -> dict:
+async def _import_csv(content: bytes, bounds: dict | None = None) -> dict:
     """Import the minimal 8-column format or the full upstream dataset
     (rich column names are mapped via COLUMN_ALIASES). Never raises on a
     per-row problem — every failure is collected and returned so the caller
@@ -325,7 +329,7 @@ def import_csv(db: Session, content: bytes, bounds: dict | None = None) -> dict:
             duplicates_removed += 1
         accepted[payload.parcel_id] = payload  # keep the last occurrence
 
-    inserted, updated = _bulk_upsert_parcels(db, list(accepted.values()))
+    inserted, updated = await _bulk_upsert_parcels(list(accepted.values()))
     dimensions_imputed_count = sum(1 for payload in accepted.values() if payload.dimensions_imputed)
 
     return {
@@ -337,3 +341,13 @@ def import_csv(db: Session, content: bytes, bounds: dict | None = None) -> dict:
         "errors": errors,
         "warnings": warnings,
     }
+
+def upsert_parcel(*args, **kwargs):
+    if args and hasattr(args[0], "run"):
+        return args[0].run(_upsert_parcel(*args[1:], **kwargs))
+    return _upsert_parcel(*args, **kwargs)
+
+def import_csv(*args, **kwargs):
+    if args and hasattr(args[0], "run"):
+        return args[0].run(_import_csv(*args[1:], **kwargs))
+    return _import_csv(*args, **kwargs)
