@@ -37,5 +37,5 @@ async def delete_capability(obj):
     await obj.delete()
 
 async def optimization_ready_capabilities():
-    return [{"id": c.id, "name": c.name, "max_weight_kg": c.max_weight_kg, "max_volume_m3": c.max_volume_m3}
+    return [{"id": c.capability_id, "name": c.name, "max_weight_kg": c.max_weight_kg, "max_volume_m3": c.max_volume_m3}
             for c in await list_capabilities("ACTIVE")]

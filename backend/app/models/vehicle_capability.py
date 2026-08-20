@@ -17,9 +17,6 @@ class VehicleCapability(Document):
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)
     @property
-    def id(self) -> int:
-        return self.capability_id
-    @property
     def max_volume_m3(self) -> float:
         return (self.max_length_cm / 100) * (self.max_width_cm / 100) * (self.max_height_cm / 100)
     class Settings:
