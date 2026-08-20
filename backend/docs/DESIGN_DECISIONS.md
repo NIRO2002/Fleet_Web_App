@@ -282,3 +282,12 @@ utilization changed 21.67% -> 18.38%, vehicles stayed at 18, distance changed
 437.21 -> 303.62 s. This is reported as measured rather than tuning the new
 rule to force a utilization gain; NSGA-II stochastic search and the changed
 feasible region can select a different trade-off solution.
+## Pre-launch R7 stop decision (2026-08-20)
+
+The 36-run validation pilot triggered the mandatory no-launch rule: one
+K-Means/capacity-off run had a single-point infeasible front (0 feasible
+final individuals, maximum violation 70.080), making that arm's
+infeasibility rate 11.1%; two capacity-on arms also regressed slightly in
+median utilization versus `launch_pilot`. The full evaluation was therefore
+not launched and no parameter was tuned post hoc. See
+`docs/PRE_LAUNCH_REPORT.md` for the complete evidence and projection.
