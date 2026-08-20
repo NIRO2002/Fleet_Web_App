@@ -43,7 +43,7 @@ from app.db.database import Base
 from app.db.seed_vehicle_types import VEHICLE_TYPES
 from app.evaluation.real_data import real_instance_payloads
 from app.evaluation.synthetic_data import generate_synthetic_parcels
-from app.evaluation.utilization_ceiling import compute_placement_aware_ceiling, compute_utilization_ceiling
+from app.evaluation.utilization_ceiling import compute_utilization_greedy_reference, compute_utilization_ceiling
 from app.models.load_plan import LoadPlan
 from app.optimization.assignment_problem import AssignmentConfig, load_catalog_snapshot, run_nsga2
 from app.schemas.parcel import ParcelIn
@@ -278,11 +278,11 @@ def run_pipeline_one(cfg: PipelineRunConfig) -> dict:
         total_weight = sum(p.weight_kg for p in parcels)
         total_volume = sum(p.volume_m3 for p in parcels)
         capacity_ceiling = compute_utilization_ceiling(total_weight, total_volume, catalog)
-        placement_ceiling = compute_placement_aware_ceiling(
+        greedy_reference = compute_utilization_greedy_reference(
             parcels, catalog, enforce_weight_order=cfg.enforce_weight_order,
         )
-        achieved_vs_placement = (
-            plan.mean_utilization / placement_ceiling.utilization if placement_ceiling.utilization else 0.0
+        achieved_vs_greedy = (
+            plan.mean_utilization / greedy_reference.utilization if greedy_reference.utilization else 0.0
         )
         achieved_vs_capacity = (
             plan.mean_utilization / capacity_ceiling.utilization if capacity_ceiling.utilization else 0.0
@@ -301,8 +301,8 @@ def run_pipeline_one(cfg: PipelineRunConfig) -> dict:
             # Legacy alias retained so existing pilot files remain readable.
             "utilization_ceiling": capacity_ceiling.utilization,
             "utilization_ceiling_capacity": capacity_ceiling.utilization,
-            "utilization_greedy_reference": placement_ceiling.utilization,
-            "achieved_vs_greedy_reference": achieved_vs_placement,
+            "utilization_greedy_reference": greedy_reference.utilization,
+            "achieved_vs_greedy_reference": achieved_vs_greedy,
             "achieved_vs_capacity_ceiling": achieved_vs_capacity,
             "total_distance_km": plan.total_distance_km,
             "mean_time_window_compliance": plan.mean_time_window_compliance,
@@ -310,7 +310,9 @@ def run_pipeline_one(cfg: PipelineRunConfig) -> dict:
             "n_vehicles": plan.n_vehicles,
             "hypervolume": plan.hypervolume,
             "pareto_front_size": result["pareto_front_size"],
+            "feasible": result["feasible"],
             "feasible_individuals_final": result["feasible_individuals_final"],
+            "max_constraint_violation": result["max_constraint_violation"],
             "slot_budget": result["slot_budget"],
             "parcels_per_slot": result["parcels_per_slot"],
             "runtime_seconds": elapsed,

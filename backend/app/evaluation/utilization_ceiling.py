@@ -28,7 +28,7 @@ class UtilizationCeiling:
 
 
 @dataclass
-class PlacementAwareCeiling(UtilizationCeiling):
+class GreedyUtilizationReference(UtilizationCeiling):
     """A physically attainable reference produced by actual placement.
 
     Unlike :class:`UtilizationCeiling`, this is not a mathematical upper
@@ -42,9 +42,9 @@ class PlacementAwareCeiling(UtilizationCeiling):
     vehicle_loads: list[list[str]]
 
 
-def compute_placement_aware_ceiling(
+def compute_utilization_greedy_reference(
     parcels, catalog, *, enforce_weight_order: bool = False,
-) -> PlacementAwareCeiling:
+) -> GreedyUtilizationReference:
     """Pack the instance with each homogeneous fleet and keep the fullest.
 
     Parcels are considered in stable ID order. A vehicle is closed as soon
@@ -54,10 +54,10 @@ def compute_placement_aware_ceiling(
     heuristic is a proven global upper bound.
     """
     if not catalog:
-        raise ValueError("compute_placement_aware_ceiling requires a non-empty catalog.")
+        raise ValueError("compute_utilization_greedy_reference requires a non-empty catalog.")
     ordered = sorted(parcels, key=lambda p: p.parcel_id)
     if not ordered:
-        return PlacementAwareCeiling(1.0, [], 0.0, 0.0, [])
+        return GreedyUtilizationReference(1.0, [], 0.0, 0.0, [])
 
     total_weight = sum(p.weight_kg for p in ordered)
     total_volume = sum(p.volume_m3 for p in ordered)
@@ -91,7 +91,7 @@ def compute_placement_aware_ceiling(
         cap_kg = len(loads) * vehicle.capacity_kg
         cap_m3 = len(loads) * vehicle.capacity_m3
         utilization = max(total_weight / cap_kg, total_volume / cap_m3)
-        result = PlacementAwareCeiling(
+        result = GreedyUtilizationReference(
             utilization=utilization,
             fleet=[vehicle.code] * len(loads),
             total_capacity_kg=cap_kg,

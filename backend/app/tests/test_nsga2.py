@@ -671,6 +671,9 @@ def test_optimize_load_does_not_crash_when_nothing_is_fully_feasible(db_session)
 
     assert result["plan_id"]
     assert virtual_vehicles
+    assert result["feasible"] is False
+    assert result["feasible_individuals_final"] == 0
+    assert result["max_constraint_violation"] > 0
 
 
 def test_load_plan_and_parcel_assignments_are_persisted(db_session):

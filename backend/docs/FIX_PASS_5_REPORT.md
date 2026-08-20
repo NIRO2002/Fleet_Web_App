@@ -25,7 +25,7 @@ population 100, generations 200.
 | Fleet cost | LKR 224,618 | LKR 163,361 |
 | Runtime | 419 s (old six-worker mean) | 477.8 s (this run) |
 
-`compute_placement_aware_ceiling` is deliberately an attainable greedy
+`compute_utilization_greedy_reference` is deliberately an attainable greedy
 reference, not a proven upper bound. Achieving 102.34% of it means NSGA-II
 found a better feasible packing than that conservative reference; it does
 not mean a physical ceiling was violated.
@@ -108,4 +108,3 @@ is reported unchanged.
 Batch wall time was 3,338.8 seconds at six workers: 38.82 runs/hour. Mean
 per-run runtime was 517.6 seconds (range 347.3–857.6). The projected full
 10,800-run evaluation is 278.2 hours (11.6 days), so it was not launched.
-

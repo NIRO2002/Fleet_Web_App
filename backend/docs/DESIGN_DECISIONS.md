@@ -82,7 +82,7 @@ production placement routine accepts the first 74 real parcels in a
 failures at 62 and 63 caused by the heuristic reordering the changed set).
 The capacity-only 99.96% figure therefore remains a theoretical aggregate
 bound and is not physically reachable evidence. Results must additionally
-report `compute_placement_aware_ceiling`, which runs every claimed load
+report `compute_utilization_greedy_reference`, which runs every claimed load
 through the production placement routine. Its result is labelled an
 attainable reference, not a mathematically proven global upper bound.
 

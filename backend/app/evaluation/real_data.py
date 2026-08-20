@@ -17,6 +17,38 @@ DATASET_PATH = Path(__file__).resolve().parents[2] / "data" / "parcels_sample_36
 #: backend/data/README.md for the full list and why they're dropped.
 _NULLABLE_FLOAT_COLUMNS = ("temp_min_celsius", "temp_max_celsius")
 
+EXPECTED_ROWS = 36_000
+EXPECTED_INSTANCES = 90
+EXPECTED_PARCELS_PER_INSTANCE = 400
+EXPECTED_DEPOTS = 3
+EXPECTED_DATES_PER_DEPOT = 30
+
+
+def validate_real_dataset(df: pd.DataFrame) -> None:
+    """Fail closed when the dissertation dataset is incomplete or changed."""
+    required = {"parcel_id", "depot_id", "delivery_date"}
+    missing = sorted(required - set(df.columns))
+    if missing:
+        raise ValueError(f"Real dataset is missing required columns: {missing}")
+    if len(df) != EXPECTED_ROWS:
+        raise ValueError(f"Real dataset must contain {EXPECTED_ROWS:,} rows; found {len(df):,}.")
+
+    sizes = df.groupby(["depot_id", "delivery_date"], sort=True).size()
+    if len(sizes) != EXPECTED_INSTANCES:
+        raise ValueError(f"Real dataset must contain {EXPECTED_INSTANCES} instances; found {len(sizes)}.")
+    invalid_sizes = sizes[sizes != EXPECTED_PARCELS_PER_INSTANCE]
+    if not invalid_sizes.empty:
+        sample = {f"{depot}/{day}": int(count) for (depot, day), count in invalid_sizes.head(5).items()}
+        raise ValueError(
+            f"Every real instance must contain {EXPECTED_PARCELS_PER_INSTANCE} parcels; invalid examples: {sample}"
+        )
+    dates_per_depot = df.groupby("depot_id")["delivery_date"].nunique()
+    if len(dates_per_depot) != EXPECTED_DEPOTS or not (dates_per_depot == EXPECTED_DATES_PER_DEPOT).all():
+        raise ValueError(
+            f"Real dataset must be {EXPECTED_DEPOTS} depots x {EXPECTED_DATES_PER_DEPOT} dates; "
+            f"found {dates_per_depot.to_dict()}."
+        )
+
 
 @functools.lru_cache(maxsize=1)
 def _load_full_dataset() -> pd.DataFrame:
@@ -24,7 +56,9 @@ def _load_full_dataset() -> pd.DataFrame:
         raise FileNotFoundError(
             f"Real dataset not found at {DATASET_PATH}. See backend/data/README.md."
         )
-    return pd.read_csv(DATASET_PATH)
+    dataset = pd.read_csv(DATASET_PATH)
+    validate_real_dataset(dataset)
+    return dataset
 
 
 def list_instances() -> list[tuple[str, str]]:

@@ -50,6 +50,11 @@ def aggregate_median_by_instance(
     for row in rows:
         if row["method"] != method or row["capacity_aware"] != capacity_aware:
             continue
+        # Least-infeasible fallback rows are diagnostic outputs, not valid
+        # observations for hypothesis tests. Legacy rows without the flag
+        # remain readable, but every new evaluation row carries it.
+        if row.get("feasible", True) is not True:
+            continue
         key = _instance_key(row)
         bucket = by_instance.setdefault(key, {m: [] for m in METRICS})
         for metric in METRICS:
@@ -59,6 +64,20 @@ def aggregate_median_by_instance(
         key: {metric: pystats.median(values) for metric, values in metrics.items()}
         for key, metrics in by_instance.items()
     }
+
+
+def infeasibility_by_arm(rows: list[dict]) -> dict[tuple[str, bool], dict[str, float | int]]:
+    """Counts fallback/infeasible runs separately instead of hiding them."""
+    arms: dict[tuple[str, bool], dict[str, float | int]] = {}
+    for row in rows:
+        key = (row["method"], row["capacity_aware"])
+        bucket = arms.setdefault(key, {"total": 0, "infeasible": 0, "rate": 0.0})
+        bucket["total"] += 1
+        if row.get("feasible", True) is not True:
+            bucket["infeasible"] += 1
+    for bucket in arms.values():
+        bucket["rate"] = bucket["infeasible"] / bucket["total"] if bucket["total"] else 0.0
+    return arms
 
 
 def _rank_biserial_effect_size(a: list[float], b: list[float]) -> tuple[float, int]:

@@ -8,6 +8,7 @@ from app.evaluation.statistics import (
     ComparisonRow,
     aggregate_median_by_instance,
     holm_bonferroni,
+    infeasibility_by_arm,
     run_h1_clustering_comparison,
     run_h2_capacity_aware_ablation,
     to_markdown_table,
@@ -19,7 +20,7 @@ def _row(depot_id, delivery_date, method, capacity_aware, seed, **metrics):
         "mean_utilization": 0.5, "total_distance_km": 100.0, "mean_time_window_compliance": 0.9,
         "total_fleet_cost": 1000.0, "n_vehicles": 5, "hypervolume": 0.1, "runtime_seconds": 60.0,
         "utilization_ceiling_capacity": 0.95, "utilization_greedy_reference": 0.6,
-        "achieved_vs_greedy_reference": 0.5 / 0.6,
+        "achieved_vs_greedy_reference": 0.5 / 0.6, "feasible": True,
     }
     base.update(metrics)
     return {
@@ -117,3 +118,15 @@ def test_run_h1_raises_on_no_shared_instances():
     rows = [_row("D1", "2026-01-01", "hdbscan", True, seed=0)]  # no K-Means rows at all
     with pytest.raises(ValueError):
         run_h1_clustering_comparison(rows, capacity_aware=True)
+
+
+def test_infeasible_rows_are_flagged_counted_and_excluded():
+    rows = [
+        _row("D1", "2026-01-01", "hdbscan", True, 0, mean_utilization=0.5),
+        _row("D1", "2026-01-01", "hdbscan", True, 1, mean_utilization=0.99, feasible=False),
+        _row("D1", "2026-01-01", "hdbscan", True, 2, mean_utilization=0.6),
+    ]
+    aggregate = aggregate_median_by_instance(rows, method="hdbscan", capacity_aware=True)
+    assert aggregate[("D1", "2026-01-01")]["mean_utilization"] == pytest.approx(0.55)
+    summary = infeasibility_by_arm(rows)
+    assert summary[("hdbscan", True)] == {"total": 3, "infeasible": 1, "rate": pytest.approx(1 / 3)}

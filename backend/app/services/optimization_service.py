@@ -94,6 +94,9 @@ def optimize_load(
     feasible_individuals_final = int(
         np.sum(np.all(final_population_g <= 1e-12, axis=1))
     ) if len(final_population_g) else 0
+    selected_positive_violations = np.maximum(G[idx], 0.0)
+    selected_feasible = bool(np.all(selected_positive_violations <= 1e-12))
+    max_constraint_violation = float(np.max(selected_positive_violations, initial=0.0))
 
     plan_id = f"PLAN-{uuid.uuid4().hex[:10].upper()}"
     vehicles_summary = []
@@ -241,7 +244,9 @@ def optimize_load(
         "slot_budget": problem.K,
         "pareto_front_size": len(F),
         "feasible_individuals_final": feasible_individuals_final,
-        "selected_constraint_violation": float(np.maximum(G[idx], 0.0).sum()),
+        "feasible": selected_feasible,
+        "max_constraint_violation": max_constraint_violation,
+        "selected_constraint_violation": float(selected_positive_violations.sum()),
         "parcels_per_slot": slot_parcel_counts,
     }
     return result, virtual_vehicles
