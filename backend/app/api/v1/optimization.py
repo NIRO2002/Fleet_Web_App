@@ -1,12 +1,27 @@
+from datetime import date as date_type
+
 from fastapi import APIRouter, HTTPException, Response
 
 from app.core.config import settings
+from app.models.load_plan import LoadPlan
 from app.models.parcel import Parcel
 from app.schemas.optimization import OptimizationRequest
 from app.services.optimization_service import optimize_load
 from app.services.export_service import load_plan_csv, load_plan_payload
 
 router = APIRouter(prefix="/optimization", tags=["optimization"])
+
+
+@router.get("/plans")
+async def find_plan(depot_id: str, delivery_date: date_type):
+    """Most recent plan for a (depot_id, delivery_date), if one exists --
+    lets a caller avoid re-running an optimization that already ran."""
+    plan = await LoadPlan.find(
+        LoadPlan.depot_id == depot_id, LoadPlan.delivery_date == delivery_date,
+    ).sort("-created_at").first_or_none()
+    if plan is None:
+        return None
+    return await load_plan_payload(plan.plan_id)
 
 
 @router.get("/plans/{plan_id}")

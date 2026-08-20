@@ -115,10 +115,13 @@ export interface LoadPlanParcel {
 export interface LoadPlanVehicle {
   virtual_vehicle_id: string
   vehicle_type: VehicleType
+  status: 'PLANNED' | 'LOADING' | 'READY'
+  ready_at: string | null
   capacity_kg: number
   capacity_m3: number
   used_weight_kg: number
   used_volume_m3: number
+  utilization: number
   parcel_count: number
   cargo_length_cm: number
   cargo_width_cm: number
@@ -144,18 +147,50 @@ export interface LoadPlan {
 }
 
 export interface VirtualVehicle {
-  id: number
   virtual_vehicle_id: string
-  vehicle_type: VehicleType
+  vehicle_type_code: VehicleType
+  status: 'PLANNED' | 'LOADING' | 'READY'
+  ready_at: string | null
   capacity_kg: number
   capacity_m3: number
   used_weight_kg: number
   used_volume_m3: number
+  parcel_count: number
+  max_parcels: number | null
+  utilization: number
+  is_refrigerated: boolean
+  is_hazmat_certified: boolean
   cluster_id: number | null
   destination_latitude: number | null
   destination_longitude: number | null
-  created_at: string
   updated_at: string
+}
+
+// --- Loaded Vehicles / fleet-optimizer handoff ("READY") -----------------
+
+export interface ReadyVehicleStop {
+  parcelId: string
+  lat: number
+  lng: number
+  deliverySequence: number
+  timeWindowStart: string
+  timeWindowEnd: string
+}
+
+export interface ReadyVehicle {
+  vehicleId: string
+  vehicleType: VehicleType
+  vehicleTypeName: string
+  status: 'READY'
+  loadPlanId: string
+  depotId: string
+  deliveryDate: string
+  parcelCount: number
+  utilization: number
+  totalWeightKg: number
+  totalVolumeM3: number
+  readyAt: string | null
+  stops: ReadyVehicleStop[]
 }
 
 export interface InsertionResult {

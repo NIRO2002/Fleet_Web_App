@@ -377,16 +377,16 @@ export function LoadOptimizationPage() {
         ) : (
           <DataTable headers={['Virtual Vehicle', 'Type', 'Weight Load', 'Volume Load', 'Cluster', 'Destination', 'Updated']}>
             {vehicles.map((vehicle) => {
-              const Icon = VEHICLE_ICON[vehicle.vehicle_type]
+              const Icon = VEHICLE_ICON[vehicle.vehicle_type_code]
               return (
                 <tr className="transition hover:bg-blue-50/40" key={vehicle.virtual_vehicle_id}>
                   <td className="px-5 py-4 font-black text-fleet-ink">{vehicle.virtual_vehicle_id}</td>
                   <td className="px-5 py-4">
                     <span className="inline-flex items-center gap-2 font-bold">
-                      <span className={clsx('grid h-7 w-7 place-items-center rounded-lg', vehicleToneClass(vehicle.vehicle_type))}>
+                      <span className={clsx('grid h-7 w-7 place-items-center rounded-lg', vehicleToneClass(vehicle.vehicle_type_code))}>
                         <Icon className="h-3.5 w-3.5" />
                       </span>
-                      {vehicle.vehicle_type.replace('_', ' ')}
+                      {vehicle.vehicle_type_code.replace('_', ' ')}
                     </span>
                   </td>
                   <td className="w-40 px-5 py-4">
@@ -431,7 +431,7 @@ export function LoadOptimizationPage() {
               <option value="">Select a virtual vehicle…</option>
               {vehicles.map((vehicle) => (
                 <option key={vehicle.virtual_vehicle_id} value={vehicle.virtual_vehicle_id}>
-                  {vehicle.virtual_vehicle_id} · {vehicle.vehicle_type} · {(vehicle.capacity_kg - vehicle.used_weight_kg).toFixed(1)} kg free
+                  {vehicle.virtual_vehicle_id} · {vehicle.vehicle_type_code} · {(vehicle.capacity_kg - vehicle.used_weight_kg).toFixed(1)} kg free
                 </option>
               ))}
             </select>

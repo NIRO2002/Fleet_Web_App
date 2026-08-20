@@ -15,6 +15,8 @@ const instanceQuery = () => `depot_id=${encodeURIComponent(DEMO_DEPOT_ID)}&deliv
 
 export const parcelService = {
   list: () => api.get<Parcel[]>(`/parcels?${instanceQuery()}`),
+  listForInstance: (depotId: string, deliveryDate: string) =>
+    api.get<Parcel[]>(`/parcels?depot_id=${encodeURIComponent(depotId)}&delivery_date=${encodeURIComponent(deliveryDate)}`),
   create: (payload: ParcelInput) =>
     api.post<Parcel>('/parcels', { ...payload, depot_id: DEMO_DEPOT_ID, delivery_date: demoDeliveryDate() }),
 
