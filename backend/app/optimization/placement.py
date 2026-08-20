@@ -316,7 +316,7 @@ def _lifo_exceptions(parcels_in_delivery_order: list, placements: dict[str, Plac
 
 def attempt_placement(
     parcels_in_delivery_order: list, vehicle, *, collect_exceptions: bool = True,
-    enforce_weight_order: bool = True,
+    enforce_weight_order: bool = settings.enforce_weight_order,
 ) -> PlacementResult | None:
     """Places every parcel for one vehicle. Returns `None` if any parcel
     cannot be placed at all (too big for the bay in any orientation, or the

@@ -23,6 +23,8 @@ from app.optimization.assignment_problem import (
     schedule_time_window_compliance,
     slot_budget,
     decode,
+    load_catalog_snapshot,
+    run_nsga2,
 )
 from app.schemas.parcel import ParcelIn
 from app.schemas.vehicle_type import VehicleTypeCatalogIn
@@ -441,12 +443,34 @@ def test_warm_start_produces_multiple_rows_and_splits_an_oversized_cluster():
     clusters = {0: parcels}
     K = 6
 
-    rows = ap.warm_start_rows_from_clusters(parcels, clusters, catalog, K)
-
+    rows = ap.warm_start_rows_from_clusters(parcels, clusters, catalog, K, AssignmentConfig())
     assert len(rows) >= 1
     slot_assignment = rows[0][:n]
     assert len(set(slot_assignment.tolist())) > 1, "an oversized cluster must be split across multiple slots"
 
+
+def test_assignment_config_threads_weight_order_to_placement(monkeypatch):
+    """R1: the optimizer config, not a hidden placement default, controls the rule."""
+    import app.optimization.assignment_problem as ap
+
+    seen = []
+    original = ap.attempt_placement
+
+    def capture(*args, **kwargs):
+        seen.append(kwargs.get("enforce_weight_order"))
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(ap, "attempt_placement", capture)
+    parcels = [ParcelIn(
+        parcel_id="P-CONFIG", latitude=DEPOT_LAT, longitude=DEPOT_LON,
+        weight_kg=1.0, volume_m3=0.001,
+        time_window_start="08:00", time_window_end="18:00",
+    )]
+    problem = ap.AssignmentProblem(
+        parcels, (_catalog_pair()[0],), AssignmentConfig(enforce_weight_order=True), n_slots=1,
+    )
+    problem.evaluate_individual(np.array([0, 0]))
+    assert seen == [True]
 
 def _catalog_pair():
     small = VehicleTypeSpec(
@@ -600,6 +624,13 @@ def test_seed_is_a_real_caller_supplied_parameter(db_session):
     `minimize()`, ignoring whatever the caller passed in."""
     _seed_catalog(db_session, [("SMALL", 30.0, 0.3), ("BIG", 200.0, 2.0)])
     parcels = _stressed_parcels(db_session, n=12, seed=17)
+
+    catalog = load_catalog_snapshot(db_session, DEPOT_ID, DELIVERY_DATE)
+    _problem_a, raw_a = run_nsga2(parcels, catalog, FAST_CONFIG, seed=99)
+    _problem_b, raw_b = run_nsga2(parcels, catalog, FAST_CONFIG, seed=99)
+    np.testing.assert_array_equal(raw_a.X, raw_b.X)
+    np.testing.assert_array_equal(raw_a.F, raw_b.F)
+    np.testing.assert_array_equal(raw_a.G, raw_b.G)
 
     result_a, _ = optimize_load(
         db_session, parcels,

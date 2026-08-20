@@ -260,6 +260,21 @@ At 70 parcels the layer histogram was `0:31, 1:11, 2:11, 3:8, 4:6, 5:3`;
 39/70 (55.7%) were above the floor and their combined 151.339 kg used only
 6.05% of the vehicle's 2,500 kg above-floor allowance.
 
+For the pre-launch configuration freeze, weight ordering is therefore an
+optional ablation and defaults to **off**. The three recorded capacities are:
+old per-parcel-limit model 70 (historical measurement), current immediate-
+support ordering 70, and ordering disabled 81. The pre-launch prompt's claim
+that the current ordered model fits 61 was re-measured and proved wrong on
+this checkout. Across the 36,000-row dataset, 41.67% (not the prompt's 25%)
+of `max_stack_weight_kg` values are exactly zero and 42.11% are below 5 kg;
+median parcel weight is 4.99 kg and median recorded stack limit is 11.86 kg.
+Those values were not grounded in observed logistics operations, supporting
+removal of the per-parcel constraint. Heavy-bottom ordering remains
+physically principled, but its measured 70-versus-81 density cost makes it an
+explicit option rather than the main experimental model. This default was
+frozen here before the final experiment, not selected after observing final
+results.
+
 The full HDBSCAN/capacity-aware/seed-0 run (population 100, generations 200)
 did not improve the optimization headline: relative to the saved pilot,
 utilization changed 21.67% -> 18.38%, vehicles stayed at 18, distance changed

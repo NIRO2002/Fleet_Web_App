@@ -145,7 +145,7 @@ def _assert_dimensions(parcels_by_id, assignments, catalog_by_code, vehicle_by_i
         assert fits_flat or fits_rotated, f"{a.parcel_id} does not fit {vehicle_by_id[a.virtual_vehicle_id]}'s bay"
 
 
-def _assert_fragility_and_stack_weight(parcels_by_id, assignments):
+def _assert_fragility_and_stack_weight(parcels_by_id, assignments, *, enforce_weight_order: bool):
     """No parcel rests on a fragile or non-stackable parcel.
 
     Per-parcel ``max_stack_weight_kg`` is imported for data fidelity but no
@@ -170,10 +170,11 @@ def _assert_fragility_and_stack_weight(parcels_by_id, assignments):
                     assert below.stackable and not below.fragile, (
                         f"{a.parcel_id} rests on {below.parcel_id}, which is fragile/non-stackable"
                     )
-                    assert above.weight_kg <= below.weight_kg + STACK_WEIGHT_TOLERANCE_KG + 1e-6, (
-                        f"{above.parcel_id} ({above.weight_kg}kg) is heavier than its support "
-                        f"{below.parcel_id} ({below.weight_kg}kg) beyond tolerance"
-                    )
+                    if enforce_weight_order:
+                        assert above.weight_kg <= below.weight_kg + STACK_WEIGHT_TOLERANCE_KG + 1e-6, (
+                            f"{above.parcel_id} ({above.weight_kg}kg) is heavier than its support "
+                            f"{below.parcel_id} ({below.weight_kg}kg) beyond tolerance"
+                        )
 
 
 def _assert_vehicle_stack_weight(parcels_by_id, assignments, catalog_by_code, vehicle_by_id):
@@ -342,7 +343,9 @@ def _assert_all_invariants(db_session, parcels, config, seed, depot_id, depot_la
     _assert_conservation(parcels, assignments)
     _assert_weight_volume_count(virtual_vehicles)
     _assert_dimensions(parcels_by_id, assignments, catalog_by_code, vehicle_by_id)
-    _assert_fragility_and_stack_weight(parcels_by_id, assignments)
+    _assert_fragility_and_stack_weight(
+        parcels_by_id, assignments, enforce_weight_order=config.enforce_weight_order,
+    )
     _assert_vehicle_stack_weight(parcels_by_id, assignments, catalog_by_code, vehicle_by_id)
     _assert_placement_validity(assignments, catalog_by_code, vehicle_by_id)
     _assert_load_order_completeness(assignments)

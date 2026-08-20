@@ -130,6 +130,7 @@ def _split_oversize(
     depot_lon: float,
     next_id: int,
     audit: list[dict],
+    seed: int,
 ):
     n_split = 0
     max_depth_hit = False
@@ -158,7 +159,7 @@ def _split_oversize(
             continue
 
         coords = project_to_metric(parcels, depot_lat, depot_lon)
-        sub_labels = KMeans(n_clusters=2, random_state=0, n_init=10).fit_predict(coords)
+        sub_labels = KMeans(n_clusters=2, random_state=seed, n_init=10).fit_predict(coords)
         group_a = [p for p, lbl in zip(parcels, sub_labels) if lbl == 0]
         group_b = [p for p, lbl in zip(parcels, sub_labels) if lbl == 1]
         if not group_a or not group_b:
@@ -250,6 +251,7 @@ def repair_clusters(
     config: RepairConfig | None = None,
     depot_lat: float = settings.depot_latitude,
     depot_lon: float = settings.depot_longitude,
+    seed: int = 0,
 ) -> RepairedClusters:
     config = config or RepairConfig()
     clusters = {cid: list(parcels) for cid, parcels in parcels_by_cluster.items()}
@@ -260,7 +262,7 @@ def repair_clusters(
     next_id = (max(clusters.keys()) + 1) if clusters else 0
 
     clusters, next_id, n_split, max_depth_hit = _split_oversize(
-        clusters, vehicle_catalog, config, depot_lat, depot_lon, next_id, audit
+        clusters, vehicle_catalog, config, depot_lat, depot_lon, next_id, audit, seed
     )
     clusters, n_merged = _merge_undersize(clusters, vehicle_catalog, config, depot_lat, depot_lon, audit)
 

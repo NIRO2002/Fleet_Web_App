@@ -57,11 +57,13 @@ from app.services.vehicle_catalog_service import list_available_types
 DEPOT_LAT, DEPOT_LON = 6.9271, 79.8612
 
 
-def _prepare_warm_clusters(clusters, catalog_rows, capacity_aware: bool):
+def _prepare_warm_clusters(clusters, catalog_rows, capacity_aware: bool, *, seed: int):
     """Apply the ablation switch and always return an explicit audit."""
     if not capacity_aware:
         return clusters, {"enabled": False, "n_split": 0, "n_merged": 0}
-    repaired = repair_clusters(clusters, catalog_rows, RepairConfig(), DEPOT_LAT, DEPOT_LON)
+    repaired = repair_clusters(
+        clusters, catalog_rows, RepairConfig(), DEPOT_LAT, DEPOT_LON, seed=seed,
+    )
     return repaired.clusters, {
         "enabled": True,
         "n_split": repaired.n_split,
@@ -83,6 +85,17 @@ def _scratch_db():
 def _seed_catalog(session) -> None:
     for payload in VEHICLE_TYPES:
         vehicle_catalog_service.upsert_type(session, payload)
+
+
+def evaluation_catalog_snapshot():
+    """Exact seeded catalog used by evaluation runs, for batch manifests."""
+    engine, session = _scratch_db()
+    try:
+        _seed_catalog(session)
+        return load_catalog_snapshot(session, depot_id=None)
+    finally:
+        session.close()
+        engine.dispose()
 
 
 def _build_catalog_and_parcels(
@@ -127,6 +140,7 @@ class RunConfig:
     synthetic: bool = False
     depot_id: str = "D-CMB-001"
     delivery_date: str = "2026-01-05"
+    enforce_weight_order: bool = False
     run_id: str = field(default_factory=lambda: uuid.uuid4().hex[:10])
 
 
@@ -139,7 +153,10 @@ def run_one(cfg: RunConfig) -> dict:
         cfg.n_parcels, cfg.instance_seed, cfg.n_clusters,
         synthetic=cfg.synthetic, depot_id=cfg.depot_id, delivery_date=cfg.delivery_date,
     )
-    config = AssignmentConfig(depot_lat=DEPOT_LAT, depot_lon=DEPOT_LON, population=cfg.population, generations=cfg.generations)
+    config = AssignmentConfig(
+        depot_lat=DEPOT_LAT, depot_lon=DEPOT_LON, population=cfg.population,
+        generations=cfg.generations, enforce_weight_order=cfg.enforce_weight_order,
+    )
 
     started = time.perf_counter()
     problem, res = run_nsga2(parcels, catalog, config, seed=cfg.ga_seed)
@@ -152,6 +169,7 @@ def run_one(cfg: RunConfig) -> dict:
         "ga_seed": cfg.ga_seed,
         "population": cfg.population,
         "generations": cfg.generations,
+        "enforce_weight_order": cfg.enforce_weight_order,
         "elapsed_seconds": elapsed,
         "cache_hit_rate": problem.cache_hit_rate(),
         "short_circuit_rate": problem.short_circuit_rate(),
@@ -200,6 +218,7 @@ class PipelineRunConfig:
     seed: int
     population: int = 100
     generations: int = 200
+    enforce_weight_order: bool = False
 
     @property
     def run_id(self) -> str:
@@ -239,10 +258,13 @@ def run_pipeline_one(cfg: PipelineRunConfig) -> dict:
         cluster_fn(parcels, cfg.seed, clustering_config)
         clusters = group_by_cluster(parcels)
 
-        warm_clusters, repair_audit = _prepare_warm_clusters(clusters, catalog_rows, cfg.capacity_aware)
+        warm_clusters, repair_audit = _prepare_warm_clusters(
+            clusters, catalog_rows, cfg.capacity_aware, seed=cfg.seed,
+        )
 
         ga_config = AssignmentConfig(
             depot_lat=DEPOT_LAT, depot_lon=DEPOT_LON, population=cfg.population, generations=cfg.generations,
+            enforce_weight_order=cfg.enforce_weight_order,
         )
         result, _virtual_vehicles = optimize_load(
             session, parcels,
@@ -256,7 +278,9 @@ def run_pipeline_one(cfg: PipelineRunConfig) -> dict:
         total_weight = sum(p.weight_kg for p in parcels)
         total_volume = sum(p.volume_m3 for p in parcels)
         capacity_ceiling = compute_utilization_ceiling(total_weight, total_volume, catalog)
-        placement_ceiling = compute_placement_aware_ceiling(parcels, catalog)
+        placement_ceiling = compute_placement_aware_ceiling(
+            parcels, catalog, enforce_weight_order=cfg.enforce_weight_order,
+        )
         achieved_vs_placement = (
             plan.mean_utilization / placement_ceiling.utilization if placement_ceiling.utilization else 0.0
         )
@@ -271,6 +295,7 @@ def run_pipeline_one(cfg: PipelineRunConfig) -> dict:
             "method": cfg.method,
             "capacity_aware": cfg.capacity_aware,
             "seed": cfg.seed,
+            "enforce_weight_order": cfg.enforce_weight_order,
             "n_parcels": len(parcels),
             "mean_utilization": plan.mean_utilization,
             # Legacy alias retained so existing pilot files remain readable.

@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     # rather than optimistically.
     imputed_dimension_safety_factor: float = 1.5
     stack_weight_tolerance_kg: float = 0.5
+    enforce_weight_order: bool = False
 
     # Raised from 80/80 now that the assignment problem's search space is
     # real (Phase 3) — the old n_var=1 formulation over 4 fixed options

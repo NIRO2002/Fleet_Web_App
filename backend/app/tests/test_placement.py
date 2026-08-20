@@ -159,11 +159,19 @@ def test_weight_order_tolerance_accepts_near_equal_but_rejects_heavier_top():
     near_equal = _FakeParcel("NEAR", 40.0, 30.0, 20.0, 10.4)
     too_heavy = _FakeParcel("TOO-HEAVY", 40.0, 30.0, 20.0, 11.0)
 
-    accepted = attempt_placement([near_equal, floor], vehicle)
-    rejected_to_floor = attempt_placement([too_heavy, floor], vehicle)
+    accepted = attempt_placement([near_equal, floor], vehicle, enforce_weight_order=True)
+    rejected_to_floor = attempt_placement([too_heavy, floor], vehicle, enforce_weight_order=True)
 
     assert accepted.placements["NEAR"].layer == 1
     assert rejected_to_floor.placements["TOO-HEAVY"].layer == 0
+
+
+def test_weight_order_default_is_disabled_in_configuration():
+    from app.core.config import settings
+    from app.optimization.assignment_problem import AssignmentConfig
+
+    assert settings.enforce_weight_order is False
+    assert AssignmentConfig().enforce_weight_order is False
 
 
 def test_lifo_exceptions_are_linear_and_match_the_brute_force_violation_set():

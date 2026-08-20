@@ -107,7 +107,10 @@ def optimize_load(
         parcel_objs = [parcels[i] for i in parcel_indices]
 
         m = vehicle_metrics(parcel_objs, vehicle_spec, config)
-        placement = attempt_placement(m["ordered_parcels"], vehicle_spec)
+        placement = attempt_placement(
+            m["ordered_parcels"], vehicle_spec,
+            enforce_weight_order=config.enforce_weight_order,
+        )
 
         utilizations.append(m["utilization"])
         distances.append(m["distance"])

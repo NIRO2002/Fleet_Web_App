@@ -14,8 +14,8 @@ def test_capacity_aware_audit_differs_when_repair_fires(monkeypatch):
     repaired = SimpleNamespace(clusters={1: [object()]}, n_split=1, n_merged=2)
     monkeypatch.setattr(harness, "repair_clusters", lambda *args, **kwargs: repaired)
 
-    off_clusters, off_audit = harness._prepare_warm_clusters(clusters, [], False)
-    on_clusters, on_audit = harness._prepare_warm_clusters(clusters, [], True)
+    off_clusters, off_audit = harness._prepare_warm_clusters(clusters, [], False, seed=7)
+    on_clusters, on_audit = harness._prepare_warm_clusters(clusters, [], True, seed=7)
 
     assert off_clusters is clusters
     assert on_clusters is repaired.clusters

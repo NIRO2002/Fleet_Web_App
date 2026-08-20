@@ -21,8 +21,10 @@ import sys
 from pathlib import Path
 
 from app.core.reproducibility import is_git_dirty, write_manifest
-from app.evaluation.harness import PipelineRunConfig, RunConfig, run_batch, run_pipeline_batch
-from app.evaluation.real_data import list_instances
+from app.evaluation.harness import (
+    PipelineRunConfig, RunConfig, evaluation_catalog_snapshot, run_batch, run_pipeline_batch,
+)
+from app.evaluation.real_data import DATASET_PATH, list_instances
 
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:
@@ -46,6 +48,7 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
         help="Real-data instance date, YYYY-MM-DD (ignored with --synthetic).",
     )
     run.add_argument("--allow-dirty", action="store_true", help="Skip the git-clean check.")
+    run.add_argument("--enforce-weight-order", action="store_true")
 
     pipeline = subparsers.add_parser("pipeline", help="Full pipeline: clustering -> capacity-aware -> NSGA-II -> LoadPlan.")
     pipeline.add_argument("--methods", type=str, default="hdbscan,kmeans")
@@ -63,6 +66,7 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     pipeline.add_argument("--out", type=str, required=True, help="Output directory for per-run result files.")
     pipeline.add_argument("--n-jobs", type=int, default=-1)
     pipeline.add_argument("--allow-dirty", action="store_true", help="Skip the git-clean check.")
+    pipeline.add_argument("--enforce-weight-order", action="store_true")
 
     return parser.parse_args(argv)
 
@@ -89,7 +93,15 @@ def main(argv: list[str] | None = None) -> int:
 
         out_dir = Path(args.out)
         out_dir.mkdir(parents=True, exist_ok=True)
-        write_manifest(out_dir / "manifest.json")
+        experiment_config = vars(args).copy()
+        write_manifest(
+            out_dir / "manifest.json", catalog=evaluation_catalog_snapshot(),
+            dataset_path=None if args.synthetic else DATASET_PATH,
+            experiment_config=experiment_config, extra={
+                "seeds": [int(s) for s in args.seeds.split(",")],
+                "enforce_weight_order": args.enforce_weight_order,
+            },
+        )
 
         seeds = [int(s) for s in args.seeds.split(",")]
         configs = [
@@ -97,6 +109,7 @@ def main(argv: list[str] | None = None) -> int:
                 n_parcels=args.n_parcels, instance_seed=seed, ga_seed=seed, n_clusters=args.n_clusters,
                 population=args.pop, generations=args.gen, synthetic=args.synthetic,
                 depot_id=args.depot_id, delivery_date=args.delivery_date,
+                enforce_weight_order=args.enforce_weight_order,
             )
             for seed in seeds
         ]
@@ -114,7 +127,15 @@ def main(argv: list[str] | None = None) -> int:
 
         out_dir = Path(args.out)
         out_dir.mkdir(parents=True, exist_ok=True)
-        write_manifest(out_dir / "manifest.json")
+        experiment_config = vars(args).copy()
+        write_manifest(
+            out_dir / "manifest.json", catalog=evaluation_catalog_snapshot(),
+            dataset_path=DATASET_PATH, experiment_config=experiment_config,
+            extra={
+                "seeds": [int(s) for s in args.seeds.split(",")],
+                "enforce_weight_order": args.enforce_weight_order,
+            },
+        )
 
         methods = args.methods.split(",")
         capacity_aware_values = {"on": [True], "off": [False], "both": [True, False]}[args.capacity_aware]
@@ -128,6 +149,7 @@ def main(argv: list[str] | None = None) -> int:
             PipelineRunConfig(
                 depot_id=depot_id, delivery_date=delivery_date, method=method, capacity_aware=capacity_aware,
                 seed=seed, population=args.pop, generations=args.gen,
+                enforce_weight_order=args.enforce_weight_order,
             )
             for depot_id, delivery_date in instances
             for method in methods

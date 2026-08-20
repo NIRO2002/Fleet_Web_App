@@ -1,4 +1,9 @@
 {
+  "legacy_reconstructed": false,
+  "dataset": {"filename": "parcels_sample_36000.csv", "sha256": "e68fc340f15e422044fcb83969efd512c4c68128d740a1de5fa1bbd77e176c75"},
+  "config_snapshot": {"experiment": {"population": 100, "generations": 200, "seeds": [0, 1, 2]}},
+  "seeds": [0, 1, 2],
+  "enforce_weight_order": null,
   "settings": {
     "app_name": "Fleet Web App - Parcel Optimization Backend",
     "app_version": "1.0.0",

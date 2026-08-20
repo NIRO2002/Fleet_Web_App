@@ -141,6 +141,7 @@ class AssignmentConfig:
     population: int = settings.nsga2_population
     generations: int = settings.nsga2_generations
     warm_start_count: int = 5
+    enforce_weight_order: bool = settings.enforce_weight_order
 
 
 def slot_budget(
@@ -457,7 +458,10 @@ class AssignmentProblem(Problem):
             # F7: the GA only needs the feasibility verdict, never the LIFO
             # exception list -- computing it here would be pure waste,
             # repeated per slot/individual/generation.
-            placement_ok = attempt_placement(ordered_parcels, vehicle, collect_exceptions=False) is not None
+            placement_ok = attempt_placement(
+                ordered_parcels, vehicle, collect_exceptions=False,
+                enforce_weight_order=self.config.enforce_weight_order,
+            ) is not None
 
         result = {
             "weight": weight,
@@ -556,7 +560,7 @@ class WarmStartSampling(Sampling):
         return base
 
 
-def _cluster_fits_type(members: list, vehicle: VehicleTypeSpec) -> bool:
+def _cluster_fits_type(members: list, vehicle: VehicleTypeSpec, config: AssignmentConfig) -> bool:
     """Full feasibility chain for seeding a warm-start row, cheapest check
     first (Fix Pass 4 S3.1): weight -> volume -> parcel count -> every
     parcel's dimensional fit -> `attempt_placement` actually succeeding.
@@ -571,22 +575,27 @@ def _cluster_fits_type(members: list, vehicle: VehicleTypeSpec) -> bool:
         return False
     if not all(_dimension_fits(p, vehicle) for p in members):
         return False
-    return attempt_placement(members, vehicle, collect_exceptions=False) is not None
+    return attempt_placement(
+        members, vehicle, collect_exceptions=False,
+        enforce_weight_order=config.enforce_weight_order,
+    ) is not None
 
 
-def _best_fitting_type_idx(members: list, catalog: tuple[VehicleTypeSpec, ...]) -> int | None:
+def _best_fitting_type_idx(
+    members: list, catalog: tuple[VehicleTypeSpec, ...], config: AssignmentConfig,
+) -> int | None:
     """Smallest-capacity catalog type whose type passes the full
     feasibility chain for this cluster whole, or None if no single type
     fits it (the caller then splits it -- see `_split_cluster_for_warm_start`)."""
     best_idx, best_capacity = None, float("inf")
     for t_idx, vehicle in enumerate(catalog):
-        if vehicle.capacity_kg < best_capacity and _cluster_fits_type(members, vehicle):
+        if vehicle.capacity_kg < best_capacity and _cluster_fits_type(members, vehicle, config):
             best_idx, best_capacity = t_idx, vehicle.capacity_kg
     return best_idx
 
 
 def _split_cluster_for_warm_start(
-    members: list, catalog: tuple[VehicleTypeSpec, ...]
+    members: list, catalog: tuple[VehicleTypeSpec, ...], config: AssignmentConfig,
 ) -> list[tuple[list, int]]:
     """When no single catalog type fits a cluster whole, greedily bin-fills
     it across multiple (sub-cluster, type_idx) pairs -- largest-weight
@@ -610,7 +619,7 @@ def _split_cluster_for_warm_start(
                     group.append(p)
                     weight += p.weight_kg
                     volume += p.volume_m3
-            if group and _cluster_fits_type(group, vehicle):
+            if group and _cluster_fits_type(group, vehicle, config):
                 if best_group is None or len(group) > len(best_group):
                     best_group, best_type_idx = group, t_idx
         if best_group is None:
@@ -628,7 +637,8 @@ def _split_cluster_for_warm_start(
 
 
 def warm_start_rows_from_clusters(
-    parcels: list, clusters: dict[int, list], catalog: tuple[VehicleTypeSpec, ...], K: int
+    parcels: list, clusters: dict[int, list], catalog: tuple[VehicleTypeSpec, ...], K: int,
+    config: AssignmentConfig,
 ) -> list[np.ndarray]:
     """Builds warm-start individuals from capacity-aware-repaired clusters.
 
@@ -652,9 +662,9 @@ def warm_start_rows_from_clusters(
         for members in clusters.values():
             if not members:
                 continue
-            type_idx = None if force_split else _best_fitting_type_idx(members, catalog)
+            type_idx = None if force_split else _best_fitting_type_idx(members, catalog, config)
             sub_groups = (
-                _split_cluster_for_warm_start(members, catalog)
+                _split_cluster_for_warm_start(members, catalog, config)
                 if type_idx is None
                 else [(members, type_idx)]
             )
@@ -887,7 +897,10 @@ class OverflowRepair(Repair):
                 continue
             vehicle = problem.catalog[type_of_slot[slot_idx]]
             ordered = [problem.parcels[i] for i in parcel_indices]
-            if attempt_placement(ordered, vehicle, collect_exceptions=False) is not None:
+            if attempt_placement(
+                ordered, vehicle, collect_exceptions=False,
+                enforce_weight_order=problem.config.enforce_weight_order,
+            ) is not None:
                 continue
 
             candidates = sorted(
@@ -905,7 +918,10 @@ class OverflowRepair(Repair):
                         continue
                 move(idx, slot_idx, target)
                 remaining = [problem.parcels[i] for i in slots[slot_idx]]
-                if attempt_placement(remaining, vehicle, collect_exceptions=False) is not None:
+                if attempt_placement(
+                    remaining, vehicle, collect_exceptions=False,
+                    enforce_weight_order=problem.config.enforce_weight_order,
+                ) is not None:
                     break
 
     def _open_new_slot(self, problem, slots, type_of_slot, slot_weight, slot_volume, parcel) -> int | None:
@@ -965,7 +981,7 @@ def run_nsga2(
     K = slot_budget(parcels, catalog, config, n_warm_clusters)
     problem = AssignmentProblem(parcels, catalog, config, n_slots=K)
 
-    warm_rows = warm_start_rows_from_clusters(parcels, warm_start_clusters, catalog, K) if warm_start_clusters else []
+    warm_rows = warm_start_rows_from_clusters(parcels, warm_start_clusters, catalog, K, config) if warm_start_clusters else []
 
     algorithm = NSGA2(
         pop_size=config.population,

@@ -91,6 +91,25 @@ def test_oversize_cluster_is_split_until_it_fits():
     assert repaired.clusters_after > repaired.clusters_before
 
 
+def test_splitter_threads_run_seed_to_kmeans(monkeypatch):
+    import app.services.capacity_aware_clustering as module
+
+    observed = []
+    original = module.KMeans
+
+    def capture(*args, **kwargs):
+        observed.append(kwargs.get("random_state"))
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(module, "KMeans", capture)
+    parcels = [
+        _parcel(f"SEED-{i}", cluster_id=0, weight=2.0, lat=6.90 + 0.001 * i, lon=79.85 + 0.001 * i)
+        for i in range(80)
+    ]
+    repair_clusters(group_by_cluster(parcels), [SMALL_VAN], seed=37)
+    assert observed and set(observed) == {37}
+
+
 def test_no_parcel_lost_or_duplicated_through_split_and_merge():
     parcels = [_parcel(f"P{i}", cluster_id=i % 5, weight=1.0, volume=0.005) for i in range(40)]
     clusters = group_by_cluster(parcels)

@@ -42,7 +42,9 @@ class PlacementAwareCeiling(UtilizationCeiling):
     vehicle_loads: list[list[str]]
 
 
-def compute_placement_aware_ceiling(parcels, catalog) -> PlacementAwareCeiling:
+def compute_placement_aware_ceiling(
+    parcels, catalog, *, enforce_weight_order: bool = False,
+) -> PlacementAwareCeiling:
     """Pack the instance with each homogeneous fleet and keep the fullest.
 
     Parcels are considered in stable ID order. A vehicle is closed as soon
@@ -69,10 +71,14 @@ def compute_placement_aware_ceiling(parcels, catalog) -> PlacementAwareCeiling:
             within_count = vehicle.max_parcels is None or len(candidate) <= vehicle.max_parcels
             within_weight = sum(p.weight_kg for p in candidate) <= vehicle.capacity_kg
             within_volume = sum(p.volume_m3 for p in candidate) <= vehicle.capacity_m3
-            if within_count and within_weight and within_volume and attempt_placement(candidate, vehicle) is not None:
+            if within_count and within_weight and within_volume and attempt_placement(
+                candidate, vehicle, enforce_weight_order=enforce_weight_order,
+            ) is not None:
                 current = candidate
                 continue
-            if not current or attempt_placement([parcel], vehicle) is None:
+            if not current or attempt_placement(
+                [parcel], vehicle, enforce_weight_order=enforce_weight_order,
+            ) is None:
                 feasible = False
                 break
             loads.append(current)

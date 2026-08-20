@@ -94,23 +94,54 @@ def _catalog_digest(catalog) -> str | None:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def run_manifest(catalog=None) -> dict:
+def _dataset_record(dataset_path: str | Path | None) -> dict | None:
+    if dataset_path is None:
+        return None
+    path = Path(dataset_path)
+    if not path.is_file():
+        raise FileNotFoundError(f"Dataset not found: {path}")
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return {"filename": path.name, "sha256": digest.hexdigest()}
+
+
+def run_manifest(
+    catalog=None, *, dataset_path: str | Path | None = None,
+    experiment_config: dict | None = None, extra: dict | None = None,
+) -> dict:
     """Full reproducibility snapshot for one run: settings (secrets
     redacted), git commit + dirty flag, Python version, tracked package
     versions, a UTC timestamp, and (when `catalog` is passed) a digest of
     the exact vehicle catalog snapshot the run used."""
-    return {
-        "settings": _redacted_settings(),
+    redacted_settings = _redacted_settings()
+    manifest = {
+        "settings": redacted_settings,
+        "config_snapshot": {
+            "settings": redacted_settings,
+            "experiment": experiment_config or {},
+        },
         "git_commit_sha": git_commit_sha(),
         "git_dirty": is_git_dirty(),
         "python_version": platform.python_version(),
         "package_versions": _package_versions(),
         "timestamp_utc": utcnow().isoformat(),
         "catalog_snapshot_digest": _catalog_digest(catalog),
+        "dataset": _dataset_record(dataset_path),
     }
+    if extra:
+        manifest.update(extra)
+    return manifest
 
 
-def write_manifest(path: str | Path, *, catalog=None) -> dict:
-    manifest = run_manifest(catalog=catalog)
+def write_manifest(
+    path: str | Path, *, catalog=None, dataset_path: str | Path | None = None,
+    experiment_config: dict | None = None, extra: dict | None = None,
+) -> dict:
+    manifest = run_manifest(
+        catalog=catalog, dataset_path=dataset_path,
+        experiment_config=experiment_config, extra=extra,
+    )
     Path(path).write_text(json.dumps(manifest, indent=2))
     return manifest
