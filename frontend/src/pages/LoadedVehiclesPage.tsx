@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Bike, Car, CheckCircle2, Container, PackageOpen, Sparkles, Truck, View } from 'lucide-react'
+import { Bike, Car, CheckCircle2, Container, ListOrdered, PackageOpen, Sparkles, Truck, View } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import clsx from 'clsx'
 import { Card, EmptyState, InlineAlert, LoadingState, PageHeader, PrimaryButton, SecondaryButton, StatusBadge } from '../components/UI'
 import { CargoBay3D } from '../components/CargoBay3D'
 import { DEFAULT_DEPOT } from '../data/mockData'
@@ -39,6 +38,8 @@ export function LoadedVehiclesPage() {
   const [notice, setNotice] = useState<Notice>(null)
   const [readyPending, setReadyPending] = useState<Set<string>>(new Set())
   const [viewingVehicle, setViewingVehicle] = useState<LoadPlanVehicle | null>(null)
+  const [loadOrderVehicle, setLoadOrderVehicle] = useState<LoadPlanVehicle | null>(null)
+  const [showParcelIds, setShowParcelIds] = useState(false)
 
   const loadExisting = async () => {
     setLoading(true)
@@ -60,12 +61,12 @@ export function LoadedVehiclesPage() {
 
   useEffect(() => {
     if (!generating) return
-    setElapsedSeconds(0)
     const interval = window.setInterval(() => setElapsedSeconds((s) => s + 1), 1000)
     return () => window.clearInterval(interval)
   }, [generating])
 
   const handleGenerate = async () => {
+    setElapsedSeconds(0)
     setGenerating(true)
     setNotice({ tone: 'info', text: 'Clustering parcels (HDBSCAN) then searching vehicle assignments (NSGA-II) — a 200-generation run can take several minutes.' })
     try {
@@ -163,7 +164,8 @@ export function LoadedVehiclesPage() {
               <VehicleCard
                 key={vehicle.virtual_vehicle_id}
                 onReady={() => handleReady(vehicle)}
-                onView3D={() => setViewingVehicle(vehicle)}
+                onLoadOrder={() => setLoadOrderVehicle(vehicle)}
+                onView3D={() => { setShowParcelIds(false); setViewingVehicle(vehicle) }}
                 pending={readyPending.has(vehicle.virtual_vehicle_id)}
                 vehicle={vehicle}
               />
@@ -191,10 +193,27 @@ export function LoadedVehiclesPage() {
                 <SecondaryButton onClick={() => setViewingVehicle(null)}>Close</SecondaryButton>
               </div>
             </div>
-            <CargoBay3D maxLoadSequence={viewingVehicle.parcels.length} mode="sequence" vehicle={viewingVehicle} />
+            <div className="mb-3 flex items-center justify-end">
+              <label className="flex cursor-pointer items-center gap-2 text-sm font-bold text-fleet-ink">
+                <span>Show Parcel IDs</span>
+                <button
+                  aria-checked={showParcelIds}
+                  aria-label="Show Parcel IDs"
+                  className={`relative h-6 w-11 rounded-full transition ${showParcelIds ? 'bg-blue-600' : 'bg-slate-300'}`}
+                  onClick={() => setShowParcelIds((shown) => !shown)}
+                  role="switch"
+                  type="button"
+                >
+                  <span className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition ${showParcelIds ? 'translate-x-5' : ''}`} />
+                </button>
+              </label>
+            </div>
+            <CargoBay3D maxLoadSequence={viewingVehicle.parcels.length} mode="sequence" showParcelIds={showParcelIds} vehicle={viewingVehicle} />
           </div>
         </div>
       )}
+
+      {loadOrderVehicle && <LoadOrderModal onClose={() => setLoadOrderVehicle(null)} vehicle={loadOrderVehicle} />}
     </div>
   )
 }
@@ -208,7 +227,7 @@ function Summary({ label, value }: { label: string; value: string }) {
   )
 }
 
-function VehicleCard({ vehicle, onReady, onView3D, pending }: { vehicle: LoadPlanVehicle; onReady: () => void; onView3D: () => void; pending: boolean }) {
+function VehicleCard({ vehicle, onReady, onView3D, onLoadOrder, pending }: { vehicle: LoadPlanVehicle; onReady: () => void; onView3D: () => void; onLoadOrder: () => void; pending: boolean }) {
   const Icon = VEHICLE_ICON[vehicle.vehicle_type]
   const isReady = vehicle.status === 'READY'
   return (
@@ -243,10 +262,15 @@ function VehicleCard({ vehicle, onReady, onView3D, pending }: { vehicle: LoadPla
         </div>
       </div>
 
-      <div className="mt-4 flex items-center justify-between border-t border-fleet-line/80 pt-4">
-        <SecondaryButton onClick={onView3D}>
-          <View className="h-4 w-4" /> View 3D Load
-        </SecondaryButton>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-fleet-line/80 pt-4">
+        <div className="flex flex-wrap gap-2">
+          <SecondaryButton onClick={onView3D}>
+            <View className="h-4 w-4" /> View 3D Load
+          </SecondaryButton>
+          <SecondaryButton onClick={onLoadOrder}>
+            <ListOrdered className="h-4 w-4" /> Load Order
+          </SecondaryButton>
+        </div>
         {isReady ? (
           <span className="text-xs font-bold text-fleet-muted">{vehicle.ready_at ? `Ready at ${new Date(vehicle.ready_at).toLocaleTimeString()}` : 'Ready'}</span>
         ) : (
@@ -254,6 +278,57 @@ function VehicleCard({ vehicle, onReady, onView3D, pending }: { vehicle: LoadPla
             <CheckCircle2 className="h-4 w-4" /> Ready
           </PrimaryButton>
         )}
+      </div>
+    </div>
+  )
+}
+
+function LoadOrderModal({ vehicle, onClose }: { vehicle: LoadPlanVehicle; onClose: () => void }) {
+  const steps = useMemo(() => {
+    const grouped = new Map<number, LoadPlanVehicle['parcels']>()
+    for (const parcel of vehicle.parcels) {
+      const parcels = grouped.get(parcel.load_sequence) ?? []
+      parcels.push(parcel)
+      grouped.set(parcel.load_sequence, parcels)
+    }
+    return [...grouped.entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([step, parcels]) => ({ step, parcels: [...parcels].sort((a, b) => a.delivery_sequence - b.delivery_sequence) }))
+  }, [vehicle.parcels])
+
+  return (
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/60 p-4" onClick={onClose}>
+      <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
+        <div className="flex items-start justify-between gap-4 border-b border-fleet-line p-5">
+          <div>
+            <h2 className="text-lg font-extrabold text-fleet-ink">Load Order · {vehicle.virtual_vehicle_id}</h2>
+            <p className="mt-1 max-w-2xl text-sm text-fleet-muted">Load in this order. Parcels loaded first are placed deeper inside the vehicle; later parcels remain accessible near the vehicle door.</p>
+          </div>
+          <SecondaryButton onClick={onClose}>Close</SecondaryButton>
+        </div>
+
+        <div className="flex items-center justify-between bg-blue-50 px-5 py-3 text-xs font-black uppercase tracking-wide text-blue-800">
+          <span>Deepest inside · Step {steps[0]?.step ?? '—'}</span>
+          <span>Vehicle door at x = 0 · Later steps →</span>
+        </div>
+
+        <div className="overflow-auto">
+          <table className="w-full min-w-[680px] text-left text-sm">
+            <thead className="sticky top-0 bg-slate-100 text-xs uppercase text-fleet-muted">
+              <tr><th className="px-5 py-3">Load step</th><th className="px-5 py-3">Parcels</th><th className="px-5 py-3">Layer</th><th className="px-5 py-3">Delivery sequence</th></tr>
+            </thead>
+            <tbody>
+              {steps.map(({ step, parcels }) => (
+                <tr className="border-t border-fleet-line align-top" key={step}>
+                  <td className="px-5 py-4"><span className="inline-flex h-8 min-w-8 items-center justify-center rounded-full bg-blue-600 px-2 font-black text-white">{step}</span></td>
+                  <td className="px-5 py-4"><div className="mb-1 text-xs font-bold text-fleet-muted">{parcels.length} parcel{parcels.length === 1 ? '' : 's'}</div><div className="flex max-w-xl flex-wrap gap-1.5">{parcels.map((parcel) => <span className="rounded-md bg-slate-100 px-2 py-1 font-mono text-xs font-bold text-fleet-ink" key={parcel.parcel_id} title={parcel.parcel_id}>{parcel.parcel_id}</span>)}</div></td>
+                  <td className="px-5 py-4 font-semibold">{[...new Set(parcels.map((parcel) => parcel.stack_layer))].sort((a, b) => a - b).join(', ')}</td>
+                  <td className="px-5 py-4 font-semibold">{parcels.map((parcel) => parcel.delivery_sequence).join(', ')}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   )
