@@ -154,6 +154,9 @@ def optimize_load(
                     load_position_x=placed.x if placed else 0.0,
                     load_position_y=placed.y if placed else 0.0,
                     load_position_z=placed.z if placed else 0.0,
+                    placed_length_cm=placed.placed_length_cm if placed else parcel.length_cm,
+                    placed_width_cm=placed.placed_width_cm if placed else parcel.width_cm,
+                    placed_height_cm=placed.placed_height_cm if placed else parcel.height_cm,
                 )
             )
 

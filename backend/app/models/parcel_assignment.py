@@ -27,5 +27,10 @@ class ParcelAssignment(Base):
     load_position_x = Column(Float, nullable=False, default=0.0)
     load_position_y = Column(Float, nullable=False, default=0.0)
     load_position_z = Column(Float, nullable=False, default=0.0)
+    # Actual oriented box dimensions selected by placement. Parcel source
+    # dimensions alone cannot reconstruct a 90-degree floor rotation.
+    placed_length_cm = Column(Float, nullable=True)
+    placed_width_cm = Column(Float, nullable=True)
+    placed_height_cm = Column(Float, nullable=True)
 
     created_at = Column(DateTime, default=utcnow, nullable=False)

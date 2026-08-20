@@ -93,6 +93,56 @@ export interface OptimizationResult {
   virtual_vehicle_ids: string[]
 }
 
+export interface LoadPlanParcel {
+  parcel_id: string
+  delivery_sequence: number
+  load_sequence: number
+  stack_layer: number
+  load_position_x: number
+  load_position_y: number
+  load_position_z: number
+  length_cm: number | null
+  width_cm: number | null
+  height_cm: number | null
+  weight_kg: number
+  volume_m3: number
+  fragile: boolean
+  stackable: boolean
+  time_window_start: string
+  time_window_end: string
+}
+
+export interface LoadPlanVehicle {
+  virtual_vehicle_id: string
+  vehicle_type: VehicleType
+  capacity_kg: number
+  capacity_m3: number
+  used_weight_kg: number
+  used_volume_m3: number
+  parcel_count: number
+  cargo_length_cm: number
+  cargo_width_cm: number
+  cargo_height_cm: number
+  estimated_distance_km: number
+  time_window_compliance: number | null
+  fleet_cost: number | null
+  parcels: LoadPlanParcel[]
+}
+
+export interface LoadPlan {
+  plan_id: string
+  depot_id: string
+  delivery_date: string
+  status: string
+  n_parcels: number
+  n_vehicles: number
+  mean_utilization: number
+  total_distance_km: number
+  mean_time_window_compliance: number
+  total_fleet_cost: number
+  vehicles: LoadPlanVehicle[]
+}
+
 export interface VirtualVehicle {
   id: number
   virtual_vehicle_id: string

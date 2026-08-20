@@ -5,6 +5,7 @@ import { authService } from './services/authService'
 import { LoadOptimizationPage } from './pages/LoadOptimizationPage'
 import { ParcelConsolidationPage } from './pages/ParcelConsolidationPage'
 import { VehicleTypesPage } from './pages/VehicleTypesPage'
+import { LoadPlanPage } from './pages/LoadPlanPage'
 
 function RequireAuth() {
   return authService.getSession() ? <AppShell /> : <Navigate replace to="/login" />
@@ -20,6 +21,7 @@ function App() {
           <Route element={<Navigate replace to="/parcel-consolidation" />} index />
           <Route element={<ParcelConsolidationPage />} path="/parcel-consolidation" />
           <Route element={<LoadOptimizationPage />} path="/load-optimization" />
+          <Route element={<LoadPlanPage />} path="/load-plans/:planId?" />
           <Route element={<VehicleTypesPage />} path="/vehicle-types" />
         </Route>
         <Route element={<Navigate replace to="/parcel-consolidation" />} path="*" />

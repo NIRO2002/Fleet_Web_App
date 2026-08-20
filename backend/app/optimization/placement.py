@@ -39,11 +39,19 @@ existing LIFO-exception audit (`_lifo_exceptions`) is what records where the
 physical result deviates from pure delivery order, rather than the ordering
 enforcing strict delivery order during packing itself; that is unchanged
 from before this pass.
+
+LIFO banding governs depth from the doors; weight ordering governs only
+which open column may receive a parcel. When those goals conflict, LIFO
+depth wins and `_lifo_exceptions` records any physical compromise. Fragile
+and non-stackable parcels may be placed on a compatible support, but close
+that column and can never support another parcel.
 """
 from dataclasses import dataclass, field
 from math import cbrt
 
 from app.core.config import settings
+
+STACK_WEIGHT_TOLERANCE_KG = settings.stack_weight_tolerance_kg
 
 
 @dataclass
@@ -54,6 +62,9 @@ class Placement:
     z: float
     layer: int
     load_sequence: int  # 1-based; 1 = loaded first = deepest
+    placed_length_cm: float
+    placed_width_cm: float
+    placed_height_cm: float
 
 
 @dataclass
@@ -70,22 +81,14 @@ class _Column:
     y_start: float
     z_top: float = 0.0
     layers: int = 0
-    # Remaining weight budget for anything placed *above* this column's
-    # current top: the running minimum of (a) what's left of every parcel
-    # already in the stack's own `max_stack_weight_kg`, each reduced by the
-    # weight of everything placed above it, and (b) nothing shortcuts to
-    # just the topmost parcel's limit, or a heavy parcel could sit on a
-    # stack whose bottom parcel tolerates far less (constraint 7).
-    stack_headroom_kg: float = 0.0
+    top_weight_kg: float = 0.0
     open_for_stacking: bool = True
 
 
 @dataclass
 class _VehicleStackState:
     """Running total of weight stacked above the bay floor (layer > 0),
-    across every column in the vehicle -- distinct from `_Column`'s
-    per-column `stack_headroom_kg`, which only tracks what one stack's own
-    parcels tolerate. Fix Pass 2 A.5: the vehicle's
+    across every column in the vehicle. The catalog's field-data-backed
     `vehicle_max_stack_weight_kg` bounds this total independently."""
 
     cumulative_above_floor_kg: float = 0.0
@@ -164,22 +167,28 @@ def _fits_bay_at_all(parcel, vehicle, footprint_cache: dict | None = None) -> bo
 
 def _try_stack(
     parcel, weight: float, height: float, columns: list[_Column], vehicle, stack_state: _VehicleStackState,
-    footprint_cache: dict | None = None,
+    footprint_cache: dict | None = None, *, enforce_weight_order: bool = True,
 ) -> _Column | None:
-    """First open column this parcel can be stacked on top of, honouring
-    fragility/stackability, remaining stack-weight budget, layer cap, cargo
-    height, and the vehicle-level cumulative stack-weight cap (A.5). Tried
-    before opening new floor space."""
+    """Best compatible open column for stacking.
+
+    The incoming parcel must be no heavier than the current top within
+    ``STACK_WEIGHT_TOLERANCE_KG``. Fragile/non-stackable incoming parcels
+    remain valid placement targets and close the column after placement.
+    Footprint, layer, height and vehicle-level above-floor weight limits
+    are enforced unchanged.
+    """
     length, width, _ = _get_footprint(parcel, footprint_cache)
     vehicle_max_stack_weight = getattr(vehicle, "vehicle_max_stack_weight_kg", None)
-    for column in columns:
+    # Choose the heaviest compatible top. This integrates weight ordering
+    # into column selection without globally reordering the parcel stream.
+    for column in sorted(columns, key=lambda c: c.top_weight_kg, reverse=True):
         if not column.open_for_stacking:
             continue
         if column.layers >= vehicle.max_stack_layers:
             continue
         if column.z_top + height > vehicle.cargo_height_cm:
             continue
-        if weight > column.stack_headroom_kg:
+        if enforce_weight_order and weight > column.top_weight_kg + STACK_WEIGHT_TOLERANCE_KG:
             continue
         if (
             vehicle_max_stack_weight is not None
@@ -306,7 +315,8 @@ def _lifo_exceptions(parcels_in_delivery_order: list, placements: dict[str, Plac
 
 
 def attempt_placement(
-    parcels_in_delivery_order: list, vehicle, *, collect_exceptions: bool = True
+    parcels_in_delivery_order: list, vehicle, *, collect_exceptions: bool = True,
+    enforce_weight_order: bool = True,
 ) -> PlacementResult | None:
     """Places every parcel for one vehicle. Returns `None` if any parcel
     cannot be placed at all (too big for the bay in any orientation, or the
@@ -346,8 +356,10 @@ def attempt_placement(
         weight = parcel.weight_kg
         _length, _width, height = _get_footprint(parcel, footprint_cache)
 
-        column = _try_stack(parcel, weight, height, columns, vehicle, stack_state, footprint_cache)
-        max_stack_weight = parcel.max_stack_weight_kg if parcel.max_stack_weight_kg is not None else 0.0
+        column = _try_stack(
+            parcel, weight, height, columns, vehicle, stack_state, footprint_cache,
+            enforce_weight_order=enforce_weight_order,
+        )
         if column is None:
             column = _place_in_open_rows(parcel, rows, vehicle, footprint_cache)
             if column is None:
@@ -356,34 +368,25 @@ def attempt_placement(
                 return None
             columns.append(column)
             z, layer = 0.0, 0
-            # Floor parcel: headroom for everything above it starts at its
-            # own budget — nothing has been placed above it yet.
-            column.stack_headroom_kg = max_stack_weight
         else:
             z, layer = column.z_top, column.layers
-            # Accumulated-weight-above check (constraint 7): the budget for
-            # anything placed above *this* parcel is the tighter of what's
-            # left of the stack's existing headroom (after this parcel's
-            # own weight) and this parcel's own limit — not just this
-            # parcel's limit on its own, which would ignore every parcel
-            # already below it.
-            column.stack_headroom_kg = min(column.stack_headroom_kg - weight, max_stack_weight)
             # This parcel landed above layer 0 -- counts toward the
             # vehicle-level cumulative stack-weight cap (A.5).
             stack_state.cumulative_above_floor_kg += weight
 
         column.z_top = z + height
         column.layers = layer + 1
+        column.top_weight_kg = weight
         # A fragile or non-stackable parcel must be the top of its column
-        # from here on; everything else may still take more weight up to
-        # the accumulated headroom computed above.
+        # from here on; a normal parcel remains available as support.
         stackable = parcel.stackable if parcel.stackable is not None else True
         fragile = bool(parcel.fragile)
         column.open_for_stacking = stackable and not fragile
 
         placements[parcel.parcel_id] = Placement(
             parcel_id=parcel.parcel_id, x=column.x_start, y=column.y_start, z=z, layer=layer,
-            load_sequence=load_sequence,
+            load_sequence=load_sequence, placed_length_cm=column.footprint_length,
+            placed_width_cm=column.footprint_width, placed_height_cm=height,
         )
 
     exceptions = _lifo_exceptions(parcels_in_delivery_order, placements) if collect_exceptions else []

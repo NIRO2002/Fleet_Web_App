@@ -63,6 +63,8 @@ def real_instance_payloads(depot_id: str = "D-CMB-001", delivery_date: str = "20
                 "time_window_end": str(row["time_window_end"])[:5],
                 "fragile": bool(row["fragile"]),
                 "stackable": bool(row["stackable"]),
+                # Retained for dataset fidelity; placement no longer uses
+                # this synthetic per-parcel value as a constraint.
                 "max_stack_weight_kg": float(row["max_stack_weight_kg"]),
                 "loading_orientation_fixed": bool(row["loading_orientation_fixed"]),
                 "do_not_tilt": bool(row["do_not_tilt"]),

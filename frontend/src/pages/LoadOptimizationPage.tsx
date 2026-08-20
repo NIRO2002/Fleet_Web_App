@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
-import { useLocation } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import clsx from 'clsx'
 import { Bike, Car, Container, Gauge, ListChecks, MapPin, PackageSearch, RefreshCw, Route, Sparkles, Truck } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -325,6 +325,7 @@ export function LoadOptimizationPage() {
             </div>
             <div className="mt-5 flex flex-wrap items-center gap-2">
               <StatusBadge tone="blue">{result.optimization_id}</StatusBadge>
+              <Link className="rounded-lg bg-fleet-blue px-3 py-1.5 text-xs font-extrabold text-white" to={`/load-plans/${encodeURIComponent(result.optimization_id)}`}>View load plan</Link>
               {result.virtual_vehicle_ids.map((id) => <StatusBadge key={id} tone="green">{id}</StatusBadge>)}
               {result.cluster_id !== null && <StatusBadge tone="slate">{clusterLabel(result.cluster_id)}</StatusBadge>}
               <StatusBadge tone="slate">Fleet cost {formatNumber(result.selected_vehicle.fleet_cost)}</StatusBadge>

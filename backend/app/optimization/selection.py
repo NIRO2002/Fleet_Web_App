@@ -22,8 +22,14 @@ def pareto_front(res) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     if G is not None:
         feasible = np.all(G <= 1e-6, axis=1)
         if feasible.any():
-            return F[feasible], X[feasible], G[feasible]
-    return F, X, G
+            F, X, G = F[feasible], X[feasible], G[feasible]
+
+    # pymoo eliminates duplicate decision vectors, not duplicate objective
+    # vectors. The API front represents trade-off points, so retain the
+    # first genotype for each genuinely distinct objective vector.
+    _unique, first_indices = np.unique(F, axis=0, return_index=True)
+    keep = np.array(sorted(first_indices))
+    return F[keep], X[keep], G[keep] if G is not None else G
 
 
 def knee_point_index(F: np.ndarray) -> int:

@@ -19,14 +19,8 @@ so per the remediation doc's own fallback ("otherwise a seeded loop of 50
 instances is adequate") this uses a seeded Python loop, not a new
 dependency.
 
-One documented simplification: invariant 10 (placement validity) checks that
-every parcel's load position lies within the cargo bay and that no two
-parcels on the same vehicle occupy the exact same (x, y, z) point. It does
-not reconstruct full rectangle-overlap-in-chosen-orientation, because the
-persisted schema doesn't record which of a parcel's two floor orientations
-placement.py chose for a given assignment -- verifying true rectangle
-overlap would require also persisting that choice, which is out of scope
-for this pass. This is flagged here rather than silently narrowed.
+Placement validity uses the oriented dimensions persisted with each
+assignment, so it checks full 3D bay bounds and pairwise box intersection.
 """
 import random
 from datetime import date
@@ -42,7 +36,7 @@ from app.optimization.assignment_problem import (
     VehicleTypeSpec,
     schedule_time_window_compliance,
 )
-from app.optimization.placement import _footprint
+from app.optimization.placement import STACK_WEIGHT_TOLERANCE_KG, _footprint
 from app.schemas.parcel import ParcelIn
 from app.services import vehicle_catalog_service
 from app.services.data_service import upsert_parcel
@@ -152,9 +146,11 @@ def _assert_dimensions(parcels_by_id, assignments, catalog_by_code, vehicle_by_i
 
 
 def _assert_fragility_and_stack_weight(parcels_by_id, assignments):
-    """6. Fragility: no parcel rests on a fragile or non-stackable parcel.
-    7. Stack weight: accumulated weight above any parcel <= its
-    max_stack_weight_kg."""
+    """No parcel rests on a fragile or non-stackable parcel.
+
+    Per-parcel ``max_stack_weight_kg`` is imported for data fidelity but no
+    longer constrains placement. Weight ordering is asserted separately.
+    """
     by_vehicle: dict[str, list[ParcelAssignment]] = {}
     for a in assignments:
         by_vehicle.setdefault(a.virtual_vehicle_id, []).append(a)
@@ -167,44 +163,65 @@ def _assert_fragility_and_stack_weight(parcels_by_id, assignments):
 
         for column in by_column.values():
             column.sort(key=lambda a: a.stack_layer)
-            weights = [parcels_by_id[a.parcel_id].weight_kg for a in column]
             for i, a in enumerate(column):
                 if i > 0:
                     below = parcels_by_id[column[i - 1].parcel_id]
+                    above = parcels_by_id[a.parcel_id]
                     assert below.stackable and not below.fragile, (
                         f"{a.parcel_id} rests on {below.parcel_id}, which is fragile/non-stackable"
                     )
-                    # Weight of everything strictly above `below` (i.e. from
-                    # this position onward in the column), not a running
-                    # total from the floor -- each parcel's own
-                    # max_stack_weight_kg bounds only what sits above it.
-                    weight_above_below = sum(weights[i:])
-                    max_stack = below.max_stack_weight_kg if below.max_stack_weight_kg is not None else 0.0
-                    assert weight_above_below <= max_stack + 1e-6, (
-                        f"weight stacked above {below.parcel_id} ({weight_above_below}kg) exceeds its "
-                        f"max_stack_weight_kg ({max_stack}kg)"
+                    assert above.weight_kg <= below.weight_kg + STACK_WEIGHT_TOLERANCE_KG + 1e-6, (
+                        f"{above.parcel_id} ({above.weight_kg}kg) is heavier than its support "
+                        f"{below.parcel_id} ({below.weight_kg}kg) beyond tolerance"
                     )
 
 
+def _assert_vehicle_stack_weight(parcels_by_id, assignments, catalog_by_code, vehicle_by_id):
+    """Vehicle-level above-floor weight remains a separate hard limit."""
+    above_floor_by_vehicle: dict[str, float] = {}
+    for assignment in assignments:
+        if assignment.stack_layer > 0:
+            above_floor_by_vehicle[assignment.virtual_vehicle_id] = (
+                above_floor_by_vehicle.get(assignment.virtual_vehicle_id, 0.0)
+                + parcels_by_id[assignment.parcel_id].weight_kg
+            )
+
+    for vehicle_id, above_floor_weight in above_floor_by_vehicle.items():
+        limit = catalog_by_code[vehicle_by_id[vehicle_id]]["vehicle_max_stack_weight_kg"]
+        if limit is not None:
+            assert above_floor_weight <= limit + 1e-6, (
+                f"{vehicle_id} has {above_floor_weight}kg above floor, exceeding {limit}kg"
+            )
+
+
 def _assert_placement_validity(assignments, catalog_by_code, vehicle_by_id):
-    """8. Placement validity: no two parcels overlap in placement
-    coordinates; nothing exceeds the cargo bay bounds. See module docstring
-    for the documented simplification (bounds + no-exact-duplicate-point,
-    not full rotated-rectangle overlap)."""
+    """8. Placement validity: full oriented boxes stay in-bay and disjoint."""
     by_vehicle: dict[str, list[ParcelAssignment]] = {}
     for a in assignments:
         by_vehicle.setdefault(a.virtual_vehicle_id, []).append(a)
 
     for vv_id, vv_assignments in by_vehicle.items():
         vehicle_row = catalog_by_code[vehicle_by_id[vv_id]]
-        seen_points = set()
         for a in vv_assignments:
             assert -1e-6 <= a.load_position_x <= vehicle_row["cargo_length_cm"] + 1e-6
             assert -1e-6 <= a.load_position_y <= vehicle_row["cargo_width_cm"] + 1e-6
             assert -1e-6 <= a.load_position_z <= vehicle_row["cargo_height_cm"] + 1e-6
-            point = (round(a.load_position_x, 3), round(a.load_position_y, 3), round(a.load_position_z, 3))
-            assert point not in seen_points, f"two parcels on {vv_id} occupy the exact same placement point"
-            seen_points.add(point)
+            assert a.placed_length_cm and a.placed_width_cm and a.placed_height_cm
+            assert a.load_position_x + a.placed_length_cm <= vehicle_row["cargo_length_cm"] + 1e-6
+            assert a.load_position_y + a.placed_width_cm <= vehicle_row["cargo_width_cm"] + 1e-6
+            assert a.load_position_z + a.placed_height_cm <= vehicle_row["cargo_height_cm"] + 1e-6
+
+        for i, a in enumerate(vv_assignments):
+            for b in vv_assignments[i + 1:]:
+                intersects = (
+                    a.load_position_x < b.load_position_x + b.placed_length_cm - 1e-6
+                    and b.load_position_x < a.load_position_x + a.placed_length_cm - 1e-6
+                    and a.load_position_y < b.load_position_y + b.placed_width_cm - 1e-6
+                    and b.load_position_y < a.load_position_y + a.placed_width_cm - 1e-6
+                    and a.load_position_z < b.load_position_z + b.placed_height_cm - 1e-6
+                    and b.load_position_z < a.load_position_z + a.placed_height_cm - 1e-6
+                )
+                assert not intersects, f"{a.parcel_id} and {b.parcel_id} overlap on {vv_id}"
 
 
 def _assert_load_order_completeness(assignments):
@@ -326,6 +343,7 @@ def _assert_all_invariants(db_session, parcels, config, seed, depot_id, depot_la
     _assert_weight_volume_count(virtual_vehicles)
     _assert_dimensions(parcels_by_id, assignments, catalog_by_code, vehicle_by_id)
     _assert_fragility_and_stack_weight(parcels_by_id, assignments)
+    _assert_vehicle_stack_weight(parcels_by_id, assignments, catalog_by_code, vehicle_by_id)
     _assert_placement_validity(assignments, catalog_by_code, vehicle_by_id)
     _assert_load_order_completeness(assignments)
     _assert_lifo_consistency(assignments, load_order_exceptions_by_vehicle)

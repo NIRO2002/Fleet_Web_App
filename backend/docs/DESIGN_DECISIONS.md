@@ -237,3 +237,33 @@ km across the seven field-data types), so it's stored on the catalog row for
 provenance/auditing but is never read by the objective function --
 `fixed_cost + cost_per_km * distance` already fully prices a trip, and
 summing in the bundled quote as well would double-count.
+## Stacking model change (2026-08-20)
+
+Parcel-level `max_stack_weight_kg` is retained as imported source data but is
+no longer treated as a load-bearing capacity constraint. The source field's
+meaning is not sufficiently reliable for cumulative support calculations,
+and applying it that way rejected physically plausible stacks. The vehicle
+catalog's `vehicle_max_stack_weight_kg` remains a hard limit.
+
+Placement now enforces a directly auditable rule: a parcel placed above
+another parcel may weigh at most 0.5 kg more than its immediate support.
+The rule is applied while selecting an open column; parcel delivery/LIFO
+order is not globally weight-sorted. Fragile and non-stackable parcels may
+be placed as the final parcel in a compatible column but cannot support a
+subsequent parcel.
+
+On the ordered prefixes of the real `D-CMB-001 / 2026-01-05` instance in a
+`TRUCK_4T`, the largest successful prefix was 70 with weight ordering and 81
+with the rule disabled. Thus the requested monotonic guard passed, although
+the expected 75-parcel estimate did not: the measured values are 70 and 81.
+At 70 parcels the layer histogram was `0:31, 1:11, 2:11, 3:8, 4:6, 5:3`;
+39/70 (55.7%) were above the floor and their combined 151.339 kg used only
+6.05% of the vehicle's 2,500 kg above-floor allowance.
+
+The full HDBSCAN/capacity-aware/seed-0 run (population 100, generations 200)
+did not improve the optimization headline: relative to the saved pilot,
+utilization changed 21.67% -> 18.38%, vehicles stayed at 18, distance changed
+607.51 -> 622.12 km, cost LKR 175,999 -> 203,558, and runtime changed
+437.21 -> 303.62 s. This is reported as measured rather than tuning the new
+rule to force a utilization gain; NSGA-II stochastic search and the changed
+feasible region can select a different trade-off solution.

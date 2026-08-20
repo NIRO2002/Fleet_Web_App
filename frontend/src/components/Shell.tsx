@@ -1,6 +1,7 @@
 import {
   Bell,
   Boxes,
+  ClipboardList,
   ChevronLeft,
   ChevronRight,
   HelpCircle,
@@ -27,6 +28,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { label: 'Parcel Consolidation', to: '/parcel-consolidation', icon: Boxes },
   { label: 'Load Optimization', to: '/load-optimization', icon: Route },
+  { label: 'Load Plans', to: '/load-plans', icon: ClipboardList },
   { label: 'Vehicle Types', to: '/vehicle-types', icon: Truck },
 ]
 

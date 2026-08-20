@@ -232,6 +232,8 @@ def _process_row(
             temp_max_celsius=float(row["temp_max_celsius"]) if row.get("temp_max_celsius") else None,
             priority_level=row.get("priority_level", "standard"),
             service_type=row.get("service_type", "door_to_door"),
+            # Retained for source-data fidelity; placement deliberately
+            # does not enforce this synthetic per-parcel field.
             max_stack_weight_kg=float(row["max_stack_weight_kg"]) if row.get("max_stack_weight_kg") else 0.0,
             **bool_fields,
         )
