@@ -13,6 +13,7 @@ from pathlib import Path
 
 import hdbscan
 import joblib
+from pymongo import UpdateOne
 
 from app.core.config import settings
 from app.models.parcel import Parcel
@@ -102,7 +103,7 @@ async def train_hdbscan(
                 parcel.cluster_id += label_offset
     if parcels:
         await Parcel.get_motor_collection().bulk_write([
-            __import__("pymongo").UpdateOne({"parcel_id": p.parcel_id}, {"$set": {"cluster_id": p.cluster_id, "cluster_probability": p.cluster_probability, "is_noise": p.is_noise}})
+            UpdateOne({"parcel_id": p.parcel_id}, {"$set": {"cluster_id": p.cluster_id, "cluster_probability": p.cluster_probability, "is_noise": p.is_noise}})
             for p in parcels
         ])
 

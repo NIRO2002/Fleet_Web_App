@@ -106,6 +106,9 @@ def test_clustering_and_capacity_repair_are_deterministic_and_conservative():
     }
     assert len(assignment_a) == len({parcel_id for parcel_id, _ in assignment_a})
     assert all(_fits_some_vehicle(members, FIELD_DATA_VEHICLE_TYPES) for members in first.clusters.values())
+    assert all(cluster_id >= 0 for cluster_id in first.clusters)
+    assert first.excluded_infeasible_count == 0
+    assert all(row == {"feasible": True, "reason": None} for row in first.cluster_status.values())
 
 
 def test_real_priority_is_valid_and_unknown_priority_is_rejected():

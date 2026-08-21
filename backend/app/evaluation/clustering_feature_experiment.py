@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import csv
 import statistics
+import math
 from collections import defaultdict
 from datetime import date
 from itertools import combinations
@@ -58,6 +59,13 @@ def metrics(parcels: list[Parcel], result, config: ClusteringConfig, seed: int, 
     labels = np.asarray(result.labels)
     coords = project_to_metres(parcels, config.depot_lat, config.depot_lon)
     sizes = [int((labels == label).sum()) for label in sorted(set(labels))]
+    non_noise_sizes = [int((labels == label).sum()) for label in sorted(set(labels)) if label >= 0]
+    max_cluster_share = max(non_noise_sizes, default=0) / len(parcels)
+    if len(non_noise_sizes) > 1:
+        shares = np.asarray(non_noise_sizes, dtype=float) / sum(non_noise_sizes)
+        normalized_entropy = float(-np.sum(shares * np.log(shares)) / math.log(len(non_noise_sizes)))
+    else:
+        normalized_entropy = 0.0
     intra = []
     overlaps = []
     for label in sorted(set(labels)):
@@ -70,19 +78,23 @@ def metrics(parcels: list[Parcel], result, config: ClusteringConfig, seed: int, 
     np.fill_diagonal(distances, np.inf)
     purity = np.mean([np.mean(labels[np.argsort(distances[i])[:5]] == labels[i]) for i in range(len(labels))])
     repaired = repair_clusters(group_by_cluster(parcels), FIELD_DATA_VEHICLE_TYPES, seed=seed)
-    infeasible = sum(not _fits_some_vehicle(group, FIELD_DATA_VEHICLE_TYPES) for group in repaired.clusters.values())
+    infeasible = repaired.excluded_infeasible_count
     return {
         "instance_id": f"{parcels[0].depot_id}_{parcels[0].delivery_date}", "depot_id": parcels[0].depot_id,
         "delivery_date": str(parcels[0].delivery_date), "configuration": name,
         "min_cluster_size": config.min_cluster_size, "min_samples": config.min_samples,
         "time_weight": config.time_weight if "time" in config.feature_set else 0,
         "cluster_count": result.n_clusters, "noise_fraction": result.noise_count / len(parcels),
+        "max_cluster_share": max_cluster_share,
+        "normalized_cluster_size_entropy": normalized_entropy,
+        "degenerate": max_cluster_share > 0.60,
         "min_cluster_size_observed": min(sizes), "median_cluster_size": statistics.median(sizes), "max_cluster_size": max(sizes),
         "mean_intra_cluster_distance_km": statistics.mean(intra) / 1000 if intra else 0,
         "median_intra_cluster_distance_km": statistics.median(intra) / 1000 if intra else 0,
         "spatial_purity": float(purity), "temporal_overlap_rate": statistics.mean(overlaps) if overlaps else 0,
         "split_count": repaired.n_split, "merge_count": repaired.n_merged,
         "surviving_cluster_count": repaired.clusters_after, "remaining_infeasible_cluster_count": infeasible, "seed": seed,
+        "excluded_infeasible_cluster_count": infeasible,
     }
 
 
@@ -118,12 +130,15 @@ def main() -> None:
     aggregates = defaultdict(dict)
     for name in configurations:
         selected = [r for r in rows if r["configuration"] == name]
-        for field in ("cluster_count", "noise_fraction", "mean_intra_cluster_distance_km", "spatial_purity", "temporal_overlap_rate", "split_count", "merge_count", "surviving_cluster_count", "remaining_infeasible_cluster_count"):
+        for field in ("cluster_count", "noise_fraction", "max_cluster_share", "normalized_cluster_size_entropy", "mean_intra_cluster_distance_km", "spatial_purity", "temporal_overlap_rate", "split_count", "merge_count", "surviving_cluster_count", "remaining_infeasible_cluster_count"):
             aggregates[name][field] = statistics.mean(r[field] for r in selected)
-    md = ["# Clustering Feature Experiment v2", "", "## Methodology", "", "Three 400-parcel depot/date instances from 2026-01-05; identical HDBSCAN parameters (min_cluster_size=8, min_samples=4), seed 0, and unchanged capacity-aware repair. B uses midpoint and width with time_weight=5 metres/minute. C/D use the pre-vocabulary-fix urgency mapping so Stage 5A can be evaluated separately.", "", "## Aggregate results", "", "| Configuration | Raw clusters | Noise | Mean distance km | Purity | Time overlap | Splits | Merges | Surviving | Infeasible |", "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
+    md = ["# Clustering Feature Experiment v2", "", "## Methodology", "", "Three 400-parcel depot/date instances from 2026-01-05; identical HDBSCAN parameters (min_cluster_size=8, min_samples=4), seed 0, and unchanged capacity-aware repair. B and D explicitly set include_window_width=True and use midpoint plus width with time_weight=5 metres/minute. C/D use the pre-vocabulary-fix urgency mapping so Stage 5A can be evaluated separately. A run is flagged degenerate when its largest non-noise cluster exceeds 60% of the instance.", "", "Spatial purity is only comparable at similar cluster granularity; it is not interpreted when cluster counts differ by more than approximately 2x.", "", "## Per-instance results", "", "| Instance | Configuration | Raw clusters | Noise | Max share | Entropy | Degenerate | Mean km | Purity | Overlap | Surviving |", "|---|---|---:|---:|---:|---:|---|---:|---:|---:|---:|"]
+    for row in rows[:len(instances) * len(configurations)]:
+        md.append(f"| {row['instance_id']} | {row['configuration']} | {row['cluster_count']} | {row['noise_fraction']:.3f} | {row['max_cluster_share']:.3f} | {row['normalized_cluster_size_entropy']:.3f} | {row['degenerate']} | {row['mean_intra_cluster_distance_km']:.3f} | {row['spatial_purity']:.3f} | {row['temporal_overlap_rate']:.3f} | {row['surviving_cluster_count']} |")
+    md += ["", "## Aggregate results", "", "| Configuration | Raw clusters | Noise | Max share | Entropy | Mean distance km | Purity | Time overlap | Splits | Merges | Surviving | Infeasible |", "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
     for name, values in aggregates.items():
-        md.append(f"| {name} | {values['cluster_count']:.2f} | {values['noise_fraction']:.3f} | {values['mean_intra_cluster_distance_km']:.3f} | {values['spatial_purity']:.3f} | {values['temporal_overlap_rate']:.3f} | {values['split_count']:.2f} | {values['merge_count']:.2f} | {values['surviving_cluster_count']:.2f} | {values['remaining_infeasible_cluster_count']:.2f} |")
-    md += ["", "## Sensitivity results", "", "The CSV includes location and location+time sensitivity rows at min_cluster_size/min_samples 5/3 and 10/5, with temporal weights 2 and 10 metres/minute.", "", "## Interpretation and recommendation", "", "A versus B is inconclusive: location-only is geographically tighter and needs fewer splits, while time reduces noise, raises neighbour purity, and leaves fewer repaired clusters; temporal overlap improves only marginally. Urgency sharply reduces spatial purity. Location-only remains the conservative default pending broader validation, not a claimed winner.", "", "## Limitations", "", "One delivery date, three depots, seed 0, a bounded parameter sensitivity, and no NSGA-II runs. HDBSCAN is deterministic; seed affects only downstream seeded repair when a split occurs."]
+        md.append(f"| {name} | {values['cluster_count']:.2f} | {values['noise_fraction']:.3f} | {values['max_cluster_share']:.3f} | {values['normalized_cluster_size_entropy']:.3f} | {values['mean_intra_cluster_distance_km']:.3f} | {values['spatial_purity']:.3f} | {values['temporal_overlap_rate']:.3f} | {values['split_count']:.2f} | {values['merge_count']:.2f} | {values['surviving_cluster_count']:.2f} | {values['remaining_infeasible_cluster_count']:.2f} |")
+    md += ["", "## Sensitivity results", "", "The CSV includes location and location+time sensitivity rows at min_cluster_size/min_samples 5/3 and 10/5, with temporal weights 2 and 10 metres/minute.", "", "## Corrected interpretation", "", "A is stable across all three instances. B is unstable: on D-CMB-001 its largest cluster contains 382/400 parcels (95.5%), which is a degenerate collapse. B's high spatial purity there is an artifact of coarse granularity and is not compared with A's purity. The honest geographic signal is mean intra-cluster distance, which rises from 1.655 km (A) to 2.753 km (B) on that instance. Urgency configurations also reduce geographic purity at comparable granularity. The evidence supports A (location only) as the stable default; this conclusion is based on collapse resistance and geographic cohesion, not fewer clusters.", "", "## Limitations", "", "One delivery date, three depots, seed 0, a bounded parameter sensitivity, and no NSGA-II runs. HDBSCAN is deterministic; seed affects only downstream seeded repair when a split occurs."]
     (OUT_DIR / "clustering_feature_experiment_v2.md").write_text("\n".join(md) + "\n", encoding="utf-8")
 
 

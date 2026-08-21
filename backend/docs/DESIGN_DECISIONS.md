@@ -5,6 +5,78 @@ different reader could reasonably have chosen differently. Recorded here so
 an examiner (or future maintainer) can see the reasoning, not just the
 result.
 
+## Remediation stages 4C–6 (2026-08-21)
+
+### Clustering features and degeneracy
+
+Production HDBSCAN uses projected location only. In the corrected controlled
+experiment, location-only (A) was stable across all three 400-parcel
+instances. Location plus midpoint and width (B) collapsed on
+`D-CMB-001/2026-01-05`: its largest cluster contained 382/400 parcels
+(95.5%, normalized size entropy 0.144), and mean intra-cluster distance rose
+from 1.655 km to 2.753 km. Its 0.976 neighbour purity is not evidence of
+better cohesion because purity approaches one as cluster granularity
+collapses. Purity is therefore compared only when cluster counts are within
+approximately 2x. Urgency variants also reduced geographic purity. SO2 is
+accordingly stated as: **identify stable geographic delivery-density groups
+per depot/date**. Urgency remains on complete Parcel records for downstream
+priority, scheduling, assignment and reporting; it is not a similarity
+feature.
+
+### Time windows are both a soft objective and a coarse repair guard
+
+Parcel delivery compliance is deliberately NSGA-II soft objective f3: hard
+per-parcel enforcement could make real instances have no feasible solution
+and would hide the trade-off the Pareto front is intended to expose. Repair
+does use an independently switchable coarse temporal split predicate. Its
+lower bound is `parcel_count * 4 service minutes + one approximate diameter
+traverse / vehicle speed`, compared with the span from earliest opening to
+latest closing. It is not a tour estimate. The diameter uses a deterministic
+two-sweep farthest-point O(n) lower bound; this avoids the former O(n²)
+matrix inside every vehicle/pair check.
+
+### Noise policy
+
+Raw HDBSCAN cluster count excludes noise. A noise parcel is reassigned only
+when its nearest real-cluster centroid is within 0.75 km. Original-noise
+confidence is sentinel `-1.0` and `Parcel.is_noise` remains true. Unassignable
+points stay `-1` until repair, where each becomes a marked singleton eligible
+for normal feasibility-aware merging. Final repaired IDs are normalized to
+non-negative integers; raw and post-noise counts are reported separately.
+
+### Priority vocabulary
+
+Accepted values include the real dataset's `standard`, `express`, and
+`priority`, plus schema-supported `next_day` and `same_day`. Unknown values
+raise validation errors. The diagnostic urgency score `priority=2.5` between
+`express=2.0` and `same_day=3.0` is an explicit, unverified ordinal
+assumption: the dataset generator is unavailable, and `next_day`/`same_day`
+do not occur in the measured file. It must not be presented as source-backed
+semantics.
+
+### Authoritative depots and fleet ceilings
+
+Depot coordinates and hours come from `depots_table4_sample_10.csv`, Table 4:
+D-CMB-001 `(6.927079,79.861244)`, D-CMB-002
+`(6.864908,79.899678)`, and D-CMB-003 `(6.851320,79.865576)`. The former
+global origin was correct only for D-CMB-001 and invalidated historical
+distance results for the other two depots. Unknown IDs now fail; there is no
+global fallback. Request coordinates are permitted only as an explicit
+latitude/longitude pair for ad-hoc API runs. Depot closing time tightens each
+catalog vehicle's return deadline, and selected plans are rejected above the
+depot's 95/70/58 vehicle ceiling.
+
+### Reproducibility and runtime
+
+Plan UUIDs and timestamps remain operational metadata and are excluded from
+semantic determinism comparisons. With the same seed/config and one worker,
+the gate compares cluster/repair assignments, selected parcel/vehicle
+assignments, objective vectors and constraint vectors byte-for-byte. A real
+400-parcel clustering+repair run measured 3.69 seconds after incremental
+merge caching (about 11.1 hours for 10,800 repair stages). Historical full
+NSGA-II runs measured 292–311 seconds, projecting roughly 36–39 serial days;
+the full evaluation must not launch without parallel-capacity planning.
+
 ## Placement (Fix Pass 4, item S1)
 
 ### Decision 8 — clustering seeds one whole-instance assignment problem

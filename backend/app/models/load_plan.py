@@ -16,6 +16,8 @@ class LoadPlan(Document):
     n_vehicles: int
     n_parcels_with_imputed_dimensions: int = 0
     n_carryover_parcels: int = 0
+    repair_cluster_status: dict[str, dict] = Field(default_factory=dict)
+    excluded_infeasible_cluster_count: int = 0
     run_manifest: dict | None = None
     mean_utilization: float
     total_distance_km: float

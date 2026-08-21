@@ -8,6 +8,8 @@ from app.schemas.parcel import (
 )
 from app.services.data_service import upsert_parcel, import_csv
 from app.services.clustering_service import predict_cluster, train_hdbscan, cluster_summary
+from app.services.clustering_common import ClusteringConfig
+from app.services.depot_service import get_depot_or_fail
 
 router = APIRouter(prefix="/parcels", tags=["parcels"])
 
@@ -61,10 +63,12 @@ async def train_clustering(
     app/services/clustering_service.py."""
     try:
         if dataset_id is None:
+            depot = await get_depot_or_fail(depot_id)
             result, parcels = await train_hdbscan(
                 depot_id,
                 delivery_date,
                 seed=seed,
+                config=ClusteringConfig(depot_lat=depot.lat, depot_lon=depot.lng),
             )
             n_clusters = result.n_clusters
             noise_count = result.noise_count
@@ -84,12 +88,14 @@ async def train_clustering(
             runtime_seconds = 0.0
             label_offset = 0
             for instance_depot, instance_date in instances:
+                depot = await get_depot_or_fail(instance_depot)
                 instance_result, instance_parcels = await train_hdbscan(
                     instance_depot,
                     instance_date,
                     seed=seed,
                     dataset_id=dataset_id,
                     label_offset=label_offset,
+                    config=ClusteringConfig(depot_lat=depot.lat, depot_lon=depot.lng),
                 )
                 parcels.extend(instance_parcels)
                 n_clusters += instance_result.n_clusters

@@ -18,9 +18,10 @@ it into a persisted `LoadPlan`.
 """
 import time
 import uuid
-from dataclasses import asdict
+from dataclasses import asdict, replace
 
 import numpy as np
+from pymongo import UpdateOne
 from starlette.concurrency import run_in_threadpool
 
 from app.core.reproducibility import run_manifest
@@ -46,6 +47,11 @@ def _single_cluster_id(parcel_objs) -> int | None:
     return next(iter(ids)) if len(ids) == 1 else None
 
 
+def _enforce_depot_vehicle_capacity(n_vehicles: int, capacity: int | None) -> None:
+    if capacity is not None and n_vehicles > capacity:
+        raise ValueError(f"Selected plan uses {n_vehicles} vehicles but depot fleet capacity is {capacity}.")
+
+
 async def _optimize_load(
     parcels: list,
     *,
@@ -59,6 +65,9 @@ async def _optimize_load(
     warm_start_clusters: dict[int, list] | None = None,
     catalog_cache: VehicleCatalogCache | None = None,
     preference_weights: list[float] | None = None,
+    depot_operating_end: str | None = None,
+    depot_vehicle_capacity: int | None = None,
+    repair_cluster_status: dict[int, dict] | None = None,
 ):
     """Runs NSGA-II over `parcels` and persists the selected solution as a
     `LoadPlan` with one `VirtualVehicle` + a set of `ParcelAssignment` rows
@@ -73,6 +82,8 @@ async def _optimize_load(
     started = time.perf_counter()
     config = config or AssignmentConfig(depot_lat=depot_lat, depot_lon=depot_lon)
     catalog = await load_catalog_snapshot(depot_id, delivery_date, cache=catalog_cache)
+    if depot_operating_end is not None:
+        catalog = tuple(replace(v, available_until=min(v.available_until, depot_operating_end)) for v in catalog)
     # is_refrigerated/is_hazmat_certified are no longer optimizer constraints
     # (Fix Pass 3 G1 -- out of scope for commercial last-mile delivery) so
     # VehicleTypeSpec no longer carries them, but VirtualVehicle still
@@ -91,6 +102,7 @@ async def _optimize_load(
     selected_row = X[idx]
     slots, type_of_slot = decode(selected_row, problem.n, problem.K)
     used_slots = {sidx: members for sidx, members in slots.items() if members}
+    _enforce_depot_vehicle_capacity(len(used_slots), depot_vehicle_capacity)
     slot_parcel_counts = sorted(len(members) for members in used_slots.values())
     final_population_g = res.pop.get("G") if res.pop is not None else np.empty((0, 0))
     feasible_individuals_final = int(
@@ -202,6 +214,10 @@ async def _optimize_load(
         n_vehicles=len(vehicles_summary),
         n_parcels_with_imputed_dimensions=sum(1 for p in parcels if getattr(p, "dimensions_imputed", False)),
         n_carryover_parcels=n_carryover_parcels,
+        repair_cluster_status={str(key): value for key, value in (repair_cluster_status or {}).items()},
+        excluded_infeasible_cluster_count=sum(
+            not value.get("feasible", False) for value in (repair_cluster_status or {}).values()
+        ),
         run_manifest=run_manifest(catalog=catalog),
         mean_utilization=sum(utilizations) / len(utilizations) if utilizations else 0.0,
         total_distance_km=sum(distances),
@@ -213,7 +229,7 @@ async def _optimize_load(
     )
     await plan.insert()
     await Parcel.get_motor_collection().bulk_write([
-        __import__("pymongo").UpdateOne(
+        UpdateOne(
             {"parcel_id": p.parcel_id},
             {"$set": {
                 "status": "PLANNED",

@@ -7,6 +7,8 @@ from app.models.load_plan import LoadPlan
 from app.models.parcel import Parcel
 from app.schemas.optimization import OptimizationRequest
 from app.services.optimization_service import optimize_load
+from app.services.depot_service import get_depot_or_fail
+from app.optimization.assignment_problem import AssignmentConfig
 from app.services.export_service import load_plan_csv, load_plan_payload
 
 router = APIRouter(prefix="/optimization", tags=["optimization"])
@@ -62,14 +64,24 @@ async def run(payload: OptimizationRequest):
         raise HTTPException(status_code=400, detail="Selected parcels must share exactly one delivery_date")
 
     try:
-        depot_lat = payload.depot_latitude or settings.depot_latitude
-        depot_lon = payload.depot_longitude or settings.depot_longitude
+        depot = await get_depot_or_fail(next(iter(depot_ids)))
+        if (payload.depot_latitude is None) != (payload.depot_longitude is None):
+            raise ValueError("depot_latitude and depot_longitude overrides must be supplied together")
+        depot_lat = payload.depot_latitude if payload.depot_latitude is not None else depot.lat
+        depot_lon = payload.depot_longitude if payload.depot_longitude is not None else depot.lng
         result, _ = await optimize_load(
             parcels,
             depot_id=next(iter(depot_ids)),
             depot_lat=depot_lat,
             depot_lon=depot_lon,
             delivery_date=next(iter(delivery_dates)),
+            config=AssignmentConfig(
+                depot_lat=depot_lat,
+                depot_lon=depot_lon,
+                max_vehicle_slots=depot.vehicle_capacity,
+            ),
+            depot_operating_end=depot.operating_hours_end,
+            depot_vehicle_capacity=depot.vehicle_capacity,
         )
         return result
     except Exception as exc:

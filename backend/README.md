@@ -1,6 +1,6 @@
 # Fleet Web App Backend
 
-This FastAPI service takes parcels for one depot and delivery date, clusters them spatially with HDBSCAN, selects virtual vehicles from a MongoDB-backed catalog with NSGA-II, and persists a load plan. Each plan contains its virtual vehicles and every parcel's 3D cargo position in LIFO loading order. Physical fleet assignment and final route optimization are downstream responsibilities.
+This FastAPI service takes parcels for one depot and delivery date, clusters them into stable geographic density groups with HDBSCAN, selects virtual vehicles from a MongoDB-backed catalog with NSGA-II, and persists a load plan. Urgency and physical attributes remain downstream assignment/loading inputs rather than HDBSCAN similarity features. Each plan contains its virtual vehicles and every parcel's 3D cargo position in LIFO loading order. Physical fleet assignment and final route optimization are downstream responsibilities.
 
 ## Setup
 
