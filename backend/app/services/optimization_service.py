@@ -212,10 +212,18 @@ async def _optimize_load(
         vehicles=virtual_vehicles,
     )
     await plan.insert()
-    await Parcel.get_motor_collection().update_many(
-        {"parcel_id": {"$in": [p.parcel_id for p in parcels]}},
-        {"$set": {"status": "PLANNED", "plan_id": plan_id}},
-    )
+    await Parcel.get_motor_collection().bulk_write([
+        __import__("pymongo").UpdateOne(
+            {"parcel_id": p.parcel_id},
+            {"$set": {
+                "status": "PLANNED",
+                "plan_id": plan_id,
+                "delivery_date": p.delivery_date,
+                "carried_over_from_date": getattr(p, "carried_over_from_date", None),
+            }},
+        )
+        for p in parcels
+    ])
 
     result = {
         "plan_id": plan_id,

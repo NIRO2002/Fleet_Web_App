@@ -78,8 +78,8 @@ def metrics(parcels: list[Parcel], result, config: ClusteringConfig, seed: int, 
         "time_weight": config.time_weight if "time" in config.feature_set else 0,
         "cluster_count": result.n_clusters, "noise_fraction": result.noise_count / len(parcels),
         "min_cluster_size_observed": min(sizes), "median_cluster_size": statistics.median(sizes), "max_cluster_size": max(sizes),
-        "mean_intra_cluster_distance_m": statistics.mean(intra) if intra else 0,
-        "median_intra_cluster_distance_m": statistics.median(intra) if intra else 0,
+        "mean_intra_cluster_distance_km": statistics.mean(intra) / 1000 if intra else 0,
+        "median_intra_cluster_distance_km": statistics.median(intra) / 1000 if intra else 0,
         "spatial_purity": float(purity), "temporal_overlap_rate": statistics.mean(overlaps) if overlaps else 0,
         "split_count": repaired.n_split, "merge_count": repaired.n_merged,
         "surviving_cluster_count": repaired.clusters_after, "remaining_infeasible_cluster_count": infeasible, "seed": seed,
@@ -89,10 +89,9 @@ def metrics(parcels: list[Parcel], result, config: ClusteringConfig, seed: int, 
 def main() -> None:
     configurations = {
         "A_location": dict(feature_set="location"),
-        "B_location_midpoint": dict(feature_set="location_time", include_window_width=False),
-        "B2_location_midpoint_width": dict(feature_set="location_time", include_window_width=True),
-        "C_location_physical": dict(feature_set="location_physical"),
-        "D_location_time_physical": dict(feature_set="location_time_physical", include_window_width=False),
+        "B_location_time": dict(feature_set="location_time", include_window_width=True),
+        "C_location_urgency": dict(feature_set="location_urgency"),
+        "D_location_time_urgency": dict(feature_set="location_time_urgency", include_window_width=True),
     }
     rows = []
     instances = load_instances()
@@ -112,20 +111,20 @@ def main() -> None:
             name = f"sensitivity_{feature_set}_mcs{mcs}_ms{samples}_tw{weight}"
             rows.append(metrics(parcels, cluster(parcels, 0, config), config, 0, name))
     OUT_DIR.mkdir(exist_ok=True)
-    csv_path = OUT_DIR / "clustering_feature_experiment.csv"
+    csv_path = OUT_DIR / "clustering_feature_experiment_v2.csv"
     with csv_path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
         writer.writeheader(); writer.writerows(rows)
     aggregates = defaultdict(dict)
     for name in configurations:
         selected = [r for r in rows if r["configuration"] == name]
-        for field in ("cluster_count", "noise_fraction", "mean_intra_cluster_distance_m", "spatial_purity", "temporal_overlap_rate", "split_count", "merge_count", "surviving_cluster_count", "remaining_infeasible_cluster_count"):
+        for field in ("cluster_count", "noise_fraction", "mean_intra_cluster_distance_km", "spatial_purity", "temporal_overlap_rate", "split_count", "merge_count", "surviving_cluster_count", "remaining_infeasible_cluster_count"):
             aggregates[name][field] = statistics.mean(r[field] for r in selected)
-    md = ["# Clustering Feature Experiment", "", "## Methodology", "", "Three 400-parcel depot/date instances from 2026-01-05; identical HDBSCAN parameters (min_cluster_size=8, min_samples=4), seed 0, and unchanged capacity-aware repair. Geographic coordinates use a local equirectangular projection in metres; time_weight=5 metres/minute. B2 adds window width. C/D are diagnostic only.", "", "## Aggregate results", "", "| Configuration | Clusters | Noise | Mean distance m | Purity | Time overlap | Splits | Merges | Surviving | Infeasible |", "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
+    md = ["# Clustering Feature Experiment v2", "", "## Methodology", "", "Three 400-parcel depot/date instances from 2026-01-05; identical HDBSCAN parameters (min_cluster_size=8, min_samples=4), seed 0, and unchanged capacity-aware repair. B uses midpoint and width with time_weight=5 metres/minute. C/D use the pre-vocabulary-fix urgency mapping so Stage 5A can be evaluated separately.", "", "## Aggregate results", "", "| Configuration | Raw clusters | Noise | Mean distance km | Purity | Time overlap | Splits | Merges | Surviving | Infeasible |", "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
     for name, values in aggregates.items():
-        md.append(f"| {name} | {values['cluster_count']:.2f} | {values['noise_fraction']:.3f} | {values['mean_intra_cluster_distance_m']:.1f} | {values['spatial_purity']:.3f} | {values['temporal_overlap_rate']:.3f} | {values['split_count']:.2f} | {values['merge_count']:.2f} | {values['surviving_cluster_count']:.2f} | {values['remaining_infeasible_cluster_count']:.2f} |")
-    md += ["", "## Sensitivity results", "", "The CSV includes location and location+time sensitivity rows at min_cluster_size/min_samples 5/3 and 10/5, with temporal weights 2 and 10 metres/minute.", "", "## Interpretation and recommendation", "", "Location-only is recommended. Midpoint time produced no meaningful temporal-overlap gain, slightly increased geographic spread, and required more repair splits. Window width reduced noise but more than doubled geographic spread. Physical configurations sharply reduced spatial purity. The recommendation is based on coherence and downstream usefulness, not cluster count.", "", "## Limitations", "", "One delivery date, three depots, seed 0, a bounded parameter sensitivity, and no NSGA-II runs. HDBSCAN is deterministic; seed affects only downstream seeded repair when a split occurs."]
-    (OUT_DIR / "clustering_feature_experiment.md").write_text("\n".join(md) + "\n", encoding="utf-8")
+        md.append(f"| {name} | {values['cluster_count']:.2f} | {values['noise_fraction']:.3f} | {values['mean_intra_cluster_distance_km']:.3f} | {values['spatial_purity']:.3f} | {values['temporal_overlap_rate']:.3f} | {values['split_count']:.2f} | {values['merge_count']:.2f} | {values['surviving_cluster_count']:.2f} | {values['remaining_infeasible_cluster_count']:.2f} |")
+    md += ["", "## Sensitivity results", "", "The CSV includes location and location+time sensitivity rows at min_cluster_size/min_samples 5/3 and 10/5, with temporal weights 2 and 10 metres/minute.", "", "## Interpretation and recommendation", "", "A versus B is inconclusive: location-only is geographically tighter and needs fewer splits, while time reduces noise, raises neighbour purity, and leaves fewer repaired clusters; temporal overlap improves only marginally. Urgency sharply reduces spatial purity. Location-only remains the conservative default pending broader validation, not a claimed winner.", "", "## Limitations", "", "One delivery date, three depots, seed 0, a bounded parameter sensitivity, and no NSGA-II runs. HDBSCAN is deterministic; seed affects only downstream seeded repair when a split occurs."]
+    (OUT_DIR / "clustering_feature_experiment_v2.md").write_text("\n".join(md) + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":

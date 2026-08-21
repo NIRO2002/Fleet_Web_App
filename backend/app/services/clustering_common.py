@@ -23,7 +23,7 @@ METRES_PER_KM = 1000.0
 # Ordinal urgency proxy derived from Parcel.priority_level. A deliberate,
 # documented modelling choice (not in the original spec's literal field
 # list) standing in for the "urgency" feature block.
-PRIORITY_SCORE = {"standard": 0.0, "next_day": 1.0, "express": 2.0, "same_day": 3.0}
+PRIORITY_SCORE = {"standard": 0.0, "next_day": 1.0, "express": 2.0, "priority": 2.5, "same_day": 3.0}
 
 
 @dataclass
@@ -39,14 +39,16 @@ class ClusteringConfig:
     # unequal raw-unit scaling (the defect this replaces; see
     # docs/DESIGN_DECISIONS.md).
     feature_set: Literal[
-        "location", "location_time", "location_physical", "location_time_physical"
+        "location", "location_time", "location_urgency", "location_time_urgency",
+        "location_physical", "location_time_physical"
     ] = "location"
     include_window_width: bool = False
     time_weight: float = 5.0  # metres per minute
     physical_weight: float = 500.0  # metres per standard deviation; experiment only
+    urgency_weight: float = 500.0  # metres per standard deviation; experiment only
 
     noise_strategy: Literal["nearest_cluster", "singleton"] = "nearest_cluster"
-    noise_max_assign_km: float = 3.0
+    noise_max_assign_km: float = 0.75
 
     # Required only by the K-Means baseline's k-selection (SO5). Left
     # unset here deliberately — app/services/ must never contain a vehicle
@@ -63,6 +65,7 @@ class ClusterResult:
     runtime_seconds: float
     method: str
     metadata: dict = field(default_factory=dict)
+    post_noise_cluster_count: int | None = None
 
 
 def project_to_metric(parcels: list, depot_lat: float, depot_lon: float) -> np.ndarray:
@@ -146,6 +149,8 @@ def feature_names(config: ClusteringConfig) -> tuple[str, ...]:
             names.append("window_width_min")
     if "physical" in config.feature_set:
         names.extend(("weight_kg", "volume_m3", "length_cm", "width_cm", "height_cm", "fragile", "stackable"))
+    if "urgency" in config.feature_set:
+        names.append("priority_score")
     return tuple(names)
 
 
@@ -153,6 +158,7 @@ def feature_names(config: ClusteringConfig) -> tuple[str, ...]:
 class FeatureTransformer:
     config: ClusteringConfig
     physical_scaler: StandardScaler | None = None
+    urgency_scaler: StandardScaler | None = None
 
     def transform(self, parcels: list) -> np.ndarray:
         blocks = [project_to_metres(parcels, self.config.depot_lat, self.config.depot_lon)]
@@ -167,6 +173,10 @@ class FeatureTransformer:
                 raise ValueError("physical transformer is not fitted")
             physical = self.physical_scaler.transform(_physical_features(parcels))
             blocks.append(physical * self.config.physical_weight)
+        if "urgency" in self.config.feature_set:
+            if self.urgency_scaler is None:
+                raise ValueError("urgency transformer is not fitted")
+            blocks.append(self.urgency_scaler.transform(_urgency_features(parcels)) * self.config.urgency_weight)
         return np.hstack(blocks)
 
 
@@ -176,6 +186,8 @@ def build_feature_matrix(
     transformer = FeatureTransformer(config=config)
     if "physical" in config.feature_set:
         transformer.physical_scaler = StandardScaler().fit(_physical_features(parcels))
+    if "urgency" in config.feature_set:
+        transformer.urgency_scaler = StandardScaler().fit(_urgency_features(parcels))
     return transformer.transform(parcels), transformer
 
 
@@ -222,11 +234,15 @@ async def _get_planning_instance(
 
     carryover: list[Parcel] = []
     if include_carryover:
-        carryover = await Parcel.find({"depot_id": depot_id, "delivery_date": {"$lt": delivery_date}, "status": {"$in": ["PENDING", "FAILED"]}}).to_list()
-        for parcel in carryover:
-            parcel.carried_over_from_date = parcel.delivery_date
+        stored_carryover = await Parcel.find({"depot_id": depot_id, "delivery_date": {"$lt": delivery_date}, "status": {"$in": ["PENDING", "FAILED"]}}).to_list()
+        for stored in stored_carryover:
+            # Loading an evaluation/planning instance must never mutate the
+            # benchmark collection. The eventual plan-commit path owns any
+            # persistent status/date transition.
+            parcel = stored.model_copy(deep=True)
+            parcel.carried_over_from_date = stored.delivery_date
             parcel.delivery_date = delivery_date
-            await parcel.save()
+            carryover.append(parcel)
 
     return sorted(same_day + carryover, key=lambda p: p.parcel_id)
 
@@ -258,7 +274,6 @@ def handle_noise(
     real_ids = sorted(set(labels[~noise_mask].tolist()))
     new_labels = labels.copy()
     centroids = {lbl: coords[labels == lbl].mean(axis=0) for lbl in real_ids}
-    next_singleton_id = (max(real_ids) + 1) if real_ids else 0
 
     for i in np.where(noise_mask)[0]:
         assigned = False
@@ -272,7 +287,10 @@ def handle_noise(
                 new_labels[i] = best_lbl
                 assigned = True
         if not assigned:
-            new_labels[i] = next_singleton_id
-            next_singleton_id += 1
+            # Keep genuinely unassignable points as noise until capacity
+            # repair, where they are represented as marked singleton inputs
+            # and can be merged under the same feasibility rules as any
+            # other undersized cluster.
+            new_labels[i] = -1
 
     return new_labels

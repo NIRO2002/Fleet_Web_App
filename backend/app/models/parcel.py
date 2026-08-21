@@ -1,10 +1,10 @@
 from datetime import date, datetime
 from beanie import Document, Indexed
-from pydantic import Field
+from pydantic import Field, field_validator
 from pymongo import ASCENDING, IndexModel
 from app.utils_datetime import utcnow
 
-PRIORITY_LEVELS = {"standard", "next_day", "express", "same_day"}
+PRIORITY_LEVELS = {"standard", "next_day", "express", "same_day", "priority"}
 
 class Parcel(Document):
     parcel_id: Indexed(str, unique=True)
@@ -45,6 +45,14 @@ class Parcel(Document):
     @property
     def special_handling(self) -> bool:
         return self.hazardous or self.requires_refrigeration or self.two_person_lift
+
+    @field_validator("priority_level")
+    @classmethod
+    def validate_priority_level(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in PRIORITY_LEVELS:
+            raise ValueError(f"priority_level must be one of {sorted(PRIORITY_LEVELS)}")
+        return normalized
 
     class Settings:
         name = "parcels"

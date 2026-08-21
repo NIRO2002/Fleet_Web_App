@@ -4,9 +4,14 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from pydantic import ValidationError
 
 from app.services.clustering_common import ClusteringConfig, build_feature_matrix, feature_names, project_to_metres
 from app.services.clustering_service import cluster
+from app.models.parcel import Parcel
+from app.services.capacity_aware_clustering import _fits_some_vehicle, group_by_cluster, repair_clusters
+from app.db.seed_vehicle_types import FIELD_DATA_VEHICLE_TYPES
+from app.evaluation.clustering_feature_experiment import load_instances
 
 
 def parcels(n=12):
@@ -31,6 +36,7 @@ def test_default_features_exclude_every_physical_attribute():
         p.length_cm = p.width_cm = p.height_cm = 999
         p.fragile = not p.fragile
         p.stackable = not p.stackable
+        p.max_stack_weight_kg = 999999
     assert np.array_equal(build_feature_matrix(original, config)[0], build_feature_matrix(changed, config)[0])
 
 
@@ -72,3 +78,45 @@ def test_hdbscan_is_semantically_deterministic():
             grouped[p.cluster_id].append(p)
         assert all(len({p.depot_id for p in members}) == 1 for members in grouped.values())
         assert all(len({p.delivery_date for p in members}) == 1 for members in grouped.values())
+
+
+def test_clustering_and_capacity_repair_are_deterministic_and_conservative():
+    source = next(iter(load_instances().values()))
+
+    def run_once():
+        rows = [p.model_copy(deep=True) for p in source]
+        cluster(rows, seed=11, config=ClusteringConfig())
+        repaired = repair_clusters(
+            group_by_cluster(rows), FIELD_DATA_VEHICLE_TYPES, seed=11,
+        )
+        assignment = sorted(
+            (parcel.parcel_id, cluster_id)
+            for cluster_id, members in repaired.clusters.items()
+            for parcel in members
+        )
+        return rows, repaired, assignment
+
+    first_rows, first, assignment_a = run_once()
+    _second_rows, second, assignment_b = run_once()
+
+    assert assignment_a == assignment_b
+    assert first.audit == second.audit
+    assert {parcel.parcel_id for parcel in first_rows} == {
+        parcel.parcel_id for members in first.clusters.values() for parcel in members
+    }
+    assert len(assignment_a) == len({parcel_id for parcel_id, _ in assignment_a})
+    assert all(_fits_some_vehicle(members, FIELD_DATA_VEHICLE_TYPES) for members in first.clusters.values())
+
+
+def test_real_priority_is_valid_and_unknown_priority_is_rejected():
+    valid = Parcel.model_construct(priority_level="priority")
+    assert valid.priority_level == "priority"
+    payload = parcels(1)[0].__dict__.copy()
+    payload["priority_level"] = "mystery"
+    with pytest.raises(ValidationError):
+        Parcel.model_validate(payload)
+
+
+def test_empty_catalog_fails_clearly():
+    with pytest.raises(ValueError, match="non-empty vehicle catalog"):
+        repair_clusters({0: parcels(2)}, [])

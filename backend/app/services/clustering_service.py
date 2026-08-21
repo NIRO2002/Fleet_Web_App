@@ -55,16 +55,19 @@ def cluster(parcels: list[Parcel], seed: int, config: ClusteringConfig | None = 
 
     for parcel, label, probability in zip(parcels, final_labels, model.probabilities_):
         parcel.cluster_id = int(label)
-        parcel.cluster_probability = float(probability)
+        # -1.0 is the documented sentinel for a point HDBSCAN originally
+        # labelled noise, including points geographically reassigned later.
+        parcel.cluster_probability = -1.0 if parcel.is_noise else float(probability)
 
     runtime = time.perf_counter() - t0
     return ClusterResult(
         labels=final_labels,
-        n_clusters=len(set(final_labels.tolist())),
+        n_clusters=len({label for label in raw_labels.tolist() if label >= 0}),
         noise_count=noise_count,
         runtime_seconds=runtime,
         method="hdbscan",
         metadata={"seed": seed, "model": model, "scaler": scaler},
+        post_noise_cluster_count=len({label for label in final_labels.tolist() if label >= 0}),
     )
 
 

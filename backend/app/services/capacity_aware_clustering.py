@@ -40,6 +40,8 @@ class RepairConfig:
     # the worst case. Ten preserves a safety bound without prematurely
     # returning a cluster that the placement-aware predicate just rejected.
     max_split_recursion_depth: int = 10
+    enforce_temporal_feasibility: bool = True
+    service_time_minutes: float = 4.0
 
 
 @dataclass
@@ -55,12 +57,23 @@ class RepairedClusters:
 
 def group_by_cluster(parcels: list[Parcel]) -> dict[int, list[Parcel]]:
     groups: dict[int, list[Parcel]] = {}
+    next_noise_id = -1
     for parcel in parcels:
-        groups.setdefault(parcel.cluster_id, []).append(parcel)
+        cluster_id = parcel.cluster_id
+        if cluster_id == -1:
+            # Noise points remain individually identifiable until repair;
+            # negative IDs mark them as mergeable noise-origin singletons.
+            cluster_id = next_noise_id
+            next_noise_id -= 1
+        groups.setdefault(cluster_id, []).append(parcel)
     return groups
 
 
-def _fits_some_vehicle(parcels: list[Parcel], vehicle_catalog) -> bool:
+def _fits_some_vehicle(
+    parcels: list[Parcel], vehicle_catalog, config: RepairConfig | None = None,
+    depot_lat: float = settings.depot_latitude, depot_lon: float = settings.depot_longitude,
+) -> bool:
+    config = config or RepairConfig()
     if not vehicle_catalog:
         return False
     total_weight = sum(p.weight_kg for p in parcels)
@@ -77,6 +90,18 @@ def _fits_some_vehicle(parcels: list[Parcel], vehicle_catalog) -> bool:
         cargo_longest = max(vehicle.cargo_length_cm, vehicle.cargo_width_cm, vehicle.cargo_height_cm)
         if longest_side > cargo_longest:
             continue
+        if config.enforce_temporal_feasibility and len(parcels) > 1:
+            starts = [minutes(p.time_window_start) for p in parcels]
+            ends = [minutes(p.time_window_end) for p in parcels]
+            reachable_span = max(ends) - min(starts)
+            coords = project_to_metric(parcels, depot_lat, depot_lon)
+            diameter_km = float(np.max(np.linalg.norm(coords[:, None, :] - coords[None, :, :], axis=2)))
+            lower_bound_minutes = (
+                len(parcels) * config.service_time_minutes
+                + diameter_km / max(vehicle.avg_speed_kmh, 1e-6) * 60.0
+            )
+            if lower_bound_minutes > reachable_span:
+                continue
         if attempt_placement(parcels, vehicle, collect_exceptions=False) is not None:
             return True
     return False
@@ -139,7 +164,7 @@ def _split_oversize(
 
     while queue:
         cluster_id, parcels, depth = queue.pop(0)
-        fits = len(parcels) <= 1 or _fits_some_vehicle(parcels, vehicle_catalog)
+        fits = len(parcels) <= 1 or _fits_some_vehicle(parcels, vehicle_catalog, config, depot_lat, depot_lon)
         audit.append({
             "operation": "split_check",
             "cluster_id": cluster_id,
@@ -214,7 +239,7 @@ def _merge_undersize(
                 parcels_a, parcels_b = clusters[cid_a], clusters[cid_b]
                 if _cluster_handling_key(parcels_a) != _cluster_handling_key(parcels_b):
                     continue
-                if not _fits_some_vehicle(parcels_a + parcels_b, vehicle_catalog):
+                if not _fits_some_vehicle(parcels_a + parcels_b, vehicle_catalog, config, depot_lat, depot_lon):
                     continue
 
                 centroid_a = project_to_metric(parcels_a, depot_lat, depot_lon).mean(axis=0)
@@ -254,6 +279,8 @@ def repair_clusters(
     seed: int = 0,
 ) -> RepairedClusters:
     config = config or RepairConfig()
+    if not vehicle_catalog:
+        raise ValueError("capacity-aware repair requires a non-empty vehicle catalog")
     clusters = {cid: list(parcels) for cid, parcels in parcels_by_cluster.items()}
     clusters_before = len(clusters)
     total_before = sum(len(p) for p in clusters.values())
