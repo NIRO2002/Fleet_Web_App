@@ -9,6 +9,7 @@ skipped and why, and which rows were accepted with a caveat.
 import csv
 import io
 import logging
+from datetime import date
 from typing import Optional
 
 from pydantic import ValidationError
@@ -107,14 +108,18 @@ def _normalize_time(value: str) -> str:
 
 
 def _map_columns(fieldnames: list[str]) -> dict[str, str]:
-    return {name: COLUMN_ALIASES.get(name, name) for name in fieldnames}
+    return {
+        name: COLUMN_ALIASES.get(name.strip().lower(), name.strip().lower())
+        for name in fieldnames
+    }
 
 
 def _leakage_columns_present(fieldnames: list[str]) -> set[str]:
     dropped = {
         name
         for name in fieldnames
-        if name in LEAKAGE_COLUMNS or name.startswith(LEAKAGE_COLUMN_PREFIXES)
+        if name.strip().lower() in LEAKAGE_COLUMNS
+        or name.strip().lower().startswith(LEAKAGE_COLUMN_PREFIXES)
     }
     if dropped:
         logger.warning(
@@ -134,6 +139,9 @@ def _process_row(
     bounds: dict,
     errors: list[dict],
     warnings: list[dict],
+    default_depot_id: str | None = None,
+    default_delivery_date: date | None = None,
+    dataset_id: str | None = None,
 ) -> Optional[ParcelIn]:
     row: dict[str, str] = {}
     for raw_key, raw_value in raw_row.items():
@@ -221,8 +229,9 @@ def _process_row(
     try:
         payload = ParcelIn(
             parcel_id=parcel_id,
-            depot_id=row.get("depot_id") or None,
-            delivery_date=row.get("delivery_date") or None,
+            dataset_id=dataset_id,
+            depot_id=row.get("depot_id") or default_depot_id,
+            delivery_date=row.get("delivery_date") or default_delivery_date,
             latitude=latitude,
             longitude=longitude,
             weight_kg=weight_kg,
@@ -303,7 +312,13 @@ async def _bulk_upsert_parcels(payloads: list[ParcelIn]) -> tuple[int, int]:
     return len(inserts), len(updates)
 
 
-async def _import_csv(content: bytes, bounds: dict | None = None) -> dict:
+async def _import_csv(
+    content: bytes,
+    bounds: dict | None = None,
+    default_depot_id: str | None = None,
+    default_delivery_date: date | None = None,
+    dataset_id: str | None = None,
+) -> dict:
     """Import the minimal 8-column format or the full upstream dataset
     (rich column names are mapped via COLUMN_ALIASES). Never raises on a
     per-row problem — every failure is collected and returned so the caller
@@ -320,9 +335,22 @@ async def _import_csv(content: bytes, bounds: dict | None = None) -> dict:
     warnings: list[dict] = []
     accepted: dict[str, ParcelIn] = {}
     duplicates_removed = 0
+    total_rows = 0
 
     for row_index, raw_row in enumerate(reader, start=2):  # header is row 1
-        payload = _process_row(raw_row, row_index, mapping, leakage_columns, bounds, errors, warnings)
+        total_rows += 1
+        payload = _process_row(
+            raw_row,
+            row_index,
+            mapping,
+            leakage_columns,
+            bounds,
+            errors,
+            warnings,
+            default_depot_id,
+            default_delivery_date,
+            dataset_id,
+        )
         if payload is None:
             continue
         if payload.parcel_id in accepted:
@@ -333,9 +361,13 @@ async def _import_csv(content: bytes, bounds: dict | None = None) -> dict:
     dimensions_imputed_count = sum(1 for payload in accepted.values() if payload.dimensions_imputed)
 
     return {
+        "dataset_id": dataset_id or "",
         "inserted": inserted,
         "updated": updated,
         "skipped": len(errors),
+        "failed": len(errors),
+        "processed": len(accepted),
+        "total_rows": total_rows,
         "duplicates_removed": duplicates_removed,
         "dimensions_imputed_count": dimensions_imputed_count,
         "errors": errors,

@@ -291,3 +291,21 @@ infeasibility rate 11.1%; two capacity-on arms also regressed slightly in
 median utilization versus `launch_pilot`. The full evaluation was therefore
 not launched and no parameter was tuned post hoc. See
 `docs/PRE_LAUNCH_REPORT.md` for the complete evidence and projection.
+# HDBSCAN delivery-similarity features (2026-08-21)
+
+HDBSCAN runs independently per `(depot_id, delivery_date)` and uses a local
+equirectangular projection in metres. This is physically meaningful over the
+small study areas and avoids independently z-scoring latitude and longitude.
+Time is encoded as window midpoint (optionally width), with an explicit
+`time_weight` in metres per minute; the tested default was 5 m/min.
+
+The controlled three-depot experiment supported **location-only** as the
+production default. Adding midpoint time gave essentially no temporal-overlap
+gain, slightly worsened geographic spread, and caused more repair splits.
+Adding width doubled geographic spread despite lower noise. Diagnostic
+physical configurations sharply reduced spatial purity. Therefore weight,
+volume, dimensions, fragility and stackability are excluded from production
+HDBSCAN similarity while remaining on complete Parcel objects for unchanged
+capacity-aware repair, NSGA-II and placement. The feature set stays
+configurable so this decision can be re-evaluated on datasets with stronger
+time-window separation.

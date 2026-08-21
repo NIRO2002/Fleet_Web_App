@@ -17,17 +17,28 @@ export const parcelService = {
   list: () => api.get<Parcel[]>(`/parcels?${instanceQuery()}`),
   listForInstance: (depotId: string, deliveryDate: string) =>
     api.get<Parcel[]>(`/parcels?depot_id=${encodeURIComponent(depotId)}&delivery_date=${encodeURIComponent(deliveryDate)}`),
-  create: (payload: ParcelInput) =>
-    api.post<Parcel>('/parcels', { ...payload, depot_id: DEMO_DEPOT_ID, delivery_date: demoDeliveryDate() }),
+  listForDataset: (datasetId: string) =>
+    api.get<Parcel[]>(`/parcels?dataset_id=${encodeURIComponent(datasetId)}`),
+  create: (payload: ParcelInput, datasetId?: string) =>
+    api.post<Parcel>('/parcels', {
+      ...payload,
+      dataset_id: datasetId,
+      depot_id: DEMO_DEPOT_ID,
+      delivery_date: demoDeliveryDate(),
+    }),
 
   uploadCsv: (file: File) => {
     const form = new FormData()
     form.append('file', file)
-    return api.postForm<CsvUploadResult>('/parcels/upload-csv', form)
+    return api.postForm<CsvUploadResult>(`/parcels/upload-csv?${instanceQuery()}`, form)
   },
 
-  trainClustering: () => api.post<ClusteringTrainResult>(`/parcels/clustering/train?${instanceQuery()}`),
-  getClusterSummary: () => api.get<ClusterSummary>(`/parcels/clustering?${instanceQuery()}`),
+  trainClustering: (datasetId?: string) => api.post<ClusteringTrainResult>(
+    `/parcels/clustering/train?${instanceQuery()}${datasetId ? `&dataset_id=${encodeURIComponent(datasetId)}` : ''}`,
+  ),
+  getClusterSummary: (datasetId?: string) => api.get<ClusterSummary>(
+    `/parcels/clustering?${instanceQuery()}${datasetId ? `&dataset_id=${encodeURIComponent(datasetId)}` : ''}`,
+  ),
   predictCluster: (parcel: ParcelInput) =>
     api.post<ClusterPrediction>(`/parcels/clustering/predict?${instanceQuery()}`, {
       parcel: { ...parcel, depot_id: DEMO_DEPOT_ID, delivery_date: demoDeliveryDate() },

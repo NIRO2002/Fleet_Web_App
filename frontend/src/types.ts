@@ -12,6 +12,9 @@ export interface User {
 
 export interface ParcelInput {
   parcel_id: string
+  dataset_id?: string | null
+  depot_id?: string | null
+  delivery_date?: string | null
   latitude: number
   longitude: number
   weight_kg: number
@@ -54,8 +57,17 @@ export interface ClusteringTrainResult {
 }
 
 export interface CsvUploadResult {
+  dataset_id: string
   inserted: number
+  updated: number
   skipped: number
+  failed: number
+  processed: number
+  total_rows: number
+  duplicates_removed: number
+  dimensions_imputed_count: number
+  errors: Array<{ row: number; field: string; reason: string }>
+  warnings: Array<{ row: number; field: string; reason: string }>
 }
 
 // --- Optimization (mirrors backend app/schemas/optimization.py) ----------

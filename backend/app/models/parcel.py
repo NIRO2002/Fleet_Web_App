@@ -8,6 +8,7 @@ PRIORITY_LEVELS = {"standard", "next_day", "express", "same_day"}
 
 class Parcel(Document):
     parcel_id: Indexed(str, unique=True)
+    dataset_id: str | None = None
     depot_id: str | None = None
     delivery_date: date | None = None
     latitude: float
@@ -47,4 +48,4 @@ class Parcel(Document):
 
     class Settings:
         name = "parcels"
-        indexes = [IndexModel([("depot_id", ASCENDING), ("delivery_date", ASCENDING)]), "status"]
+        indexes = [IndexModel([("depot_id", ASCENDING), ("delivery_date", ASCENDING)]), "dataset_id", "status"]

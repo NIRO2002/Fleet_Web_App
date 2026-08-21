@@ -18,6 +18,7 @@ from app.models.parcel import Parcel
 from app.utils_time import minutes
 
 EARTH_RADIUS_KM = 6371.0088
+METRES_PER_KM = 1000.0
 
 # Ordinal urgency proxy derived from Parcel.priority_level. A deliberate,
 # documented modelling choice (not in the original spec's literal field
@@ -37,9 +38,12 @@ class ClusteringConfig:
     # dominance is now a deliberate, tunable choice, not an artifact of
     # unequal raw-unit scaling (the defect this replaces; see
     # docs/DESIGN_DECISIONS.md).
-    feature_weights: dict = field(
-        default_factory=lambda: {"spatial": 1.0, "time_window": 0.5, "urgency": 0.3}
-    )
+    feature_set: Literal[
+        "location", "location_time", "location_physical", "location_time_physical"
+    ] = "location"
+    include_window_width: bool = False
+    time_weight: float = 5.0  # metres per minute
+    physical_weight: float = 500.0  # metres per standard deviation; experiment only
 
     noise_strategy: Literal["nearest_cluster", "singleton"] = "nearest_cluster"
     noise_max_assign_km: float = 3.0
@@ -75,6 +79,11 @@ def project_to_metric(parcels: list, depot_lat: float, depot_lon: float) -> np.n
         for p in parcels
     ]
     return np.asarray(out, dtype=float)
+
+
+def project_to_metres(parcels: list, depot_lat: float, depot_lon: float) -> np.ndarray:
+    """Local metric projection for clustering; accurate for depot-scale instances."""
+    return project_to_metric(parcels, depot_lat, depot_lon) * METRES_PER_KM
 
 
 def _time_window_features(parcels: list) -> np.ndarray:
@@ -120,28 +129,72 @@ def raw_feature_matrix(parcels: list, depot_lat: float, depot_lon: float) -> np.
     return np.hstack([spatial, time_features, urgency])
 
 
+def _physical_features(parcels: list) -> np.ndarray:
+    """Physical diagnostic block for experiment C/D, never the default."""
+    return np.asarray([
+        [p.weight_kg, p.volume_m3, p.length_cm or 0.0, p.width_cm or 0.0,
+         p.height_cm or 0.0, float(p.fragile), float(p.stackable)]
+        for p in parcels
+    ], dtype=float)
+
+
+def feature_names(config: ClusteringConfig) -> tuple[str, ...]:
+    names = ["projected_x_m", "projected_y_m"]
+    if "time" in config.feature_set:
+        names.append("window_midpoint_min")
+        if config.include_window_width:
+            names.append("window_width_min")
+    if "physical" in config.feature_set:
+        names.extend(("weight_kg", "volume_m3", "length_cm", "width_cm", "height_cm", "fragile", "stackable"))
+    return tuple(names)
+
+
+@dataclass
+class FeatureTransformer:
+    config: ClusteringConfig
+    physical_scaler: StandardScaler | None = None
+
+    def transform(self, parcels: list) -> np.ndarray:
+        blocks = [project_to_metres(parcels, self.config.depot_lat, self.config.depot_lon)]
+        if "time" in self.config.feature_set:
+            temporal = _time_window_features(parcels)
+            columns = [temporal[:, :1] * self.config.time_weight]
+            if self.config.include_window_width:
+                columns.append(temporal[:, 1:2] * self.config.time_weight)
+            blocks.append(np.hstack(columns))
+        if "physical" in self.config.feature_set:
+            if self.physical_scaler is None:
+                raise ValueError("physical transformer is not fitted")
+            physical = self.physical_scaler.transform(_physical_features(parcels))
+            blocks.append(physical * self.config.physical_weight)
+        return np.hstack(blocks)
+
+
 def build_feature_matrix(
     parcels: list, config: ClusteringConfig
-) -> tuple[np.ndarray, StandardScaler]:
-    raw = raw_feature_matrix(parcels, config.depot_lat, config.depot_lon)
-    scaler = StandardScaler()
-    scaled = scaler.fit_transform(raw)
-    weighted = scaled * _weight_vector(config.feature_weights)
-    return weighted, scaler
+) -> tuple[np.ndarray, FeatureTransformer]:
+    transformer = FeatureTransformer(config=config)
+    if "physical" in config.feature_set:
+        transformer.physical_scaler = StandardScaler().fit(_physical_features(parcels))
+    return transformer.transform(parcels), transformer
 
 
 def transform_with_scaler(
-    parcels: list, scaler: StandardScaler, config: ClusteringConfig
+    parcels: list, scaler: FeatureTransformer, config: ClusteringConfig
 ) -> np.ndarray:
     """Apply an already-fitted scaler (e.g. at single-parcel prediction
     time) instead of refitting on one row."""
-    raw = raw_feature_matrix(parcels, config.depot_lat, config.depot_lon)
-    scaled = scaler.transform(raw)
-    return scaled * _weight_vector(config.feature_weights)
+    if not isinstance(scaler, FeatureTransformer):
+        raise ValueError("Stored clustering model uses the retired feature pipeline; retrain HDBSCAN.")
+    return scaler.transform(parcels)
 
 
 async def _get_planning_instance(
-    depot_id: str, delivery_date, *, include_carryover: bool = True
+    depot_id: str,
+    delivery_date,
+    *,
+    include_carryover: bool = True,
+    dataset_id: str | None = None,
 ) -> list[Parcel]:
     """The only sanctioned way to load parcels for clustering/optimization —
     always scoped to one (depot_id, delivery_date) instance. Replaces the
@@ -160,6 +213,9 @@ async def _get_planning_instance(
     window shows up honestly as a compliance cost (objective f3) instead of
     being silently rewritten."""
     same_day_filter = {"depot_id": depot_id, "delivery_date": delivery_date, "status": "PENDING"}
+    if dataset_id is not None:
+        same_day_filter["dataset_id"] = dataset_id
+        include_carryover = False
     if not include_carryover:
         same_day_filter["carried_over_from_date"] = None
     same_day = await Parcel.find(same_day_filter).to_list()
