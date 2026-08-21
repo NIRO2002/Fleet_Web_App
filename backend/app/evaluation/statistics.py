@@ -30,15 +30,55 @@ def _instance_key(row):
     return row["depot_id"], row["delivery_date"]
 
 
-def aggregate_median_by_instance(rows, *, method, capacity_aware):
+def aggregate_median_by_instance(rows, *, method, capacity_aware, full_seed_count=None):
+    arm_rows = [row for row in rows if row["method"] == method and row["capacity_aware"] == capacity_aware]
+    if full_seed_count is None:
+        full_seed_count = len({row["seed"] for row in arm_rows})
     grouped = {}
-    for row in rows:
-        if row["method"] != method or row["capacity_aware"] != capacity_aware or not row.get("feasible", True):
+    for row in arm_rows:
+        if not row.get("feasible", True):
             continue
         bucket = grouped.setdefault(_instance_key(row), {metric: [] for metric in METRICS})
         for metric in METRICS:
             bucket[metric].append(row[metric])
-    return {key: {m: pystats.median(v) for m, v in values.items()} for key, values in grouped.items()}
+    aggregates = {}
+    for key, values in grouped.items():
+        n_seeds = len(values[next(iter(METRICS))])
+        aggregates[key] = {m: pystats.median(v) for m, v in values.items()}
+        aggregates[key]["n_seeds"] = n_seeds
+        aggregates[key]["full_seed_count"] = full_seed_count
+        aggregates[key]["seed_count_below_half"] = bool(full_seed_count and n_seeds < full_seed_count / 2)
+    return aggregates
+
+
+def seed_count_distribution(rows, *, full_seed_count=None):
+    """Summarise feasible seed contributions across every instance/arm cell."""
+    counts = []
+    below_full = []
+    below_half = []
+    arms = sorted({(row["method"], row["capacity_aware"]) for row in rows})
+    inferred_full = full_seed_count or len({row["seed"] for row in rows})
+    for method, capacity_aware in arms:
+        aggregated = aggregate_median_by_instance(
+            rows, method=method, capacity_aware=capacity_aware,
+            full_seed_count=inferred_full,
+        )
+        for instance, cell in aggregated.items():
+            count = cell["n_seeds"]
+            counts.append(count)
+            identity = {"instance": instance, "method": method, "capacity_aware": capacity_aware, "n_seeds": count}
+            if count < inferred_full:
+                below_full.append(identity)
+            if cell["seed_count_below_half"]:
+                below_half.append(identity)
+    return {
+        "full_seed_count": inferred_full,
+        "minimum": min(counts) if counts else 0,
+        "median": pystats.median(counts) if counts else 0,
+        "cells_below_full_count": len(below_full),
+        "below_full_cells": below_full,
+        "below_half_cells": below_half,
+    }
 
 
 def paired_instance_audit(a, b):
@@ -107,6 +147,8 @@ class ComparisonRow:
     effect_size: float
     n_zero_diffs: int
     direction: str
+    seed_counts_a: tuple[int, ...] = ()
+    seed_counts_b: tuple[int, ...] = ()
 
 
 def _iqr(values):
@@ -131,7 +173,13 @@ def compare(a, b, *, label_a, label_b):
             result = wilcoxon(va, vb, zero_method="wilcox")
             statistic, p_value = float(result.statistic), float(result.pvalue)
         direction = f"{label_a} > {label_b}" if effect > 1e-9 else f"{label_b} > {label_a}" if effect < -1e-9 else "no difference"
-        rows.append(ComparisonRow(key, label, len(shared), pystats.median(va), _iqr(va), pystats.median(vb), _iqr(vb), statistic, p_value, p_value, effect, zeros, direction))
+        rows.append(ComparisonRow(
+            key, label, len(shared), pystats.median(va), _iqr(va),
+            pystats.median(vb), _iqr(vb), statistic, p_value, p_value,
+            effect, zeros, direction,
+            tuple(a[i]["n_seeds"] for i in shared),
+            tuple(b[i]["n_seeds"] for i in shared),
+        ))
     for row, adjusted in zip(rows, holm_bonferroni([r.p_value for r in rows])):
         row.p_value_adjusted = adjusted
     return rows
@@ -150,7 +198,9 @@ def run_h2_capacity_aware_ablation(rows, *, method="hdbscan"):
 
 
 def to_markdown_table(rows, *, label_a, label_b, title):
-    lines = [f"### {title}", "", f"Holm family: {', '.join(HOLM_FAMILY)}.", "", f"| Metric | n | median ({label_a}) | IQR ({label_a}) | median ({label_b}) | IQR ({label_b}) | W | p (raw) | p (Holm) | effect size (r) | direction | zero diffs |", "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---:|"]
+    def seed_summary(values):
+        return f"{min(values)}/{pystats.median(values):g}/{max(values)}" if values else "n/a"
+    lines = [f"### {title}", "", f"Holm family: {', '.join(HOLM_FAMILY)}.", "", "Seed columns show minimum/median/maximum feasible seeds contributing per paired instance; cells below half the configured seed count must be flagged in the accompanying seed audit.", "", f"| Metric | n | seeds ({label_a}) | seeds ({label_b}) | median ({label_a}) | IQR ({label_a}) | median ({label_b}) | IQR ({label_b}) | W | p (raw) | p (Holm) | effect size (r) | direction | zero diffs |", "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---:|"]
     for r in rows:
-        lines.append(f"| {r.metric_label} | {r.n} | {r.median_a:.4g} | {r.iqr_a:.4g} | {r.median_b:.4g} | {r.iqr_b:.4g} | {r.statistic:.4g} | {r.p_value:.4g} | {r.p_value_adjusted:.4g} | {r.effect_size:.3f} | {r.direction} | {r.n_zero_diffs} |")
+        lines.append(f"| {r.metric_label} | {r.n} | {seed_summary(r.seed_counts_a)} | {seed_summary(r.seed_counts_b)} | {r.median_a:.4g} | {r.iqr_a:.4g} | {r.median_b:.4g} | {r.iqr_b:.4g} | {r.statistic:.4g} | {r.p_value:.4g} | {r.p_value_adjusted:.4g} | {r.effect_size:.3f} | {r.direction} | {r.n_zero_diffs} |")
     return "\n".join(lines)
