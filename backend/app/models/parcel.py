@@ -3,6 +3,7 @@ from beanie import Document, Indexed
 from pydantic import Field, field_validator
 from pymongo import ASCENDING, IndexModel
 from app.utils_datetime import utcnow
+from app.db.bson import DATE_BSON_ENCODERS
 
 PRIORITY_LEVELS = {"standard", "next_day", "express", "same_day", "priority"}
 
@@ -56,4 +57,5 @@ class Parcel(Document):
 
     class Settings:
         name = "parcels"
+        bson_encoders = DATE_BSON_ENCODERS
         indexes = [IndexModel([("depot_id", ASCENDING), ("delivery_date", ASCENDING)]), "dataset_id", "status"]

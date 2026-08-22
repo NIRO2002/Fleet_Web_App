@@ -122,7 +122,7 @@ export function VehicleTypesPage() {
             <RefreshCw className="h-4 w-4" /> Refresh
           </SecondaryButton>
         }
-        description="Define vehicle capability types (e.g. Bajaj Three Wheeler) the optimizer can plan around. These are not physical vehicles — registered vehicles will reference a type."
+        description="Define vehicle capability types (e.g. Bajaj Three Wheeler) the optimizer can plan around. These are not physical vehicles - registered vehicles will reference a type."
         title="Vehicle Types"
       />
 
@@ -197,7 +197,7 @@ export function VehicleTypesPage() {
                 <td className="px-5 py-4 font-black text-fleet-ink">{capability.name}</td>
                 <td className="px-5 py-4 text-fleet-muted">{capability.category}</td>
                 <td className="px-5 py-4 text-fleet-muted">
-                  {[capability.brand, capability.model].filter(Boolean).join(' ') || '—'}
+                  {[capability.brand, capability.model].filter(Boolean).join(' ') || '-'}
                 </td>
                 <td className="px-5 py-4 font-semibold">{capability.max_weight_kg} kg</td>
                 <td className="px-5 py-4 text-fleet-muted">

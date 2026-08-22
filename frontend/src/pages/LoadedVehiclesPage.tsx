@@ -9,6 +9,7 @@ import { parcelService } from '../services/parcelService'
 import { ApiError } from '../services/api'
 import type { LoadPlan, LoadPlanVehicle, VehicleType } from '../types'
 import { formatKg, formatM3, formatNumber, formatPercent } from '../utils/format'
+import { readSession, writeSession } from '../utils/sessionStore'
 
 const VEHICLE_ICON: Record<VehicleType, LucideIcon> = {
   BIKE: Bike,
@@ -27,11 +28,18 @@ type Notice = { tone: 'success' | 'error' | 'info'; text: string } | null
 const DEPOT_CHOICES = ['D-CMB-001', 'D-CMB-002', 'D-CMB-003']
 
 export function LoadedVehiclesPage() {
-  const [depotId, setDepotId] = useState(DEPOT_CHOICES[0])
+  const [depotId, setDepotId] = useState(() => readSession('loadedVehicles.depotId', DEPOT_CHOICES[0]))
   // Real parcels are dated across the bundled dataset's own window, not "today" --
   // 2026-01-05 is the instance every depot in DEPOT_CHOICES has real parcels for.
-  const [deliveryDate, setDeliveryDate] = useState('2026-01-05')
+  const [deliveryDate, setDeliveryDate] = useState(() => readSession('loadedVehicles.deliveryDate', '2026-01-05'))
   const [plan, setPlan] = useState<LoadPlan | null>(null)
+
+  useEffect(() => {
+    writeSession('loadedVehicles.depotId', depotId)
+  }, [depotId])
+  useEffect(() => {
+    writeSession('loadedVehicles.deliveryDate', deliveryDate)
+  }, [deliveryDate])
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
@@ -67,7 +75,7 @@ export function LoadedVehiclesPage() {
   const handleGenerate = async () => {
     setElapsedSeconds(0)
     setGenerating(true)
-    setNotice({ tone: 'info', text: 'Clustering parcels (HDBSCAN) then searching vehicle assignments (NSGA-II) — a 200-generation run can take several minutes.' })
+    setNotice({ tone: 'info', text: 'Clustering parcels (HDBSCAN) then searching vehicle assignments (NSGA-II) - a 200-generation run can take several minutes.' })
     try {
       const parcels = await parcelService.listForInstance(depotId, deliveryDate)
       const parcelIds = parcels.map((p) => p.parcel_id)
@@ -91,7 +99,7 @@ export function LoadedVehiclesPage() {
 
   const handleReady = async (vehicle: LoadPlanVehicle) => {
     setReadyPending((prev) => new Set(prev).add(vehicle.virtual_vehicle_id))
-    // Optimistic update — the badge flips to READY immediately, then reverts if the server rejects it.
+    // Optimistic update - the badge flips to READY immediately, then reverts if the server rejects it.
     setPlan((prev) => prev && {
       ...prev,
       vehicles: prev.vehicles.map((v) => v.virtual_vehicle_id === vehicle.virtual_vehicle_id ? { ...v, status: 'READY', ready_at: new Date().toISOString() } : v),

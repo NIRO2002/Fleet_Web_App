@@ -30,7 +30,7 @@ from app.services.clustering_common import (
 def cluster(parcels: list[Parcel], seed: int, config: ClusteringConfig | None = None) -> ClusterResult:
     """Same interface as `baseline_clustering.cluster` so the evaluation
     harness (Phase 5) can swap methods behind one call. `seed` is accepted
-    for interface parity — HDBSCAN's own fit is deterministic given its
+    for interface parity - HDBSCAN's own fit is deterministic given its
     inputs, so it is threaded through only for the metadata record, not
     used to seed anything internally today."""
     config = config or ClusteringConfig()

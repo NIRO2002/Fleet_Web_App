@@ -1,0 +1,2017 @@
+{
+  "run_id": "D-CMB-001_2026-01-05_hdbscan_features-location_tw5_ww0_cap1_seed0",
+  "depot_id": "D-CMB-001",
+  "delivery_date": "2026-01-05",
+  "method": "hdbscan",
+  "capacity_aware": true,
+  "seed": 0,
+  "feature_set": "location",
+  "time_weight": 5.0,
+  "include_window_width": false,
+  "n_parcels": 782,
+  "excluded_parcels": 0,
+  "raw_cluster_count": 12,
+  "post_noise_cluster_count": 12,
+  "noise_count": 89,
+  "noise_fraction": 0.11381074168797954,
+  "max_cluster_share": 0.12276214833759591,
+  "normalized_cluster_size_entropy": 0.9699597229736843,
+  "degenerate": false,
+  "mean_utilization": 0.25395753992013953,
+  "mean_weight_utilization": 0.15282235031265032,
+  "mean_volume_utilization": 0.25395753992013953,
+  "utilization_ceiling_capacity": 0.9992442795626058,
+  "utilization_greedy_reference": 0.3180437797647059,
+  "achieved_vs_greedy_reference": 0.7984986850175834,
+  "total_distance_km": 1221.6561959663586,
+  "mean_time_window_compliance": 0.6388521642041521,
+  "total_fleet_cost": 430994.76171852835,
+  "n_vehicles": 24,
+  "hypervolume": 876345.6374047513,
+  "pareto_front_size": 100,
+  "feasible": true,
+  "feasible_individuals_final": 100,
+  "max_constraint_violation": 0.0,
+  "temporal_split_predicate_count": 0,
+  "runtime_seconds": 787.8417554000043,
+  "repair_audit": {
+    "enabled": true,
+    "n_split": 9,
+    "n_merged": 38,
+    "clusters_before": 73,
+    "clusters_after": 44,
+    "cluster_status": {
+      "0": {
+        "feasible": true,
+        "reason": null
+      },
+      "1": {
+        "feasible": true,
+        "reason": null
+      },
+      "2": {
+        "feasible": true,
+        "reason": null
+      },
+      "3": {
+        "feasible": true,
+        "reason": null
+      },
+      "4": {
+        "feasible": true,
+        "reason": null
+      },
+      "5": {
+        "feasible": true,
+        "reason": null
+      },
+      "6": {
+        "feasible": true,
+        "reason": null
+      },
+      "7": {
+        "feasible": true,
+        "reason": null
+      },
+      "8": {
+        "feasible": true,
+        "reason": null
+      },
+      "9": {
+        "feasible": true,
+        "reason": null
+      },
+      "10": {
+        "feasible": true,
+        "reason": null
+      },
+      "11": {
+        "feasible": true,
+        "reason": null
+      },
+      "12": {
+        "feasible": true,
+        "reason": null
+      },
+      "13": {
+        "feasible": true,
+        "reason": null
+      },
+      "14": {
+        "feasible": true,
+        "reason": null
+      },
+      "15": {
+        "feasible": true,
+        "reason": null
+      },
+      "16": {
+        "feasible": true,
+        "reason": null
+      },
+      "17": {
+        "feasible": true,
+        "reason": null
+      },
+      "18": {
+        "feasible": true,
+        "reason": null
+      },
+      "19": {
+        "feasible": true,
+        "reason": null
+      },
+      "20": {
+        "feasible": true,
+        "reason": null
+      },
+      "21": {
+        "feasible": true,
+        "reason": null
+      },
+      "22": {
+        "feasible": true,
+        "reason": null
+      },
+      "23": {
+        "feasible": true,
+        "reason": null
+      },
+      "24": {
+        "feasible": true,
+        "reason": null
+      },
+      "25": {
+        "feasible": true,
+        "reason": null
+      },
+      "26": {
+        "feasible": true,
+        "reason": null
+      },
+      "27": {
+        "feasible": true,
+        "reason": null
+      },
+      "28": {
+        "feasible": true,
+        "reason": null
+      },
+      "29": {
+        "feasible": true,
+        "reason": null
+      },
+      "30": {
+        "feasible": true,
+        "reason": null
+      },
+      "31": {
+        "feasible": true,
+        "reason": null
+      },
+      "32": {
+        "feasible": true,
+        "reason": null
+      },
+      "33": {
+        "feasible": true,
+        "reason": null
+      },
+      "34": {
+        "feasible": true,
+        "reason": null
+      },
+      "35": {
+        "feasible": true,
+        "reason": null
+      },
+      "36": {
+        "feasible": true,
+        "reason": null
+      },
+      "37": {
+        "feasible": true,
+        "reason": null
+      },
+      "38": {
+        "feasible": true,
+        "reason": null
+      },
+      "39": {
+        "feasible": true,
+        "reason": null
+      },
+      "40": {
+        "feasible": true,
+        "reason": null
+      },
+      "41": {
+        "feasible": true,
+        "reason": null
+      },
+      "42": {
+        "feasible": true,
+        "reason": null
+      },
+      "43": {
+        "feasible": true,
+        "reason": null
+      }
+    },
+    "audit": [
+      {
+        "operation": "split_check",
+        "cluster_id": 9,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 83,
+        "total_weight_kg": 566.713,
+        "total_volume_m3": 4.374196756,
+        "longest_parcel_dimension_cm": 127.6,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": 7,
+        "depth": 0,
+        "fits_some_vehicle": false,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 83,
+        "total_weight_kg": 573.323,
+        "total_volume_m3": 4.408404448,
+        "longest_parcel_dimension_cm": 136.2,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split",
+        "cluster_id": 7,
+        "into": [
+          12,
+          13
+        ],
+        "sizes": [
+          78,
+          5
+        ]
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": 5,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 61,
+        "total_weight_kg": 412.817,
+        "total_volume_m3": 3.648890773,
+        "longest_parcel_dimension_cm": 82.9,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": 4,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 46,
+        "total_weight_kg": 306.286,
+        "total_volume_m3": 2.939948386,
+        "longest_parcel_dimension_cm": 47.46,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": 2,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 45,
+        "total_weight_kg": 284.05,
+        "total_volume_m3": 2.64521131,
+        "longest_parcel_dimension_cm": 45.06,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": 6,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 73,
+        "total_weight_kg": 725.381,
+        "total_volume_m3": 5.767313963,
+        "longest_parcel_dimension_cm": 92.2,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": 3,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 65,
+        "total_weight_kg": 695.115,
+        "total_volume_m3": 5.691362117,
+        "longest_parcel_dimension_cm": 71.7,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": 1,
+        "depth": 0,
+        "fits_some_vehicle": false,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 62,
+        "total_weight_kg": 818.384,
+        "total_volume_m3": 10.685839824,
+        "longest_parcel_dimension_cm": 66.26,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split",
+        "cluster_id": 1,
+        "into": [
+          14,
+          15
+        ],
+        "sizes": [
+          61,
+          1
+        ]
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": 0,
+        "depth": 0,
+        "fits_some_vehicle": false,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 62,
+        "total_weight_kg": 894.176,
+        "total_volume_m3": 11.547119609,
+        "longest_parcel_dimension_cm": 86.1,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split",
+        "cluster_id": 0,
+        "into": [
+          16,
+          17
+        ],
+        "sizes": [
+          61,
+          1
+        ]
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -1,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 40.44,
+        "total_volume_m3": 0.250937379,
+        "longest_parcel_dimension_cm": 90.3,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -2,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 1.127,
+        "total_volume_m3": 0.014362956,
+        "longest_parcel_dimension_cm": 26.3,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": 11,
+        "depth": 0,
+        "fits_some_vehicle": false,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 96,
+        "total_weight_kg": 849.382,
+        "total_volume_m3": 6.578214813,
+        "longest_parcel_dimension_cm": 133.5,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split",
+        "cluster_id": 11,
+        "into": [
+          18,
+          19
+        ],
+        "sizes": [
+          22,
+          74
+        ]
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": 10,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 26,
+        "total_weight_kg": 133.185,
+        "total_volume_m3": 1.285168305,
+        "longest_parcel_dimension_cm": 99.6,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -3,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 3.559,
+        "total_volume_m3": 0.01439718,
+        "longest_parcel_dimension_cm": 29.5,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -4,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 4.311,
+        "total_volume_m3": 0.071282592,
+        "longest_parcel_dimension_cm": 53.4,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -5,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 3.528,
+        "total_volume_m3": 0.03548818,
+        "longest_parcel_dimension_cm": 48.1,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": 8,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 19,
+        "total_weight_kg": 107.986,
+        "total_volume_m3": 0.658226696,
+        "longest_parcel_dimension_cm": 70.4,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -6,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 2.765,
+        "total_volume_m3": 0.03515895,
+        "longest_parcel_dimension_cm": 39.5,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -7,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 9.696,
+        "total_volume_m3": 0.04315496,
+        "longest_parcel_dimension_cm": 59.0,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -8,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 6.823,
+        "total_volume_m3": 0.027544428,
+        "longest_parcel_dimension_cm": 36.6,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -9,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 6.878,
+        "total_volume_m3": 0.082100616,
+        "longest_parcel_dimension_cm": 67.3,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -10,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 2.193,
+        "total_volume_m3": 0.024557728,
+        "longest_parcel_dimension_cm": 41.6,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -11,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 6.984,
+        "total_volume_m3": 0.04389952,
+        "longest_parcel_dimension_cm": 47.8,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -12,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 7.487,
+        "total_volume_m3": 0.04504164,
+        "longest_parcel_dimension_cm": 43.0,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -13,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 5.436,
+        "total_volume_m3": 0.026664,
+        "longest_parcel_dimension_cm": 40.0,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -14,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 3.823,
+        "total_volume_m3": 0.042378696,
+        "longest_parcel_dimension_cm": 41.4,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -15,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 5.479,
+        "total_volume_m3": 0.039999674,
+        "longest_parcel_dimension_cm": 43.3,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -16,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 8.77,
+        "total_volume_m3": 0.03498405,
+        "longest_parcel_dimension_cm": 59.0,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -17,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 0.637,
+        "total_volume_m3": 0.00706758,
+        "longest_parcel_dimension_cm": 24.6,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -18,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 0.328,
+        "total_volume_m3": 0.001572772,
+        "longest_parcel_dimension_cm": 22.9,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -19,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 14.347,
+        "total_volume_m3": 0.38891457,
+        "longest_parcel_dimension_cm": 127.8,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -20,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 1.879,
+        "total_volume_m3": 0.01381754,
+        "longest_parcel_dimension_cm": 34.7,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -21,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 3.275,
+        "total_volume_m3": 0.037470888,
+        "longest_parcel_dimension_cm": 53.2,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -22,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 4.103,
+        "total_volume_m3": 0.01612156,
+        "longest_parcel_dimension_cm": 43.0,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -23,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 6.98,
+        "total_volume_m3": 0.135876972,
+        "longest_parcel_dimension_cm": 92.4,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -24,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 3.665,
+        "total_volume_m3": 0.02825064,
+        "longest_parcel_dimension_cm": 39.6,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -25,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 5.873,
+        "total_volume_m3": 0.027905141,
+        "longest_parcel_dimension_cm": 40.7,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -26,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 29.65,
+        "total_volume_m3": 0.1729626,
+        "longest_parcel_dimension_cm": 89.0,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -27,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 7.463,
+        "total_volume_m3": 0.0444822,
+        "longest_parcel_dimension_cm": 35.7,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -28,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 3.909,
+        "total_volume_m3": 0.056879823,
+        "longest_parcel_dimension_cm": 50.7,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -29,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 1.601,
+        "total_volume_m3": 0.0082212,
+        "longest_parcel_dimension_cm": 26.0,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -30,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 2.397,
+        "total_volume_m3": 0.026379785,
+        "longest_parcel_dimension_cm": 40.1,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -31,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 1.344,
+        "total_volume_m3": 0.002441664,
+        "longest_parcel_dimension_cm": 31.4,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -32,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 23.395,
+        "total_volume_m3": 0.145084681,
+        "longest_parcel_dimension_cm": 58.7,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -33,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 4.582,
+        "total_volume_m3": 0.037022328,
+        "longest_parcel_dimension_cm": 44.7,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -34,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 5.682,
+        "total_volume_m3": 0.02553684,
+        "longest_parcel_dimension_cm": 50.5,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -35,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 15.132,
+        "total_volume_m3": 0.064386288,
+        "longest_parcel_dimension_cm": 46.6,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -36,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 9.064,
+        "total_volume_m3": 0.0415541,
+        "longest_parcel_dimension_cm": 58.0,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -37,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 2.004,
+        "total_volume_m3": 0.010127545,
+        "longest_parcel_dimension_cm": 29.3,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -38,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 1.688,
+        "total_volume_m3": 0.01455894,
+        "longest_parcel_dimension_cm": 34.2,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -39,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 25.762,
+        "total_volume_m3": 0.235321632,
+        "longest_parcel_dimension_cm": 75.6,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -40,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 8.056,
+        "total_volume_m3": 0.038201282,
+        "longest_parcel_dimension_cm": 46.6,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -41,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 3.457,
+        "total_volume_m3": 0.019467348,
+        "longest_parcel_dimension_cm": 31.3,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -42,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 9.803,
+        "total_volume_m3": 0.131193288,
+        "longest_parcel_dimension_cm": 68.1,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -43,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 2.905,
+        "total_volume_m3": 0.038435904,
+        "longest_parcel_dimension_cm": 37.7,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -44,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 6.808,
+        "total_volume_m3": 0.058302,
+        "longest_parcel_dimension_cm": 65.6,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -45,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 0.903,
+        "total_volume_m3": 0.003771264,
+        "longest_parcel_dimension_cm": 36.8,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -46,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 4.116,
+        "total_volume_m3": 0.05425455,
+        "longest_parcel_dimension_cm": 48.9,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -47,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 6.043,
+        "total_volume_m3": 0.033725304,
+        "longest_parcel_dimension_cm": 45.6,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -48,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 2.993,
+        "total_volume_m3": 0.041735238,
+        "longest_parcel_dimension_cm": 52.7,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -49,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 3.406,
+        "total_volume_m3": 0.03990168,
+        "longest_parcel_dimension_cm": 58.8,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -50,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 2.019,
+        "total_volume_m3": 0.011822832,
+        "longest_parcel_dimension_cm": 31.7,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -51,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 19.273,
+        "total_volume_m3": 0.052663766,
+        "longest_parcel_dimension_cm": 45.7,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -52,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 0.819,
+        "total_volume_m3": 0.007747245,
+        "longest_parcel_dimension_cm": 29.7,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -53,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 12.247,
+        "total_volume_m3": 0.049691488,
+        "longest_parcel_dimension_cm": 46.9,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -54,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 12.002,
+        "total_volume_m3": 0.581308608,
+        "longest_parcel_dimension_cm": 113.8,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -55,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 15.44,
+        "total_volume_m3": 0.2927995,
+        "longest_parcel_dimension_cm": 87.5,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -56,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 3.715,
+        "total_volume_m3": 0.033839532,
+        "longest_parcel_dimension_cm": 47.8,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -57,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 5.946,
+        "total_volume_m3": 0.040862464,
+        "longest_parcel_dimension_cm": 49.6,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -58,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 28.492,
+        "total_volume_m3": 0.638158092,
+        "longest_parcel_dimension_cm": 101.2,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -59,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 5.641,
+        "total_volume_m3": 0.040334336,
+        "longest_parcel_dimension_cm": 51.2,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -60,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 14.726,
+        "total_volume_m3": 0.052173088,
+        "longest_parcel_dimension_cm": 53.8,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": -61,
+        "depth": 0,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 2.598,
+        "total_volume_m3": 0.016735425,
+        "longest_parcel_dimension_cm": 38.1,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": 12,
+        "depth": 1,
+        "fits_some_vehicle": false,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 78,
+        "total_weight_kg": 522.457,
+        "total_volume_m3": 4.02733241,
+        "longest_parcel_dimension_cm": 136.2,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split",
+        "cluster_id": 12,
+        "into": [
+          20,
+          21
+        ],
+        "sizes": [
+          62,
+          16
+        ]
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": 13,
+        "depth": 1,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 5,
+        "total_weight_kg": 50.866,
+        "total_volume_m3": 0.381072038,
+        "longest_parcel_dimension_cm": 80.3,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": 14,
+        "depth": 1,
+        "fits_some_vehicle": false,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 61,
+        "total_weight_kg": 809.017,
+        "total_volume_m3": 10.647191676,
+        "longest_parcel_dimension_cm": 66.26,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split",
+        "cluster_id": 14,
+        "into": [
+          22,
+          23
+        ],
+        "sizes": [
+          60,
+          1
+        ]
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": 15,
+        "depth": 1,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 9.367,
+        "total_volume_m3": 0.038648148,
+        "longest_parcel_dimension_cm": 45.3,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": 16,
+        "depth": 1,
+        "fits_some_vehicle": false,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 61,
+        "total_weight_kg": 850.411,
+        "total_volume_m3": 11.29727549,
+        "longest_parcel_dimension_cm": 67.23,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split",
+        "cluster_id": 16,
+        "into": [
+          24,
+          25
+        ],
+        "sizes": [
+          30,
+          31
+        ]
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": 17,
+        "depth": 1,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 43.765,
+        "total_volume_m3": 0.249844119,
+        "longest_parcel_dimension_cm": 86.1,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": 18,
+        "depth": 1,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 22,
+        "total_weight_kg": 231.847,
+        "total_volume_m3": 1.646641329,
+        "longest_parcel_dimension_cm": 101.5,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": 19,
+        "depth": 1,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 74,
+        "total_weight_kg": 617.535,
+        "total_volume_m3": 4.931573484,
+        "longest_parcel_dimension_cm": 133.5,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": 20,
+        "depth": 2,
+        "fits_some_vehicle": false,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 62,
+        "total_weight_kg": 436.267,
+        "total_volume_m3": 3.564564722,
+        "longest_parcel_dimension_cm": 136.2,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split",
+        "cluster_id": 20,
+        "into": [
+          26,
+          27
+        ],
+        "sizes": [
+          38,
+          24
+        ]
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": 21,
+        "depth": 2,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 16,
+        "total_weight_kg": 86.19,
+        "total_volume_m3": 0.462767688,
+        "longest_parcel_dimension_cm": 91.1,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": 22,
+        "depth": 2,
+        "fits_some_vehicle": false,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 60,
+        "total_weight_kg": 806.79,
+        "total_volume_m3": 10.63383034,
+        "longest_parcel_dimension_cm": 66.26,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split",
+        "cluster_id": 22,
+        "into": [
+          28,
+          29
+        ],
+        "sizes": [
+          25,
+          35
+        ]
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": 23,
+        "depth": 2,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 1,
+        "total_weight_kg": 2.227,
+        "total_volume_m3": 0.013361336,
+        "longest_parcel_dimension_cm": 33.4,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": 24,
+        "depth": 2,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 30,
+        "total_weight_kg": 424.271,
+        "total_volume_m3": 5.49401556,
+        "longest_parcel_dimension_cm": 67.23,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": 25,
+        "depth": 2,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 31,
+        "total_weight_kg": 426.14,
+        "total_volume_m3": 5.80325993,
+        "longest_parcel_dimension_cm": 65.35,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": 26,
+        "depth": 3,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 38,
+        "total_weight_kg": 250.912,
+        "total_volume_m3": 1.619155231,
+        "longest_parcel_dimension_cm": 87.6,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": 27,
+        "depth": 3,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 24,
+        "total_weight_kg": 185.355,
+        "total_volume_m3": 1.945409491,
+        "longest_parcel_dimension_cm": 136.2,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": 28,
+        "depth": 3,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 25,
+        "total_weight_kg": 345.0,
+        "total_volume_m3": 4.45783018,
+        "longest_parcel_dimension_cm": 66.24,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "split_check",
+        "cluster_id": 29,
+        "depth": 3,
+        "fits_some_vehicle": true,
+        "temporal_split_predicate_fired": false,
+        "parcel_count": 35,
+        "total_weight_kg": 461.79,
+        "total_volume_m3": 6.17600016,
+        "longest_parcel_dimension_cm": 66.26,
+        "largest_vehicle_code": "TRUCK_4T",
+        "largest_capacity_kg": 4500.0,
+        "largest_capacity_m3": 24.02,
+        "largest_max_parcels": 420,
+        "largest_cargo_dimension_cm": 520.0
+      },
+      {
+        "operation": "merge",
+        "into": -49,
+        "absorbed": -36,
+        "centroid_distance_km": 0.14516531607426142
+      },
+      {
+        "operation": "merge",
+        "into": -38,
+        "absorbed": -3,
+        "centroid_distance_km": 0.2505917292430248
+      },
+      {
+        "operation": "merge",
+        "into": -57,
+        "absorbed": -29,
+        "centroid_distance_km": 0.2783918276394095
+      },
+      {
+        "operation": "merge",
+        "into": -26,
+        "absorbed": -1,
+        "centroid_distance_km": 0.2975730860543105
+      },
+      {
+        "operation": "merge",
+        "into": -53,
+        "absorbed": -7,
+        "centroid_distance_km": 0.31315969672598876
+      },
+      {
+        "operation": "merge",
+        "into": -21,
+        "absorbed": -13,
+        "centroid_distance_km": 0.32297704771798497
+      },
+      {
+        "operation": "merge",
+        "into": -22,
+        "absorbed": -4,
+        "centroid_distance_km": 0.33192290315518824
+      },
+      {
+        "operation": "merge",
+        "into": -48,
+        "absorbed": -16,
+        "centroid_distance_km": 0.3359900532393026
+      },
+      {
+        "operation": "merge",
+        "into": -39,
+        "absorbed": -5,
+        "centroid_distance_km": 0.3726573527799326
+      },
+      {
+        "operation": "merge",
+        "into": -57,
+        "absorbed": -2,
+        "centroid_distance_km": 0.4058747672266914
+      },
+      {
+        "operation": "merge",
+        "into": -52,
+        "absorbed": -47,
+        "centroid_distance_km": 0.538276568085935
+      },
+      {
+        "operation": "merge",
+        "into": -61,
+        "absorbed": -53,
+        "centroid_distance_km": 0.5555504923190092
+      },
+      {
+        "operation": "merge",
+        "into": -58,
+        "absorbed": -31,
+        "centroid_distance_km": 0.7304433190957829
+      },
+      {
+        "operation": "merge",
+        "into": 13,
+        "absorbed": 27,
+        "centroid_distance_km": 0.7563191054521796
+      },
+      {
+        "operation": "merge",
+        "into": 10,
+        "absorbed": 18,
+        "centroid_distance_km": 0.7598808936179352
+      },
+      {
+        "operation": "merge",
+        "into": -54,
+        "absorbed": -23,
+        "centroid_distance_km": 0.7826506625549655
+      },
+      {
+        "operation": "merge",
+        "into": -32,
+        "absorbed": -10,
+        "centroid_distance_km": 0.7839627873455918
+      },
+      {
+        "operation": "merge",
+        "into": -52,
+        "absorbed": -32,
+        "centroid_distance_km": 0.7340996595599799
+      },
+      {
+        "operation": "merge",
+        "into": -22,
+        "absorbed": -8,
+        "centroid_distance_km": 0.8157885652713763
+      },
+      {
+        "operation": "merge",
+        "into": -19,
+        "absorbed": -9,
+        "centroid_distance_km": 0.8242409513304
+      },
+      {
+        "operation": "merge",
+        "into": -22,
+        "absorbed": -19,
+        "centroid_distance_km": 0.882385016478419
+      },
+      {
+        "operation": "merge",
+        "into": -45,
+        "absorbed": -44,
+        "centroid_distance_km": 0.9023693141413719
+      },
+      {
+        "operation": "merge",
+        "into": -57,
+        "absorbed": -39,
+        "centroid_distance_km": 1.1172552492187517
+      },
+      {
+        "operation": "merge",
+        "into": -61,
+        "absorbed": -48,
+        "centroid_distance_km": 1.1838553512820853
+      },
+      {
+        "operation": "merge",
+        "into": -34,
+        "absorbed": -18,
+        "centroid_distance_km": 1.2207570922017477
+      },
+      {
+        "operation": "merge",
+        "into": -49,
+        "absorbed": -45,
+        "centroid_distance_km": 1.2400218206167397
+      },
+      {
+        "operation": "merge",
+        "into": -21,
+        "absorbed": -20,
+        "centroid_distance_km": 1.2696323409183086
+      },
+      {
+        "operation": "merge",
+        "into": -52,
+        "absorbed": -34,
+        "centroid_distance_km": 1.3688737220745277
+      },
+      {
+        "operation": "merge",
+        "into": -42,
+        "absorbed": -22,
+        "centroid_distance_km": 1.4971052128249567
+      },
+      {
+        "operation": "merge",
+        "into": -57,
+        "absorbed": -49,
+        "centroid_distance_km": 1.5792983924720798
+      },
+      {
+        "operation": "merge",
+        "into": 8,
+        "absorbed": 13,
+        "centroid_distance_km": 1.5894571414075567
+      },
+      {
+        "operation": "merge",
+        "into": -37,
+        "absorbed": 4,
+        "centroid_distance_km": 1.6071022919079283
+      },
+      {
+        "operation": "merge",
+        "into": -37,
+        "absorbed": -26,
+        "centroid_distance_km": 1.6479617129413344
+      },
+      {
+        "operation": "merge",
+        "into": -46,
+        "absorbed": -37,
+        "centroid_distance_km": 1.691607919029261
+      },
+      {
+        "operation": "merge",
+        "into": -52,
+        "absorbed": -30,
+        "centroid_distance_km": 1.6924768533762462
+      },
+      {
+        "operation": "merge",
+        "into": -42,
+        "absorbed": -38,
+        "centroid_distance_km": 1.7139560730863908
+      },
+      {
+        "operation": "merge",
+        "into": -46,
+        "absorbed": -41,
+        "centroid_distance_km": 1.7709757250482534
+      },
+      {
+        "operation": "merge",
+        "into": -28,
+        "absorbed": 15,
+        "centroid_distance_km": 1.8011244120821794
+      }
+    ],
+    "excluded_infeasible_count": 0
+  }
+}

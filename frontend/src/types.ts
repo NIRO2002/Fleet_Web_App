@@ -214,7 +214,7 @@ export interface InsertionResult {
 }
 
 // --- Vehicle Capabilities (mirrors backend app/schemas/vehicle_capability.py) ---
-// A capability/type definition (e.g. "Bajaj Three Wheeler") — not a physical,
+// A capability/type definition (e.g. "Bajaj Three Wheeler") - not a physical,
 // registered vehicle. Registered Vehicles will reference these once that
 // feature exists.
 

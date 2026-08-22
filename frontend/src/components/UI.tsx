@@ -225,6 +225,24 @@ export function CapacityBar({ label, used, capacity, unit }: { label: string; us
   )
 }
 
+export function ProgressBar({ label, percent, detail }: { label: string; percent: number; detail?: string }) {
+  const pct = Math.min(100, Math.max(0, percent))
+  return (
+    <div aria-live="polite" role="status">
+      <div className="mb-1.5 flex items-center justify-between text-xs font-bold text-fleet-muted">
+        <span>{label}</span>
+        <span>{detail ?? `${Math.round(pct)}%`}</span>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+        <div
+          className="h-full rounded-full bg-fleet-blue transition-[width] duration-300 ease-out"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  )
+}
+
 export function EmptyState({
   icon: Icon,
   title,

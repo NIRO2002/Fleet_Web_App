@@ -30,6 +30,7 @@ import {
   parcelDraftToInput,
   parseClusterKey,
 } from '../utils/format'
+import { clearSession, readSession, writeSession } from '../utils/sessionStore'
 
 type Notice = { tone: 'success' | 'error' | 'info'; text: string } | null
 
@@ -37,7 +38,7 @@ export function ParcelConsolidationPage() {
   const navigate = useNavigate()
 
   const [parcels, setParcels] = useState<Parcel[]>([])
-  const [activeDatasetId, setActiveDatasetId] = useState<string | null>(null)
+  const [activeDatasetId, setActiveDatasetId] = useState<string | null>(() => readSession('parcel.activeDatasetId', null))
   const [clusterSummary, setClusterSummary] = useState<ClusterSummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [pageNotice, setPageNotice] = useState<Notice>(null)
@@ -58,8 +59,18 @@ export function ParcelConsolidationPage() {
   const [predictNotice, setPredictNotice] = useState<Notice>(null)
   const [predictResult, setPredictResult] = useState<ClusterPrediction | null>(null)
 
-  const [clusterFilter, setClusterFilter] = useState('all')
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [clusterFilter, setClusterFilter] = useState(() => readSession('parcel.clusterFilter', 'all'))
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set(readSession<string[]>('parcel.selectedIds', [])))
+
+  useEffect(() => {
+    writeSession('parcel.activeDatasetId', activeDatasetId)
+  }, [activeDatasetId])
+  useEffect(() => {
+    writeSession('parcel.clusterFilter', clusterFilter)
+  }, [clusterFilter])
+  useEffect(() => {
+    writeSession('parcel.selectedIds', Array.from(selectedIds))
+  }, [selectedIds])
 
   const resetWorkingState = () => {
     setParcels([])
@@ -74,9 +85,14 @@ export function ParcelConsolidationPage() {
     setAddNotice(null)
   }
 
+  // Refetches parcels/clusters for the current dataset without disturbing the
+  // user's filter/selection — this runs automatically on every mount, so it
+  // must not clobber state a page-switch (rather than an explicit Refresh) restored.
   const refresh = async (datasetId = activeDatasetId) => {
-    resetWorkingState()
+    setPageNotice(null)
     if (!datasetId) {
+      setParcels([])
+      setClusterSummary(null)
       setLoading(false)
       return
     }
@@ -94,6 +110,15 @@ export function ParcelConsolidationPage() {
     } catch {
       setClusterSummary(null)
     }
+    setLoading(false)
+  }
+
+  // The header "Refresh" button: discards the working dataset and all
+  // session-persisted state, returning the page to a clean slate.
+  const handleHardRefresh = () => {
+    clearSession(['parcel.activeDatasetId', 'parcel.clusterFilter', 'parcel.selectedIds'])
+    setActiveDatasetId(null)
+    resetWorkingState()
     setLoading(false)
   }
 
@@ -158,7 +183,7 @@ export function ParcelConsolidationPage() {
       }).length
       setTrainNotice({
         tone: 'success',
-        text: `Trained on ${result.parcel_count} parcels — found ${clusterCount} cluster${clusterCount === 1 ? '' : 's'}.`,
+        text: `Trained on ${result.parcel_count} parcels - found ${clusterCount} cluster${clusterCount === 1 ? '' : 's'}.`,
       })
       await refresh()
     } catch (err) {
@@ -240,7 +265,7 @@ export function ParcelConsolidationPage() {
     <div>
       <PageHeader
         action={
-          <SecondaryButton onClick={() => void refresh()}>
+          <SecondaryButton onClick={handleHardRefresh}>
             <RefreshCw className="h-4 w-4" /> Refresh
           </SecondaryButton>
         }
@@ -345,7 +370,7 @@ export function ParcelConsolidationPage() {
 
           <div className="mt-5 space-y-2.5">
             {summaryRows.length === 0 ? (
-              <p className="text-xs font-medium text-fleet-muted">No cluster data yet — add parcels and train the model.</p>
+              <p className="text-xs font-medium text-fleet-muted">No cluster data yet - add parcels and train the model.</p>
             ) : (
               summaryRows.map((row) => (
                 <div key={String(row.id)}>
@@ -379,6 +404,16 @@ export function ParcelConsolidationPage() {
               ))
             )}
           </div>
+
+          {clusterOptions.length > 0 && (
+            <div className="mt-4">
+              <PrimaryButton
+                onClick={() => navigate('/load-optimization', { state: { clusterIds: clusterOptions } })}
+              >
+                Optimize All Clusters <ArrowRight className="h-4 w-4" />
+              </PrimaryButton>
+            </div>
+          )}
         </Card>
       </div>
 
@@ -456,7 +491,7 @@ export function ParcelConsolidationPage() {
                   <StatusBadge tone={clusterTone(parcel.cluster_id)}>{clusterLabel(parcel.cluster_id)}</StatusBadge>
                 </td>
                 <td className="px-5 py-4 font-semibold">
-                  {parcel.cluster_probability !== null ? formatPercent(parcel.cluster_probability) : '—'}
+                  {parcel.cluster_probability !== null ? formatPercent(parcel.cluster_probability) : '-'}
                 </td>
               </tr>
             ))}
@@ -466,7 +501,7 @@ export function ParcelConsolidationPage() {
 
       <Card className="mt-5" title="Predict Cluster for a New Parcel">
         <p className="mb-4 text-sm font-medium text-fleet-muted">
-          Runs HDBSCAN's approximate_predict against the last trained model — train the model above first.
+          Runs HDBSCAN's approximate_predict against the last trained model - train the model above first.
         </p>
         {predictNotice && (
           <div className="mb-4">

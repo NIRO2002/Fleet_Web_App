@@ -59,7 +59,7 @@ async def train_clustering(
     dataset_id: str | None = Query(default=None),
 ):
     """Trains HDBSCAN on exactly one (depot_id, delivery_date) planning
-    instance — never the whole parcels table. See
+    instance - never the whole parcels table. See
     app/services/clustering_service.py."""
     try:
         if dataset_id is None:

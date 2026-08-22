@@ -35,10 +35,10 @@ const navItems: NavItem[] = [
 ]
 
 const routeTitles: Record<string, string> = {
-  '/parcel-consolidation': 'Parcel Consolidation — HDBSCAN Clustering',
-  '/load-optimization': 'Load Optimization — NSGA-II',
-  '/loaded-vehicles': 'Loaded Vehicles — Fleet Handoff',
-  '/vehicle-types': 'Vehicle Types — Capability Catalog',
+  '/parcel-consolidation': 'Parcel Consolidation - HDBSCAN Clustering',
+  '/load-optimization': 'Load Optimization - NSGA-II',
+  '/loaded-vehicles': 'Loaded Vehicles - Fleet Handoff',
+  '/vehicle-types': 'Vehicle Types - Capability Catalog',
 }
 
 export function AppShell() {

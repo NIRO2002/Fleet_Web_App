@@ -79,7 +79,7 @@ the full evaluation must not launch without parallel-capacity planning.
 
 ## Placement (Fix Pass 4, item S1)
 
-### Decision 8 — clustering seeds one whole-instance assignment problem
+### Decision 8 - clustering seeds one whole-instance assignment problem
 
 Fix Pass 5 re-audited the evaluation call chain after a report suggested
 that each cluster was optimized independently. That report did not match
@@ -101,7 +101,7 @@ slot into already feasible loads. At 25 generations this reduced the
 selected plan from 29 to 23 used slots while increasing the feasible final
 population from 20 to 100; the front contained 22 distinct points.
 
-### Decision 9 — the K-Means capacity-aware arm is a measured pass-through
+### Decision 9 - the K-Means capacity-aware arm is a measured pass-through
 
 The capacity-aware flag is wired identically for HDBSCAN and K-Means. In
 both complete 36-run pilots, however, every K-Means repair audit was
@@ -116,7 +116,7 @@ This finding describes the pre-I5 aggregate-only predicate and is
 superseded by Decision 10 below; it is retained because it explains why
 the earlier pilot arms were identical.
 
-### Decision 10 — split includes parcel count and physical placement
+### Decision 10 - split includes parcel count and physical placement
 
 Across the three pilot instances, two methods and three seeds, 282 clusters
 were inspected before changing the split predicate. None exceeded any
@@ -136,7 +136,7 @@ hit and every repaired cluster passed the same placement-aware predicate.
 The contribution is consequently split-and-merge in measured practice,
 not merge-only.
 
-### Decision 7 — zero stack headroom is intentional for non-stackable parcels
+### Decision 7 - zero stack headroom is intentional for non-stackable parcels
 
 The dataset generator is not included in this repository, so its exact random
 drawing rule cannot be audited from source. The committed 36,000-row dataset
@@ -158,15 +158,15 @@ report `compute_utilization_greedy_reference`, which runs every claimed load
 through the production placement routine. Its result is labelled an
 attainable reference, not a mathematically proven global upper bound.
 
-### Decision 5 — the placement fix is reported as partial, not papered over
+### Decision 5 - the placement fix is reported as partial, not papered over
 
 Real-data verification (`data/parcels_sample_36000.csv`) confirmed the placement
 heuristic collapsed to roughly one floor's worth of capacity regardless of
 `max_stack_layers`, on real (non-uniform) parcel sizes. The fix implemented
 (`_placement_order` in `app/optimization/placement.py`: stack-eligible
 parcels placed before column-closing ones, largest-footprint-area-first)
-is a verified, measured improvement — the specific n=65/105.4%-of-floor
-cliff the diagnosis reported is fixed — but real 400-parcel instances still
+is a verified, measured improvement - the specific n=65/105.4%-of-floor
+cliff the diagnosis reported is fixed - but real 400-parcel instances still
 fail placement at n=80 (124.6% of floor), short of the theoretical 6-layer
 capacity.
 
@@ -183,7 +183,7 @@ difference, confirming the bottleneck is structural, not an easy
 algorithmic tweak. See `docs/FIX_PASS_4_REPORT.md` for the full diagnostic
 trail.
 
-### Decision 6 — the utilization ceiling is computed exhaustively, not assumed
+### Decision 6 - the utilization ceiling is computed exhaustively, not assumed
 
 The source document's own worked example for the real instance
 (`[TRUCK_2T, TRUCK_2T]`, 97.1% utilization) was recomputed independently
@@ -192,12 +192,12 @@ project's established practice of verifying claimed diagnostics against
 real data before building on them. An exhaustive search over fleet sizes
 1-6 finds a tighter fit: `[APE_CARGO, APE_CARGO, MICRO_VAN, MICRO_VAN,
 TRUCK_2T]` at 99.96% utilization. The document's example wasn't wrong, just
-not exhaustive — reported as the corrected figure, not silently substituted
+not exhaustive - reported as the corrected figure, not silently substituted
 without explanation.
 
 ## Scope (Fix Pass 3, item G1)
 
-### Decision 4 — hazmat and refrigeration are descoped from the optimizer; peel is dropped
+### Decision 4 - hazmat and refrigeration are descoped from the optimizer; peel is dropped
 
 Neither hazardous goods nor cold chain appears in any Specific Objective or
 Functional Requirement of the submitted proposal. This is commercial
@@ -237,7 +237,7 @@ the reasoning was sound for the scope that existed at the time.
 
 ## Vehicle catalog (Fix Pass 2, item A)
 
-### Decision 1 — refrigeration is a separate catalog row, not a boolean flag
+### Decision 1 - refrigeration is a separate catalog row, not a boolean flag
 
 **Superseded by Decision 4 above (Fix Pass 3 G1)**: the three reefer rows
 described here were removed from seeding when refrigeration was descoped
@@ -274,7 +274,7 @@ estimated reefer capacities, that should be reported as-is rather than
 silently loosened -- the numbers are flagged estimates precisely so a
 downstream reader can revise them with visibility into what changed.
 
-### Decision 2 — hazmat certification: "Limited" reads as not certified
+### Decision 2 - hazmat certification: "Limited" reads as not certified
 
 **Superseded by Decision 4 above (Fix Pass 3 G1)**: `is_hazmat_certified`
 is no longer read by the optimizer, and the "peel" step this decision
@@ -291,7 +291,7 @@ hazardous parcels onto a vehicle class that may not legally carry them
 under a "limited" permit. The `is_hazmat_certified` column itself is
 unchanged by Fix Pass 3 -- only the optimizer's use of it is gone.
 
-### Decision 3 — `max_parcels` is a derived estimate, not source data
+### Decision 3 - `max_parcels` is a derived estimate, not source data
 
 The source table gives weight and volume capacity but no parcel-count cap.
 `max_parcels` is derived per vehicle type as a rough count scaled from

@@ -28,13 +28,13 @@ class Settings(BaseSettings):
     enforce_weight_order: bool = False
 
     # Raised from 80/80 now that the assignment problem's search space is
-    # real (Phase 3) — the old n_var=1 formulation over 4 fixed options
+    # real (Phase 3) - the old n_var=1 formulation over 4 fixed options
     # didn't warrant a larger budget, this one does.
     nsga2_population: int = 100
     nsga2_generations: int = 200
 
     # Clock time the vehicle leaves the depot, used to simulate time-window
-    # compliance (Phase 3.2) — starting the simulation at midnight would
+    # compliance (Phase 3.2) - starting the simulation at midnight would
     # make every daytime window unreachable.
     depot_departure_time: str = "08:00"
 

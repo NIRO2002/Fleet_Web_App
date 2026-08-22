@@ -14,7 +14,7 @@ def time_window_compliance(parcels):
     `app.optimization.assignment_problem.schedule_time_window_compliance`,
     which walks the vehicle's actual tour. Kept importable only so the
     dissertation can report the old pairwise metric alongside the new one
-    for comparison, if useful — do not use it for constraint 5-style
+    for comparison, if useful - do not use it for constraint 5-style
     compliance in new code."""
     if len(parcels) <= 1:
         return 1.0

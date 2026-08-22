@@ -4,13 +4,13 @@ Satisfies FR05: given one vehicle's parcels in delivery-visit order, decides
 where each parcel physically sits in the cargo bay and in what order it is
 loaded, so the load is LIFO-consistent with the delivery order wherever
 physical constraints allow it. This is a shelf-stacking *feasibility and
-load-ordering heuristic* — it is not a 3D bin-packing contribution, and it
+load-ordering heuristic* - it is not a 3D bin-packing contribution, and it
 does not claim optimality; the spec is explicit that examiners should read
 it as such.
 
 Coordinate convention: `x` (load_position_x) is measured from the cargo
 doors (x=0) toward the front/deepest wall (x=cargo_length_cm). Parcels are
-processed in *load order* — the reverse of delivery order, so the
+processed in *load order* - the reverse of delivery order, so the
 last-delivered parcel is loaded first and ends up deepest (large x), and
 each subsequently-loaded parcel (which will be delivered earlier) lands
 nearer the doors (small x): unloading from the doors then naturally visits
@@ -18,7 +18,7 @@ parcels in delivery order. `y` runs across the cargo width, `z` is stack
 height. `layer` counts stacked tiers from the floor (0-based).
 
 A vehicle with `has_tail_lift = False` carrying `two_person_lift` parcels
-should attract a cost/feasibility penalty upstream (assignment_problem.py) —
+should attract a cost/feasibility penalty upstream (assignment_problem.py) -
 this module only decides *where* a parcel goes, not whether the vehicle is
 an appropriate choice for it.
 
@@ -34,7 +34,7 @@ the verified fix. Placing stackable parcels first lets them build up tall
 columns before any parcel that would permanently close a column (a fragile
 or non-stackable parcel can be supported, but cannot support anything
 placed after it) gets a chance to cap one prematurely. This reorders
-placement globally within a vehicle, not within any narrower grouping — the
+placement globally within a vehicle, not within any narrower grouping - the
 existing LIFO-exception audit (`_lifo_exceptions`) is what records where the
 physical result deviates from pure delivery order, rather than the ordering
 enforcing strict delivery order during packing itself; that is unchanged
@@ -109,7 +109,7 @@ class _Row:
 
 def _footprint(parcel) -> tuple[float, float, float]:
     """(length, width, height) in cm, imputing a cube from volume as a
-    last-resort fallback — by the time parcels reach here, Phase 1's
+    last-resort fallback - by the time parcels reach here, Phase 1's
     importer should already have populated real dimensions. Whenever the
     dimensions are imputed (flagged by the importer via
     `dimensions_imputed`, or imputed here directly), a safety factor
@@ -248,7 +248,7 @@ def _placement_order(
 
 
 def _place_in_open_rows(parcel, rows: list[_Row], vehicle, footprint_cache: dict | None = None) -> _Column | None:
-    """Tries every row opened so far — not just the most recent one — before
+    """Tries every row opened so far - not just the most recent one - before
     the caller falls back to opening a new one, so leftover width in an
     earlier row is reused instead of abandoned."""
     length, width, _height = _get_footprint(parcel, footprint_cache)
@@ -266,7 +266,7 @@ def _open_new_row(
 ) -> tuple[_Column | None, float]:
     """Opens a fresh row one step nearer the doors. Only called once no
     already-open row has width to spare for this parcel (see
-    `_place_in_open_rows`) — a new row is never opened merely because a
+    `_place_in_open_rows`) - a new row is never opened merely because a
     parcel is longer than the *current* row, since every open row is tried
     first."""
     length, width, _height = _get_footprint(parcel, footprint_cache)
@@ -287,7 +287,7 @@ def _open_new_row(
 def _lifo_exceptions(parcels_in_delivery_order: list, placements: dict[str, Placement]) -> list[dict]:
     """O(n) LIFO-violation scan: a delivery-order walk tracking the maximum
     `x` seen so far. Any parcel whose `x` is less than that running maximum
-    is nearer the doors than something delivered *before* it — i.e. it will
+    is nearer the doors than something delivered *before* it - i.e. it will
     have to be dug out past an earlier stop's parcel, one exception per
     such parcel. Replaces an O(n^2) all-pairs scan that, at 400 parcels, ran
     80,000 comparisons per slot/individual/generation to produce a list the
@@ -320,11 +320,11 @@ def attempt_placement(
 ) -> PlacementResult | None:
     """Places every parcel for one vehicle. Returns `None` if any parcel
     cannot be placed at all (too big for the bay in any orientation, or the
-    bay is full) — the caller (the NSGA-II stacking constraint, Phase 3.2
+    bay is full) - the caller (the NSGA-II stacking constraint, Phase 3.2
     #7) treats that as an infeasible solution.
 
     `collect_exceptions=False` skips the LIFO-violation diagnostics (see
-    `_lifo_exceptions`) entirely — pass it from the GA's constraint
+    `_lifo_exceptions`) entirely - pass it from the GA's constraint
     evaluation, which only needs the None/not-None feasibility verdict and
     never reads the exception list. Collect them once, at persistence time,
     for the solution actually selected."""

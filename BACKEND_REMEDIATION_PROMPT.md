@@ -1,4 +1,4 @@
-# Backend Remediation Specification — Parcel Consolidation & Load Optimization
+# Backend Remediation Specification - Parcel Consolidation & Load Optimization
 
 **How to use this file:** open Claude Code in the `Fleet_Web_App/backend` directory and paste
 the whole document as your first message, or save it in the repo and say
@@ -19,12 +19,12 @@ combined with capacity-aware cluster repair and NSGA-II multi-objective assignme
 produces better load plans than a K-Means + single-objective baseline.* Every change
 you make must serve that claim or the code that evidences it.
 
-**Hard scope boundary — do not cross it.** Route optimization, real fleet assignment,
+**Hard scope boundary - do not cross it.** Route optimization, real fleet assignment,
 driver scheduling, and live vehicle tracking belong to a teammate's separate module.
 This backend ends at the load plan. Files named `auth.py`, `vehicles.py`,
 `maintenance.py`, `predictions.py`, `demand.py`, `deliveries.py`, `routes.py`,
 `trips.py`, `alerts.py`, `reports.py` are deliberate placeholders owned by that
-teammate — leave their public shape alone except where Phase 8 explicitly says otherwise.
+teammate - leave their public shape alone except where Phase 8 explicitly says otherwise.
 Nearest-neighbour distance in this codebase is a *cost estimate for the optimizer*,
 not a route. Do not upgrade it into a routing engine.
 
@@ -35,12 +35,12 @@ out unfavourable, that is a valid result and it gets reported as-is.
 
 ---
 
-## 1. Current state — the defects you are fixing
+## 1. Current state - the defects you are fixing
 
 A code review found the following. Read this list carefully; several fixes depend on
 understanding *why* the current design fails, not just what to change.
 
-### 1.1 CRITICAL — NSGA-II is decorative and must be redesigned
+### 1.1 CRITICAL - NSGA-II is decorative and must be redesigned
 
 In `app/services/optimization_service.py`:
 
@@ -49,7 +49,7 @@ In `app/services/optimization_service.py`:
 - The result actually returned is produced by a loop that ranks the four vehicle types
   by a hand-tuned weighted sum:
   `0.45*util_weight + 0.20*util_volume + 0.20*compliance + 0.15/(1+distance)`.
-  This is a scalarised single-objective heuristic — exactly the approach the research
+  This is a scalarised single-objective heuristic - exactly the approach the research
   gap says is inadequate.
 - The field named `pareto_solutions` is not a Pareto front. It is every feasible vehicle
   type sorted by that scalar score.
@@ -75,7 +75,7 @@ In `app/services/optimization_service.py`:
 
 The research requires assignment to respect fragility, stackability, volume, width,
 height and vehicle capacity. Actually enforced today: weight sum, and volume sum.
-Volume-as-a-scalar-sum is the bin-packing fallacy — it says a 115 cm parcel fits in a
+Volume-as-a-scalar-sum is the bin-packing fallacy - it says a 115 cm parcel fits in a
 bike because the arithmetic works. Fragility appears only as a clustering feature,
 never as a constraint. Stackability and the three dimension columns have no columns on
 the `Parcel` model at all, so they cannot be enforced.
@@ -88,7 +88,7 @@ The upstream dataset carries all of it and the backend reads none of it: `length
 
 `optimization_service.VEHICLES` is a module-level Python dict. Capacities cannot be
 changed without a deploy, cannot vary by depot, cannot be audited, and are not recorded
-against the plans they produced — so results are not reproducible. The catalog belongs in
+against the plans they produced - so results are not reproducible. The catalog belongs in
 the database, queried at runtime.
 
 Separately, nothing in the current code decides the **order parcels are loaded into the
@@ -118,7 +118,7 @@ nothing else, which undercuts any claim that clustering respects delivery constr
 - Oversize clusters hard-fail: `optimize_load` raises `"No vehicle type is feasible"`
   and returns HTTP 400. No splitting, no fallback.
 - No planning-instance concept. `train_hdbscan` runs `db.query(Parcel).all()` over the
-  entire table with no depot or date filter — also a scalability failure.
+  entire table with no depot or date filter - also a scalability failure.
 - `seed=42` is hardcoded inside `minimize()`, making multi-seed statistical runs
   impossible without editing source.
 - No K-Means baseline anywhere. No evaluation harness, no statistical test.
@@ -154,7 +154,7 @@ nothing else, which undercuts any claim that clustering respects delivery constr
 
 ---
 
-## Phase 0 — Baseline and safety net
+## Phase 0 - Baseline and safety net
 
 1. Read the whole repo before changing anything. Produce a short written map: each
    module, its responsibility, and its callers.
@@ -170,7 +170,7 @@ nothing else, which undercuts any claim that clustering respects delivery constr
 
 ---
 
-## Phase 1 — Data model: carry the constraints
+## Phase 1 - Data model: carry the constraints
 
 **Goal:** the database must hold every attribute the optimizer needs to enforce.
 
@@ -181,23 +181,23 @@ survive):
 
 | Column | Type | Default | Purpose |
 |---|---|---|---|
-| `depot_id` | String(32), indexed | — | planning-instance key |
-| `delivery_date` | Date, indexed | — | planning-instance key |
-| `length_cm` | Float | — | dimensional fit |
-| `width_cm` | Float | — | dimensional fit |
-| `height_cm` | Float | — | dimensional fit |
+| `depot_id` | String(32), indexed | - | planning-instance key |
+| `delivery_date` | Date, indexed | - | planning-instance key |
+| `length_cm` | Float | - | dimensional fit |
+| `width_cm` | Float | - | dimensional fit |
+| `height_cm` | Float | - | dimensional fit |
 | `stackable` | Boolean | True | stacking feasibility |
 | `max_stack_weight_kg` | Float | 0.0 | load that may rest on top |
 | `loading_orientation_fixed` | Boolean | False | cannot be rotated |
 | `hazardous` | Boolean | False | requires certified vehicle |
-| `hazmat_class` | String(16) | None | — |
+| `hazmat_class` | String(16) | None | - |
 | `requires_refrigeration` | Boolean | False | requires refrigerated vehicle |
-| `temp_min_celsius` | Float | None | — |
-| `temp_max_celsius` | Float | None | — |
+| `temp_min_celsius` | Float | None | - |
+| `temp_max_celsius` | Float | None | - |
 | `two_person_lift` | Boolean | False | handling flag |
 | `do_not_tilt` | Boolean | False | handling flag |
 | `priority_level` | String(16) | 'standard' | urgency; one of standard/next_day/express/same_day |
-| `service_type` | String(24) | 'door_to_door' | — |
+| `service_type` | String(24) | 'door_to_door' | - |
 | `special_handling` | Boolean, computed | False | derived: hazardous OR requires_refrigeration OR two_person_lift |
 
 Add a `volume_m3` consistency check: if dimensions are present, assert
@@ -208,7 +208,7 @@ Add a composite index on `(depot_id, delivery_date)`.
 
 ### 1.2 Extend `app/models/virtual_vehicle.py`
 
-Add: `depot_id`, `delivery_date`, `plan_id` (String, indexed — groups vehicles belonging
+Add: `depot_id`, `delivery_date`, `plan_id` (String, indexed - groups vehicles belonging
 to one load plan), `parcel_count`, `max_parcels`, `estimated_distance_km`,
 `time_window_compliance`, `fleet_cost`, `is_refrigerated`, `is_hazmat_certified`,
 `cargo_length_cm`, `cargo_width_cm`, `cargo_height_cm`.
@@ -218,11 +218,11 @@ Add a new model `LoadPlan` with: `plan_id` (PK), `depot_id`, `delivery_date`,
 `mean_utilization`, `total_distance_km`, `mean_time_window_compliance`,
 `total_fleet_cost`, `hypervolume`, `runtime_seconds`, `created_at`.
 
-Add `app/models/parcel_assignment.py` — an association table linking `plan_id`,
+Add `app/models/parcel_assignment.py` - an association table linking `plan_id`,
 `virtual_vehicle_id`, `parcel_id`, `delivery_sequence`, `load_sequence`, `stack_layer`,
 `load_position_x`, `load_position_y`, `load_position_z`. This is what gets exported.
 
-### 1.2b New model — the vehicle type catalog lives in the database
+### 1.2b New model - the vehicle type catalog lives in the database
 
 **The vehicle catalog must not be a hardcoded Python dict.** Today
 `optimization_service.VEHICLES` is a module-level literal, which means capacities cannot
@@ -246,7 +246,7 @@ class VehicleTypeCatalog(Base):
 ```
 
 Add `app/services/vehicle_catalog_service.py` with:
-- `list_available_types(db, depot_id, delivery_date) -> list[VehicleTypeCatalog]` —
+- `list_available_types(db, depot_id, delivery_date) -> list[VehicleTypeCatalog]` -
   returns active types for that depot (including depot-agnostic rows). **This is the
   only way the optimizer may obtain vehicle data.** It must never import a literal dict.
 - `get_type(db, code)`, `upsert_type(db, payload)`, `deactivate_type(db, code)`
@@ -261,7 +261,7 @@ a `source` note of `"placeholder"` so it is obvious which rows still need real
 Sri Lankan capacity and cost figures.
 
 If `list_available_types` returns an empty set for an instance, the pipeline must raise a
-clear, specific error — never fall back to a built-in default.
+clear, specific error - never fall back to a built-in default.
 
 ### 1.3 Alembic migration
 
@@ -293,7 +293,7 @@ accurate on a deliberately corrupted fixture.
 
 ---
 
-## Phase 2 — Clustering: fix scaling, handle noise, add the baseline
+## Phase 2 - Clustering: fix scaling, handle noise, add the baseline
 
 ### 2.1 Rewrite `app/services/clustering_service.py`
 
@@ -312,7 +312,7 @@ documented two-block approach:
 - **Remove `fragile` from the feature vector.** Fragility is a handling constraint, not
   a spatial similarity signal; it belongs in the optimizer's constraint set, where
   Phase 3 puts it. Say so in the docstring.
-- Time windows should enter as cyclical/interval features — use window midpoint and
+- Time windows should enter as cyclical/interval features - use window midpoint and
   window width, both standardised, not raw start and end.
 
 **Planning instances.** Every clustering call takes `(depot_id, delivery_date)` and
@@ -321,15 +321,15 @@ Never call `db.query(Parcel).all()` again.
 
 **Noise handling.** HDBSCAN's `-1` label must not become a pseudo-cluster. Implement
 `handle_noise(parcels, labels, strategy)` with strategies:
-- `"nearest_cluster"` (default) — assign each noise point to the nearest cluster centroid
+- `"nearest_cluster"` (default) - assign each noise point to the nearest cluster centroid
   in metric space, but only if within `NOISE_MAX_ASSIGN_KM` (config, default 3.0 km)
-- `"singleton"` — otherwise, each remaining noise point becomes its own cluster
+- `"singleton"` - otherwise, each remaining noise point becomes its own cluster
 Store the original label in a new `Parcel.is_noise` boolean so the dissertation can
 report the noise rate honestly.
 
 ### 2.2 New file `app/services/baseline_clustering.py`
 
-Implement the K-Means baseline (SO5 — currently entirely absent):
+Implement the K-Means baseline (SO5 - currently entirely absent):
 
 - Same feature pipeline, same planning-instance scoping, same interface signature as
   HDBSCAN so the evaluation harness can swap them.
@@ -379,12 +379,12 @@ vehicle type, no parcel is lost, and no parcel is duplicated.
 
 ---
 
-## Phase 3 — The NSGA-II rewrite (the core fix)
+## Phase 3 - The NSGA-II rewrite (the core fix)
 
 Rewrite `app/services/optimization_service.py` completely. This is the phase that
 determines whether the dissertation stands up.
 
-### 3.1 Vehicle catalog — sourced from the database
+### 3.1 Vehicle catalog - sourced from the database
 
 **Delete the module-level `VEHICLES` dict from `optimization_service.py` entirely.**
 It must not be replaced by another literal elsewhere. The optimizer obtains vehicle data
@@ -422,7 +422,7 @@ Record the exact snapshot (all fields, all types) in the `LoadPlan` row as a JSO
 runs and there is no record of what the optimizer actually saw. The evaluation harness
 must fail loudly if two runs it is comparing used different snapshots.
 
-`T` in the encoding (section 3.2) is `len(snapshot)`, derived at runtime — not a constant.
+`T` in the encoding (section 3.2) is `len(snapshot)`, derived at runtime - not a constant.
 The system must work correctly if an administrator adds a fifth vehicle type through the
 API without any code change. Add a test proving that.
 
@@ -438,8 +438,8 @@ Create `app/optimization/assignment_problem.py`.
 **Decision variables.** For a planning instance with `n` parcels and a vehicle-slot
 budget `K`:
 
-- Genes `0 .. n-1`: integer in `[0, K-1]` — which vehicle slot each parcel goes to.
-- Genes `n .. n+K-1`: integer in `[0, T-1]` — the vehicle *type* of each slot,
+- Genes `0 .. n-1`: integer in `[0, K-1]` - which vehicle slot each parcel goes to.
+- Genes `n .. n+K-1`: integer in `[0, T-1]` - the vehicle *type* of each slot,
   where `T = len(catalog)`.
 
 Total `n_var = n + K`. Set `K = ceil(n / min_parcels_per_vehicle)` bounded by a config
@@ -447,7 +447,7 @@ Total `n_var = n + K`. Set `K = ceil(n / min_parcels_per_vehicle)` bounded by a 
 dropped from the final plan. **This is the fix for the fatal defect: distance,
 compliance and cost now genuinely vary with the decision variable.**
 
-**Objectives — four, all minimised:**
+**Objectives - four, all minimised:**
 
 | # | Objective | Formula |
 |---|---|---|
@@ -456,7 +456,7 @@ compliance and cost now genuinely vary with the decision variable.**
 | f3 | negative time-window compliance | `-(compliant parcels / total parcels)` |
 | f4 | total fleet cost | sum over used vehicles of `fixed_cost + cost_per_km * distance` |
 
-Note f1 uses `max(weight, volume)` utilization, not weight alone — a van full of
+Note f1 uses `max(weight, volume)` utilization, not weight alone - a van full of
 pillows is fully utilized. Document this choice.
 
 **Redefine time-window compliance.** The current pairwise-overlap metric measures
@@ -474,14 +474,14 @@ comparison in the dissertation if useful.
 2. Volume overflow: `sum(volume) - capacity_m3`, same aggregation
 3. Parcel-count overflow: `count - max_parcels`
 4. Dimensional fit: for each parcel, `longest_side - longest_cargo_dim` (respecting
-   `loading_orientation_fixed` — if fixed, each of l/w/h must fit the corresponding
+   `loading_orientation_fixed` - if fixed, each of l/w/h must fit the corresponding
    cargo dimension without rotation)
 5. Hazmat: any hazardous parcel on a non-certified vehicle
 6. Refrigeration: any refrigerated parcel on a non-refrigerated vehicle, plus
    temperature-range compatibility
 7. Stacking: total weight of non-fragile parcels assigned above a parcel must not exceed
    its `max_stack_weight_kg`; a `fragile` or non-`stackable` parcel must occupy a top
-   layer. Model this with the shelf-stacking heuristic in 3.4 — you need a placement to
+   layer. Model this with the shelf-stacking heuristic in 3.4 - you need a placement to
    evaluate it.
 8. Empty-slot consistency: a slot with parcels must have a valid type (auto-satisfied
    by encoding, but assert it)
@@ -506,7 +506,7 @@ from pymoo.operators.repair.rounding import RoundingRepair
   80/80 now that the search space is real).
 
 **Add a warm-start seeding operator.** Inject into the initial population a small number
-of individuals built from the capacity-aware repaired clusters — one cluster per vehicle
+of individuals built from the capacity-aware repaired clusters - one cluster per vehicle
 slot, with vehicle type chosen as the smallest feasible. This gives NSGA-II a feasible
 starting region and is a defensible, documentable design choice.
 
@@ -519,17 +519,17 @@ This is standard practice for constrained assignment GAs; document it.
 Parcels must be loaded in an order that matches how they will be unloaded. Two distinct
 orderings are involved and the code must keep them clearly separated:
 
-**Delivery sequence** — the order stops are visited. The optimizer already computes a
+**Delivery sequence** - the order stops are visited. The optimizer already computes a
 nearest-neighbour tour per vehicle for objective f2; reuse that tour. Store it as
 `ParcelAssignment.delivery_sequence` (1-based). Document explicitly, in the docstring
 and in the export schema, that this is a **cost-estimation tour, not an optimized route**,
 and that the downstream route-optimization module may reorder it. If it does, the loading
-order must be recomputed from the new sequence — expose
+order must be recomputed from the new sequence - expose
 `recompute_load_order(plan_id, new_sequence)` for that purpose. This keeps the scope
 boundary intact: you are not doing route optimization, you are producing a load order
 consistent with a stated delivery order.
 
-**Load sequence** — the order parcels are physically placed into the vehicle, and it is
+**Load sequence** - the order parcels are physically placed into the vehicle, and it is
 the **reverse** of the delivery sequence (last-in, first-out). The parcel delivered first
 is loaded last and sits nearest the doors; the parcel delivered last is loaded first and
 sits deepest in the bay. Store as `ParcelAssignment.load_sequence` (1-based, 1 = loaded
@@ -540,7 +540,7 @@ priority order:
 
 1. Stack-weight and fragility limits (a fragile parcel cannot be buried to satisfy LIFO)
 2. Dimensional fit
-3. Weight distribution — heavier parcels low, and roughly balanced front-to-back
+3. Weight distribution - heavier parcels low, and roughly balanced front-to-back
 4. LIFO accessibility
 
 Record every LIFO violation the heuristic was forced to make in a
@@ -565,7 +565,7 @@ set with an assigned delivery sequence and a vehicle's cargo dimensions, produce
 - Prefer placing `two_person_lift` parcels on the floor layer near the doors, and note
   in the docstring that a vehicle with `has_tail_lift = False` should attract a penalty
   when carrying them
-- Return `None` if no valid placement exists — this feeds constraint 7 in section 3.2
+- Return `None` if no valid placement exists - this feeds constraint 7 in section 3.2
 
 This is a feasibility and load-ordering heuristic, not a 3D bin-packing contribution.
 Say so in the docstring so no examiner mistakes it for an unsubstantiated claim.
@@ -574,7 +574,7 @@ Say so in the docstring so no examiner mistakes it for an unsubstantiated claim.
 
 Create `app/optimization/selection.py`.
 
-- Return **the whole Pareto front** in the API response. This is non-negotiable —
+- Return **the whole Pareto front** in the API response. This is non-negotiable -
   FR04 and SO4 require it.
 - For the single plan that gets persisted, use **knee-point selection** by default:
   normalise all objectives to `[0,1]` using the front's ideal and nadir points, then
@@ -582,7 +582,7 @@ Create `app/optimization/selection.py`.
   formula.
 - Support an optional caller-supplied preference weight vector for planner-driven
   selection (this is the decision-support story in the proposal). If supplied, it is
-  applied **only** to choose among already-non-dominated solutions — never as the
+  applied **only** to choose among already-non-dominated solutions - never as the
   optimizer's objective.
 
 ### 3.7 Compute hypervolume
@@ -597,7 +597,7 @@ all constraints report satisfied for the selected solution.
 
 ---
 
-## Phase 4 — Orchestration, persistence, export
+## Phase 4 - Orchestration, persistence, export
 
 ### 4.1 New file `app/services/pipeline.py`
 
@@ -623,9 +623,9 @@ Abort with a specific error if the catalog is empty, if any selected vehicle typ
 longer active, or if placement fails for the selected solution (in the last case, fall
 back to the next-best solution on the front and record that this happened).
 
-`capacity_aware=False` must produce a valid run — that is the ablation arm.
+`capacity_aware=False` must produce a valid run - that is the ablation arm.
 
-### 4.2 Export — the product deliverable
+### 4.2 Export - the product deliverable
 
 Create `app/services/export_service.py` producing the load plan in both formats the
 downstream route-optimization module consumes.
@@ -644,21 +644,21 @@ load_position_x, load_position_y, load_position_z
 
 `delivery_sequence` is the estimated stop order the load was built against;
 `load_sequence` is the physical loading order (reverse of delivery, LIFO). The downstream
-route module owns `delivery_sequence` and may overwrite it — include a
+route module owns `delivery_sequence` and may overwrite it - include a
 `delivery_sequence_is_estimate` boolean column set to `true` to make that explicit.
 
-**JSON** — nested: plan metadata → vehicles → parcels, with per-vehicle utilization,
+**JSON** - nested: plan metadata → vehicles → parcels, with per-vehicle utilization,
 estimated distance, compliance and cost. Include a `schema_version` field.
 
 Endpoints:
-- `POST /api/v1/optimization/plan` — run the pipeline, return the plan plus the front
-- `GET  /api/v1/optimization/plan/{plan_id}` — retrieve
-- `GET  /api/v1/optimization/plan/{plan_id}/export?format=csv|json` — download
-- `GET  /api/v1/optimization/plan/{plan_id}/pareto` — the full front with objective values
+- `POST /api/v1/optimization/plan` - run the pipeline, return the plan plus the front
+- `GET  /api/v1/optimization/plan/{plan_id}` - retrieve
+- `GET  /api/v1/optimization/plan/{plan_id}/export?format=csv|json` - download
+- `GET  /api/v1/optimization/plan/{plan_id}/pareto` - the full front with objective values
 
 ### 4.3 Fix the existing endpoints
 
-- Add `virtual_vehicle_id` to `OptimizationResponse` — currently returned by the service
+- Add `virtual_vehicle_id` to `OptimizationResponse` - currently returned by the service
   and dropped by the schema.
 - Rename the `pareto_solutions` field's *contents* so it is a real front. If you keep the
   old `POST /optimization/run` endpoint, make it delegate to the new pipeline for a
@@ -675,7 +675,7 @@ the exported CSV round-trips (re-importing it reproduces the same assignments).
 
 ---
 
-## Phase 5 — Evaluation harness and statistical comparison
+## Phase 5 - Evaluation harness and statistical comparison
 
 This is SO5, currently at zero. Build it as a standalone runnable module, not an endpoint.
 
@@ -694,19 +694,19 @@ def run_experiment(instances, methods, seeds, capacity_aware_variants, out_dir)
 ```
 
 - `instances`: all `(depot_id, delivery_date)` pairs with at least `MIN_INSTANCE_PARCELS`
-  parcels (config, default 100 — below this, capacity does not bind and the comparison
+  parcels (config, default 100 - below this, capacity does not bind and the comparison
   is uninformative; document this filter and report how many instances it excluded)
 - `methods`: `["hdbscan", "kmeans"]`
 - `seeds`: `range(30)`
 - Write one tidy row per `(instance, method, capacity_aware, seed)` to a CSV. Never
-  aggregate before writing — keep raw runs so the analysis is auditable.
+  aggregate before writing - keep raw runs so the analysis is auditable.
 - Add a resume capability: skip runs whose row already exists. These experiments take
   hours.
 
 ### 5.3 `statistics.py`
 
 - Aggregate to one value per `(instance, method)` by taking the **median across the 30
-  seeds** — median, not mean, because GA outcomes are not normally distributed.
+  seeds** - median, not mean, because GA outcomes are not normally distributed.
 - Paired **Wilcoxon signed-rank test** (`scipy.stats.wilcoxon`) across instances, one
   test per metric, HDBSCAN vs K-Means.
 - Report effect size (matched-pairs rank-biserial correlation) alongside every p-value.
@@ -728,34 +728,34 @@ table. Do not fabricate or hand-edit any numbers at any point.
 
 ---
 
-## Phase 6 — Tests: feasibility invariants
+## Phase 6 - Tests: feasibility invariants
 
 Replace the 14-line health test with a real suite in `app/tests/`.
 
-### `test_feasibility_invariants.py` — the important one
+### `test_feasibility_invariants.py` - the important one
 
 For every generated plan, assert:
-1. **Conservation** — every input parcel appears in exactly one vehicle. No losses, no
+1. **Conservation** - every input parcel appears in exactly one vehicle. No losses, no
    duplicates. Compare sets, not counts.
-2. **Weight** — per vehicle, `sum(weight) <= capacity_kg`.
-3. **Volume** — per vehicle, `sum(volume) <= capacity_m3`.
-4. **Count** — per vehicle, `n_parcels <= max_parcels`.
-5. **Dimensions** — every parcel physically fits its vehicle's cargo bay, honouring
+2. **Weight** - per vehicle, `sum(weight) <= capacity_kg`.
+3. **Volume** - per vehicle, `sum(volume) <= capacity_m3`.
+4. **Count** - per vehicle, `n_parcels <= max_parcels`.
+5. **Dimensions** - every parcel physically fits its vehicle's cargo bay, honouring
    `loading_orientation_fixed`.
-6. **Fragility** — no parcel rests on a `fragile` or non-`stackable` parcel.
-7. **Stack weight** — accumulated weight above any parcel `<= max_stack_weight_kg`.
-8. **Hazmat** — hazardous parcels only on certified vehicles.
-9. **Refrigeration** — refrigerated parcels only on refrigerated vehicles, with
+6. **Fragility** - no parcel rests on a `fragile` or non-`stackable` parcel.
+7. **Stack weight** - accumulated weight above any parcel `<= max_stack_weight_kg`.
+8. **Hazmat** - hazardous parcels only on certified vehicles.
+9. **Refrigeration** - refrigerated parcels only on refrigerated vehicles, with
    compatible temperature ranges.
-10. **Placement validity** — no two parcels overlap in the placement coordinates; nothing
+10. **Placement validity** - no two parcels overlap in the placement coordinates; nothing
     exceeds the cargo bay bounds.
-11. **Load order completeness** — every parcel has a `delivery_sequence` and a
+11. **Load order completeness** - every parcel has a `delivery_sequence` and a
     `load_sequence`; both are contiguous 1..n within each vehicle with no gaps or
     duplicates.
-12. **LIFO consistency** — for every pair of parcels on the same vehicle, if A is
+12. **LIFO consistency** - for every pair of parcels on the same vehicle, if A is
     delivered before B then A's placement depth is no greater than B's, *unless* the pair
     appears in `load_order_exceptions` with a recorded physical reason.
-13. **Catalog fidelity** — every vehicle in the plan references a `vehicle_type_code`
+13. **Catalog fidelity** - every vehicle in the plan references a `vehicle_type_code`
     present in the plan's `catalog_snapshot`, and its capacities match the snapshot
     exactly. No plan may reference a type that is not in the database.
 
@@ -765,30 +765,30 @@ instances is adequate.
 
 ### Other test files
 
-- `test_clustering.py` — noise handling, planning-instance scoping, scaler determinism
+- `test_clustering.py` - noise handling, planning-instance scoping, scaler determinism
   under a fixed seed, K-Means/HDBSCAN interface parity
-- `test_capacity_aware.py` — post-repair every cluster fits some vehicle; split/merge/peel
+- `test_capacity_aware.py` - post-repair every cluster fits some vehicle; split/merge/peel
   counts are correct; parcel conservation holds
-- `test_nsga2.py` — **explicitly assert that the Pareto front contains more than one
+- `test_nsga2.py` - **explicitly assert that the Pareto front contains more than one
   solution and that f2, f3, f4 vary across it.** This is the regression test for the
   fatal defect. Also assert `minimize()`'s result is actually used.
-- `test_vehicle_catalog.py` — types are read from the database and nowhere else; adding a
+- `test_vehicle_catalog.py` - types are read from the database and nowhere else; adding a
   fifth type through the API changes the optimizer's search space with no code change;
   deactivating a type removes it from subsequent plans; an empty catalog raises rather
   than falling back to a default. Add a grep-style assertion that no vehicle capacity
   literal remains in `app/services/` or `app/optimization/`.
-- `test_placement.py` — LIFO ordering holds against a known delivery sequence; forced
+- `test_placement.py` - LIFO ordering holds against a known delivery sequence; forced
   exceptions are recorded rather than silent; `recompute_load_order` produces a valid
   load order when the downstream module supplies a different delivery sequence
-- `test_export.py` — CSV/JSON round-trip; rows emerge in loading order
-- `test_data_service.py` — error reporting, duplicate handling, leakage-column rejection
-- `test_api.py` — endpoint contracts
+- `test_export.py` - CSV/JSON round-trip; rows emerge in loading order
+- `test_data_service.py` - error reporting, duplicate handling, leakage-column rejection
+- `test_api.py` - endpoint contracts
 
 **Gate:** `pytest` green, and coverage reported for `app/services` and `app/optimization`.
 
 ---
 
-## Phase 7 — Configuration and reproducibility
+## Phase 7 - Configuration and reproducibility
 
 Rewrite `app/core/config.py`:
 
@@ -804,12 +804,12 @@ Update `.env.example` with every new variable.
 
 ---
 
-## Phase 8 — Security, docs, cleanup
+## Phase 8 - Security, docs, cleanup
 
 - Implement real JWT auth in `app/core/security.py` and `app/api/deps.py`
   (`get_current_user`). Apply the dependency to every parcel, optimization and
   virtual-vehicle endpoint. Leave the teammate's placeholder routers alone.
-- Make `jwt_secret_key` mandatory with no default — fail loudly at startup if unset.
+- Make `jwt_secret_key` mandatory with no default - fail loudly at startup if unset.
 - Add rate limiting on the expensive `POST /optimization/plan` endpoint.
 - Delete all committed `__pycache__` directories and add a `.gitignore`.
 - Rewrite `README.md` to describe the real pipeline: instance loading → preprocessing →
@@ -861,5 +861,5 @@ Update `.env.example` with every new variable.
 Work through the phases in order. After each phase, report: files changed, tests added,
 tests passing, and anything in this specification you could not implement as written
 along with why. If a requirement here is wrong or infeasible given the codebase, say so
-rather than silently substituting something else — a wrong specification faithfully
+rather than silently substituting something else - a wrong specification faithfully
 reported is fixable; a silent substitution discovered at the viva is not.

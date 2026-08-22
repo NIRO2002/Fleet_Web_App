@@ -34,7 +34,7 @@ class ClusteringConfig:
     min_cluster_size: int = settings.hdbscan_min_cluster_size
     min_samples: int = settings.hdbscan_min_samples
 
-    # Applied to the standardised feature blocks *after* scaling — spatial
+    # Applied to the standardised feature blocks *after* scaling - spatial
     # dominance is now a deliberate, tunable choice, not an artifact of
     # unequal raw-unit scaling (the defect this replaces; see
     # docs/DESIGN_DECISIONS.md).
@@ -51,7 +51,7 @@ class ClusteringConfig:
     noise_max_assign_km: float = 0.75
 
     # Required only by the K-Means baseline's k-selection (SO5). Left
-    # unset here deliberately — app/services/ must never contain a vehicle
+    # unset here deliberately - app/services/ must never contain a vehicle
     # capacity literal, so callers derive it from the vehicle_type_catalog
     # table (see vehicle_catalog_service) and pass it in explicitly.
     mean_vehicle_capacity_m3: float | None = None
@@ -90,7 +90,7 @@ def project_to_metres(parcels: list, depot_lat: float, depot_lon: float) -> np.n
 
 
 def _time_window_features(parcels: list) -> np.ndarray:
-    """Window midpoint and width in minutes — cyclical/interval features,
+    """Window midpoint and width in minutes - cyclical/interval features,
     not raw start/end, so two windows that both center on midday but have
     different widths are treated as similar rather than as unrelated raw
     numbers."""
@@ -123,7 +123,7 @@ def _weight_vector(feature_weights: dict) -> np.ndarray:
 
 def raw_feature_matrix(parcels: list, depot_lat: float, depot_lon: float) -> np.ndarray:
     """[x_km, y_km, window_midpoint_min, window_width_min, urgency_score].
-    `fragile` is intentionally excluded — it is a handling constraint
+    `fragile` is intentionally excluded - it is a handling constraint
     enforced by the NSGA-II assignment problem (Phase 3), not a spatial
     similarity signal."""
     spatial = project_to_metric(parcels, depot_lat, depot_lon)
@@ -208,7 +208,7 @@ async def _get_planning_instance(
     include_carryover: bool = True,
     dataset_id: str | None = None,
 ) -> list[Parcel]:
-    """The only sanctioned way to load parcels for clustering/optimization —
+    """The only sanctioned way to load parcels for clustering/optimization -
     always scoped to one (depot_id, delivery_date) instance. Replaces the
     old `db.query(Parcel).all()` full-table scan.
 

@@ -1,0 +1,88 @@
+{
+  "settings": {
+    "app_name": "Fleet Web App - Parcel Optimization Backend",
+    "app_version": "1.0.0",
+    "mongodb_url": "mongodb://localhost:27017/",
+    "mongodb_database": "fleet_web_app",
+    "depot_latitude": 6.9271,
+    "depot_longitude": 79.8612,
+    "hdbscan_min_cluster_size": 8,
+    "hdbscan_min_samples": 4,
+    "import_lat_min": 6.7,
+    "import_lat_max": 7.1,
+    "import_lng_min": 79.7,
+    "import_lng_max": 80.1,
+    "imputed_dimension_safety_factor": 1.5,
+    "stack_weight_tolerance_kg": 0.5,
+    "enforce_weight_order": false,
+    "nsga2_population": 100,
+    "nsga2_generations": 200,
+    "depot_departure_time": "08:00",
+    "jwt_secret_key": "***REDACTED***",
+    "jwt_algorithm": "HS256",
+    "access_token_minutes": 60,
+    "model_dir": "artifacts"
+  },
+  "config_snapshot": {
+    "settings": {
+      "app_name": "Fleet Web App - Parcel Optimization Backend",
+      "app_version": "1.0.0",
+      "mongodb_url": "mongodb://localhost:27017/",
+      "mongodb_database": "fleet_web_app",
+      "depot_latitude": 6.9271,
+      "depot_longitude": 79.8612,
+      "hdbscan_min_cluster_size": 8,
+      "hdbscan_min_samples": 4,
+      "import_lat_min": 6.7,
+      "import_lat_max": 7.1,
+      "import_lng_min": 79.7,
+      "import_lng_max": 80.1,
+      "imputed_dimension_safety_factor": 1.5,
+      "stack_weight_tolerance_kg": 0.5,
+      "enforce_weight_order": false,
+      "nsga2_population": 100,
+      "nsga2_generations": 200,
+      "depot_departure_time": "08:00",
+      "jwt_secret_key": "***REDACTED***",
+      "jwt_algorithm": "HS256",
+      "access_token_minutes": 60,
+      "model_dir": "artifacts"
+    },
+    "experiment": {
+      "methods": "hdbscan",
+      "capacity_aware": "on",
+      "seeds": "0,1,2",
+      "instances": "D-CMB-001/2026-01-05;D-CMB-002/2026-01-05;D-CMB-003/2026-01-05;D-CMB-001/2026-01-06;D-CMB-002/2026-01-06;D-CMB-003/2026-01-06;D-CMB-001/2026-01-07;D-CMB-002/2026-01-07;D-CMB-003/2026-01-07",
+      "feature_set": "location",
+      "time_weight": 5.0,
+      "include_window_width": false,
+      "pop": 100,
+      "gen": 200,
+      "out": "results/feature_set_downstream_raw",
+      "n_jobs": 1,
+      "allow_dirty": false
+    }
+  },
+  "git_commit_sha": "af53ba22e09525bb90829d7862668c794f001781",
+  "git_dirty": false,
+  "python_version": "3.13.9",
+  "package_versions": {
+    "pymoo": "0.6.2",
+    "hdbscan": "0.8.44",
+    "scikit-learn": "1.9.0",
+    "numpy": "2.5.2",
+    "scipy": "1.18.0",
+    "pandas": "2.3.3"
+  },
+  "timestamp_utc": "2026-08-22T07:40:01.212077+00:00",
+  "catalog_snapshot_digest": "9e4802fa93607d03d7c26d596533975d32846931b7d7e1ae7baf3a40e72cad40",
+  "dataset": {
+    "filename": "parcels_sample_36000.csv",
+    "sha256": "e68fc340f15e422044fcb83969efd512c4c68128d740a1de5fa1bbd77e176c75"
+  },
+  "seeds": [
+    0,
+    1,
+    2
+  ]
+}
