@@ -2,6 +2,7 @@ import os
 from types import SimpleNamespace
 
 from app.evaluation import harness
+from app.evaluation.feature_set_downstream_study import study_configs
 
 
 def test_evaluation_workers_limit_numerical_thread_pools():
@@ -42,3 +43,15 @@ def test_feature_set_is_part_of_pipeline_run_identity():
     assert "features-location_" in location.run_id
     assert "features-location_time_" in location_time.run_id
     assert harness.PipelineRunConfig(**common).feature_set == "location"
+
+
+def test_downstream_feature_study_has_fixed_108_run_design():
+    configs = study_configs()
+    assert len(configs) == 108
+    assert len({config.run_id for config in configs}) == 108
+    assert all(config.method == "hdbscan" and config.capacity_aware for config in configs)
+    assert all(config.include_window_width is False for config in configs)
+    assert {(config.feature_set, config.time_weight) for config in configs} == {
+        ("location", 5.0), ("location_time", 1.0),
+        ("location_time", 5.0), ("location_time", 20.0),
+    }

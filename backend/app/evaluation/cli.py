@@ -17,6 +17,8 @@ def _parse_args(argv):
     parser.add_argument("--seeds", default=",".join(map(str, range(30))))
     parser.add_argument("--instances", default="all")
     parser.add_argument("--feature-set", default="location")
+    parser.add_argument("--time-weight", type=float, default=5.0)
+    parser.add_argument("--include-window-width", action="store_true")
     parser.add_argument("--pop", type=int, default=100)
     parser.add_argument("--gen", type=int, default=200)
     parser.add_argument("--out", required=True)
@@ -41,7 +43,13 @@ def main(argv=None):
     asyncio.run(_prepare(args))
     instances = list_instances() if args.instances == "all" else [tuple(x.split("/")) for x in args.instances.split(";")]
     capacity = {"on": [True], "off": [False], "both": [False, True]}[args.capacity_aware]
-    configs = [PipelineRunConfig(depot, str(day), method, cap, seed, args.pop, args.gen, args.feature_set)
+    configs = [PipelineRunConfig(
+        depot_id=depot, delivery_date=str(day), method=method,
+        capacity_aware=cap, seed=seed, population=args.pop,
+        generations=args.gen, feature_set=args.feature_set,
+        time_weight=args.time_weight,
+        include_window_width=args.include_window_width,
+    )
         for depot, day in instances for method in args.methods.split(",") for cap in capacity
         for seed in [int(x) for x in args.seeds.split(",")]]
     run_pipeline_batch(configs, n_jobs=args.n_jobs, out_dir=args.out)

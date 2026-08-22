@@ -64,13 +64,16 @@ class PipelineRunConfig:
     population: int = 100
     generations: int = 200
     feature_set: str = "location"
+    time_weight: float = 5.0
+    include_window_width: bool = False
     enforce_weight_order: bool = False
 
     @property
     def run_id(self):
         return (
             f"{self.depot_id}_{self.delivery_date}_{self.method}_"
-            f"features-{self.feature_set}_cap{int(self.capacity_aware)}_seed{self.seed}"
+            f"features-{self.feature_set}_tw{self.time_weight:g}_"
+            f"ww{int(self.include_window_width)}_cap{int(self.capacity_aware)}_seed{self.seed}"
         )
 
 
@@ -98,7 +101,12 @@ async def run_pipeline_one(cfg):
     catalog = await load_catalog_snapshot(cfg.depot_id, target_date, cache=cache)
     parcels = [p.model_copy(deep=True) for p in await get_planning_instance(cfg.depot_id, target_date, include_carryover=False)]
     mean_capacity = sum(v.capacity_m3 for v in rows) / len(rows)
-    cluster_config = ClusteringConfig(depot_lat=depot.lat, depot_lon=depot.lng, feature_set=cfg.feature_set, mean_vehicle_capacity_m3=mean_capacity if cfg.method == "kmeans" else None)
+    cluster_config = ClusteringConfig(
+        depot_lat=depot.lat, depot_lon=depot.lng,
+        feature_set=cfg.feature_set, time_weight=cfg.time_weight,
+        include_window_width=cfg.include_window_width,
+        mean_vehicle_capacity_m3=mean_capacity if cfg.method == "kmeans" else None,
+    )
     cluster_fn = clustering_service.cluster if cfg.method == "hdbscan" else baseline_clustering.cluster
     started = time.perf_counter()
     clustered = cluster_fn(parcels, cfg.seed, cluster_config)
@@ -120,7 +128,9 @@ async def run_pipeline_one(cfg):
     return {
         "run_id": cfg.run_id, "depot_id": cfg.depot_id, "delivery_date": cfg.delivery_date,
         "method": cfg.method, "capacity_aware": cfg.capacity_aware, "seed": cfg.seed,
-        "feature_set": cfg.feature_set, "n_parcels": len(included), "excluded_parcels": len(parcels) - len(included),
+        "feature_set": cfg.feature_set, "time_weight": cfg.time_weight,
+        "include_window_width": cfg.include_window_width,
+        "n_parcels": len(included), "excluded_parcels": len(parcels) - len(included),
         "raw_cluster_count": clustered.n_clusters, "post_noise_cluster_count": clustered.post_noise_cluster_count,
         "noise_count": clustered.noise_count, "mean_utilization": mean_util,
         "utilization_ceiling_capacity": ceiling.utilization, "utilization_greedy_reference": greedy.utilization,
