@@ -176,11 +176,7 @@ async def run_pipeline_one(cfg):
     }
 
 
-def _run_pipeline_sync(cfg):
-    return asyncio.run(run_pipeline_one(cfg))
-
-
-def run_pipeline_batch(configs, *, n_jobs=1, out_dir):
+async def run_pipeline_batch_async(configs, *, n_jobs=1, out_dir):
     """Stage 1 uses serial execution; process parallelism is added in Stage 4."""
     if n_jobs != 1:
         raise ValueError("Parallel evaluation is not enabled until the Stage 4 determinism gate passes.")
@@ -188,7 +184,11 @@ def run_pipeline_batch(configs, *, n_jobs=1, out_dir):
     output = []
     for cfg in configs:
         target = path / f"{cfg.run_id}.json"
-        row = json.loads(target.read_text()) if target.exists() else _run_pipeline_sync(cfg)
+        row = json.loads(target.read_text()) if target.exists() else await run_pipeline_one(cfg)
         if not target.exists(): target.write_text(json.dumps(row, indent=2, default=str))
         output.append(row)
     return output
+
+
+def run_pipeline_batch(configs, *, n_jobs=1, out_dir):
+    return asyncio.run(run_pipeline_batch_async(configs, n_jobs=n_jobs, out_dir=out_dir))

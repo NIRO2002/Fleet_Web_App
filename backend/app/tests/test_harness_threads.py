@@ -1,4 +1,5 @@
 import os
+import asyncio
 from types import SimpleNamespace
 
 from app.evaluation import harness
@@ -30,6 +31,22 @@ def test_parallelism_is_gated_until_stage_four():
         assert "Stage 4" in str(error)
     else:
         raise AssertionError("parallel execution must remain gated")
+
+
+def test_async_pipeline_batch_uses_callers_event_loop(tmp_path, monkeypatch):
+    loop_ids = []
+    async def fake_run(_cfg):
+        loop_ids.append(id(asyncio.get_running_loop()))
+        return {"ok": True}
+    monkeypatch.setattr(harness, "run_pipeline_one", fake_run)
+    async def scenario():
+        expected_loop = id(asyncio.get_running_loop())
+        rows = await harness.run_pipeline_batch_async(
+            [SimpleNamespace(run_id="one")], out_dir=tmp_path
+        )
+        assert loop_ids == [expected_loop]
+        assert rows == [{"ok": True}]
+    asyncio.run(scenario())
 
 
 def test_feature_set_is_part_of_pipeline_run_identity():

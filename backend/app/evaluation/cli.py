@@ -6,7 +6,7 @@ from pathlib import Path
 
 from app.core.reproducibility import is_git_dirty, write_manifest
 from app.db.database import init_database
-from app.evaluation.harness import PipelineRunConfig, evaluation_catalog_snapshot, run_pipeline_batch
+from app.evaluation.harness import PipelineRunConfig, evaluation_catalog_snapshot, run_pipeline_batch_async
 from app.evaluation.real_data import DATASET_PATH, list_instances
 
 
@@ -35,12 +35,16 @@ async def _prepare(args):
         experiment_config=vars(args), extra={"seeds": [int(x) for x in args.seeds.split(",")]})
 
 
+async def _execute(args, configs):
+    await _prepare(args)
+    await run_pipeline_batch_async(configs, n_jobs=args.n_jobs, out_dir=args.out)
+
+
 def main(argv=None):
     args = _parse_args(argv if argv is not None else sys.argv[1:])
     if is_git_dirty() and not args.allow_dirty:
         print("Refusing to evaluate a dirty working tree; commit or use --allow-dirty.", file=sys.stderr)
         return 1
-    asyncio.run(_prepare(args))
     instances = list_instances() if args.instances == "all" else [tuple(x.split("/")) for x in args.instances.split(";")]
     capacity = {"on": [True], "off": [False], "both": [False, True]}[args.capacity_aware]
     configs = [PipelineRunConfig(
@@ -52,7 +56,7 @@ def main(argv=None):
     )
         for depot, day in instances for method in args.methods.split(",") for cap in capacity
         for seed in [int(x) for x in args.seeds.split(",")]]
-    run_pipeline_batch(configs, n_jobs=args.n_jobs, out_dir=args.out)
+    asyncio.run(_execute(args, configs))
     return 0
 
 
