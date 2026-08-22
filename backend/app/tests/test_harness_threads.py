@@ -13,13 +13,14 @@ def test_evaluation_workers_limit_numerical_thread_pools():
 def test_capacity_aware_audit_carries_current_cluster_status(monkeypatch):
     repaired = SimpleNamespace(clusters={1: [object()]}, n_split=1, n_merged=2,
         clusters_before=1, clusters_after=1, cluster_status={1: {"feasible": True, "reason": None}},
-        excluded_infeasible_count=0)
+        excluded_infeasible_count=0, audit=[{"temporal_split_predicate_fired": True}])
     monkeypatch.setattr(harness, "repair_clusters", lambda *args, **kwargs: repaired)
     clusters, audit = harness._prepare_warm_clusters({0: [object()]}, [], True,
         depot_lat=1., depot_lon=2., seed=7)
     assert clusters == repaired.clusters
     assert audit["n_split"] == 1 and audit["n_merged"] == 2
     assert audit["cluster_status"] == repaired.cluster_status
+    assert audit["audit"] == repaired.audit
 
 
 def test_parallelism_is_gated_until_stage_four():
@@ -55,3 +56,11 @@ def test_downstream_feature_study_has_fixed_108_run_design():
         ("location", 5.0), ("location_time", 1.0),
         ("location_time", 5.0), ("location_time", 20.0),
     }
+
+
+def test_clustering_context_flags_stage_4c_degeneracy():
+    clustered = SimpleNamespace(labels=[0] * 7 + [1] * 2 + [-1])
+    context = harness._clustering_context([object()] * 10, clustered)
+    assert context["max_cluster_share"] == 0.7
+    assert context["degenerate"] is True
+    assert 0.0 < context["normalized_cluster_size_entropy"] < 1.0
