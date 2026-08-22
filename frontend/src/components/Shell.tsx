@@ -2,6 +2,7 @@ import {
   Bell,
   Boxes,
   ClipboardList,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   HelpCircle,
@@ -29,12 +30,14 @@ const navItems: NavItem[] = [
   { label: 'Parcel Consolidation', to: '/parcel-consolidation', icon: Boxes },
   { label: 'Load Optimization', to: '/load-optimization', icon: Route },
   { label: 'Load Plans', to: '/load-plans', icon: ClipboardList },
+  { label: 'Loaded Vehicles', to: '/loaded-vehicles', icon: CheckCircle2 },
   { label: 'Vehicle Types', to: '/vehicle-types', icon: Truck },
 ]
 
 const routeTitles: Record<string, string> = {
   '/parcel-consolidation': 'Parcel Consolidation — HDBSCAN Clustering',
   '/load-optimization': 'Load Optimization — NSGA-II',
+  '/loaded-vehicles': 'Loaded Vehicles — Fleet Handoff',
   '/vehicle-types': 'Vehicle Types — Capability Catalog',
 }
 

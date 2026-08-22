@@ -1,6 +1,4 @@
 from fastapi import Depends, HTTPException, status
-from sqlalchemy.orm import Session
-from app.db.session import get_db
 
 def get_current_user():
     # Placeholder for the friend's/auth team's implementation.

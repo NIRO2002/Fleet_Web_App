@@ -72,4 +72,5 @@ def cluster(parcels: list[Parcel], seed: int, config: ClusteringConfig | None = 
         runtime_seconds=runtime,
         method="kmeans",
         metadata={"seed": seed, "k": k, "model": model, "scaler": scaler},
+        post_noise_cluster_count=k,
     )

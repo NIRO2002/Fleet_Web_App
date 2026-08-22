@@ -11,6 +11,7 @@ PARCEL_STATUSES = {"PENDING", "PLANNED", "DELIVERED", "FAILED"}
 
 class ParcelIn(BaseModel):
     parcel_id: str = Field(min_length=1, max_length=64)
+    dataset_id: Optional[str] = Field(default=None, max_length=64)
     depot_id: Optional[str] = Field(default=None, max_length=32)
     delivery_date: Optional[date_type] = None
 
@@ -97,10 +98,14 @@ class ImportError_(BaseModel):
 
 
 class CSVUploadResponse(BaseModel):
+    dataset_id: str
     inserted: int
     updated: int = 0
     skipped: int
+    failed: int = 0
+    processed: int = 0
+    total_rows: int = 0
     duplicates_removed: int = 0
     dimensions_imputed_count: int = 0
-    errors: list[ImportError_] = []
-    warnings: list[ImportError_] = []
+    errors: list[ImportError_] = Field(default_factory=list)
+    warnings: list[ImportError_] = Field(default_factory=list)

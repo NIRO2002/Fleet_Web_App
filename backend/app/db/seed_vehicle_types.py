@@ -25,7 +25,8 @@ smaller parcels per unit volume, so the parcels-per-m3 ratio declines as
 vehicles get bigger) -- an engineering estimate, not field data, and not
 expected to bind before weight/volume/dimensional constraints do.
 """
-from app.db.session import SessionLocal
+import asyncio
+from app.db.database import init_database
 from app.schemas.vehicle_type import VehicleTypeCatalogIn
 from app.services.vehicle_catalog_service import deactivate_type, upsert_type
 
@@ -229,17 +230,17 @@ VEHICLE_TYPES = FIELD_DATA_VEHICLE_TYPES
 _DEACTIVATED_CODES = ["VAN_MED_REEFER", "TRUCK_2T_REEFER", "TRUCK_4T_REEFER"]
 
 
-def seed_vehicle_types() -> None:
-    db = SessionLocal()
+async def seed_vehicle_types() -> None:
+    client = await init_database()
     try:
         for payload in VEHICLE_TYPES:
-            upsert_type(db, payload)
+            await upsert_type(payload)
         for code in _DEACTIVATED_CODES:
-            deactivate_type(db, code)
+            await deactivate_type(code)
     finally:
-        db.close()
+        client.close()
 
 
 if __name__ == "__main__":
-    seed_vehicle_types()
+    asyncio.run(seed_vehicle_types())
     print(f"Seeded {len(VEHICLE_TYPES)} vehicle types.")

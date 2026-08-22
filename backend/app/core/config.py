@@ -3,7 +3,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     app_name: str = "Fleet Web App - Parcel Optimization Backend"
     app_version: str = "1.0.0"
-    database_url: str = "sqlite:///./fleet_web_app.db"
+    mongodb_url: str = "mongodb://localhost:27017/"
+    mongodb_database: str = "fleet_web_app"
 
     depot_latitude: float = 6.9271
     depot_longitude: float = 79.8612

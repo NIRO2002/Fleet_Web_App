@@ -37,6 +37,7 @@ export function ParcelConsolidationPage() {
   const navigate = useNavigate()
 
   const [parcels, setParcels] = useState<Parcel[]>([])
+  const [activeDatasetId, setActiveDatasetId] = useState<string | null>(null)
   const [clusterSummary, setClusterSummary] = useState<ClusterSummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [pageNotice, setPageNotice] = useState<Notice>(null)
@@ -60,19 +61,36 @@ export function ParcelConsolidationPage() {
   const [clusterFilter, setClusterFilter] = useState('all')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
-  const refresh = async () => {
-    setLoading(true)
+  const resetWorkingState = () => {
+    setParcels([])
+    setClusterSummary(null)
+    setClusterFilter('all')
+    setSelectedIds(new Set())
+    setTrainNotice(null)
+    setPredictNotice(null)
+    setPredictResult(null)
     setPageNotice(null)
+    setCsvNotice(null)
+    setAddNotice(null)
+  }
+
+  const refresh = async (datasetId = activeDatasetId) => {
+    resetWorkingState()
+    if (!datasetId) {
+      setLoading(false)
+      return
+    }
+    setLoading(true)
     // Fetched independently, not via Promise.all: the cluster summary can
     // legitimately fail before anything has ever been trained, and that
     // must not prevent the parcel list itself from rendering.
     try {
-      setParcels(await parcelService.list())
+      setParcels(await parcelService.listForDataset(datasetId))
     } catch (err) {
       setPageNotice({ tone: 'error', text: err instanceof Error ? err.message : 'Failed to load parcels.' })
     }
     try {
-      setClusterSummary(await parcelService.getClusterSummary())
+      setClusterSummary(await parcelService.getClusterSummary(datasetId))
     } catch {
       setClusterSummary(null)
     }
@@ -90,10 +108,12 @@ export function ParcelConsolidationPage() {
     try {
       const payload = parcelDraftToInput(addDraft)
       setAddSubmitting(true)
-      await parcelService.create(payload)
+      const datasetId = activeDatasetId ?? `MANUAL-${crypto.randomUUID()}`
+      await parcelService.create(payload, datasetId)
+      setActiveDatasetId(datasetId)
       setAddNotice({ tone: 'success', text: `Parcel ${payload.parcel_id} saved.` })
       setAddDraft(emptyParcelDraft(nextParcelId(parcels.map((p) => p.parcel_id).concat(payload.parcel_id))))
-      await refresh()
+      await refresh(datasetId)
     } catch (err) {
       setAddNotice({ tone: 'error', text: err instanceof Error ? err.message : 'Failed to save parcel.' })
     } finally {
@@ -107,12 +127,18 @@ export function ParcelConsolidationPage() {
     setCsvNotice(null)
     try {
       const result = await parcelService.uploadCsv(csvFile)
-      setCsvNotice({
-        tone: result.skipped > 0 ? 'info' : 'success',
-        text: `Inserted ${result.inserted} parcel${result.inserted === 1 ? '' : 's'}, skipped ${result.skipped}.`,
-      })
+      const failed = result.failed ?? result.skipped
+      const firstError = result.errors?.[0]
+      const errorDetail = firstError
+        ? ` First error: row ${firstError.row}, ${firstError.field}: ${firstError.reason}`
+        : ''
+      setActiveDatasetId(result.dataset_id)
       setCsvFile(null)
-      await refresh()
+      await refresh(result.dataset_id)
+      setCsvNotice({
+        tone: failed > 0 ? 'info' : 'success',
+        text: `Processed ${result.processed} of ${result.total_rows} rows: inserted ${result.inserted}, updated ${result.updated}, failed ${failed}${result.duplicates_removed ? `, duplicate IDs consolidated ${result.duplicates_removed}` : ''}.${errorDetail}`,
+      })
     } catch (err) {
       setCsvNotice({ tone: 'error', text: err instanceof Error ? err.message : 'CSV upload failed.' })
     } finally {
@@ -124,7 +150,8 @@ export function ParcelConsolidationPage() {
     setTraining(true)
     setTrainNotice(null)
     try {
-      const result = await parcelService.trainClustering()
+      if (!activeDatasetId) throw new Error('Upload or create a working dataset first.')
+      const result = await parcelService.trainClustering(activeDatasetId)
       const clusterCount = Object.keys(result.clusters).filter((key) => {
         const id = parseClusterKey(key)
         return id !== null && id >= 0
@@ -213,7 +240,7 @@ export function ParcelConsolidationPage() {
     <div>
       <PageHeader
         action={
-          <SecondaryButton onClick={refresh}>
+          <SecondaryButton onClick={() => void refresh()}>
             <RefreshCw className="h-4 w-4" /> Refresh
           </SecondaryButton>
         }
@@ -332,7 +359,9 @@ export function ParcelConsolidationPage() {
                       {row.id !== null && row.id >= 0 && (
                         <button
                           className="text-xs font-black text-fleet-blue"
-                          onClick={() => navigate('/load-optimization', { state: { clusterId: row.id } })}
+                          onClick={() => navigate('/load-optimization', {
+                            state: { parcelIds: parcels.filter((parcel) => parcel.cluster_id === row.id).map((parcel) => parcel.parcel_id) },
+                          })}
                           type="button"
                         >
                           Optimize →

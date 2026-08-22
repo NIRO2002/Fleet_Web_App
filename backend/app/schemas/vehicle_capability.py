@@ -42,7 +42,7 @@ class VehicleCapabilityIn(BaseModel):
 class VehicleCapabilityResponse(VehicleCapabilityIn):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
+    id: int = Field(validation_alias="capability_id")
     max_volume_m3: float
     created_at: datetime
     updated_at: datetime

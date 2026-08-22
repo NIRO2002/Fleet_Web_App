@@ -21,7 +21,8 @@ purely because merging, say, a hazardous cluster into a non-hazardous one
 would misrepresent the resulting cluster's contents — an independent reason
 that doesn't depend on peel existing.
 """
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+import heapq
 
 import numpy as np
 from sklearn.cluster import KMeans
@@ -40,6 +41,8 @@ class RepairConfig:
     # the worst case. Ten preserves a safety bound without prematurely
     # returning a cluster that the placement-aware predicate just rejected.
     max_split_recursion_depth: int = 10
+    enforce_temporal_feasibility: bool = True
+    service_time_minutes: float = 4.0
 
 
 @dataclass
@@ -51,16 +54,29 @@ class RepairedClusters:
     clusters_after: int = 0
     max_depth_hit: bool = False
     audit: list[dict] = field(default_factory=list)
+    cluster_status: dict[int, dict] = field(default_factory=dict)
+    excluded_infeasible_count: int = 0
 
 
 def group_by_cluster(parcels: list[Parcel]) -> dict[int, list[Parcel]]:
     groups: dict[int, list[Parcel]] = {}
+    next_noise_id = -1
     for parcel in parcels:
-        groups.setdefault(parcel.cluster_id, []).append(parcel)
+        cluster_id = parcel.cluster_id
+        if cluster_id == -1:
+            # Noise points remain individually identifiable until repair;
+            # negative IDs mark them as mergeable noise-origin singletons.
+            cluster_id = next_noise_id
+            next_noise_id -= 1
+        groups.setdefault(cluster_id, []).append(parcel)
     return groups
 
 
-def _fits_some_vehicle(parcels: list[Parcel], vehicle_catalog) -> bool:
+def _fits_some_vehicle(
+    parcels: list[Parcel], vehicle_catalog, config: RepairConfig | None = None,
+    depot_lat: float = settings.depot_latitude, depot_lon: float = settings.depot_longitude,
+) -> bool:
+    config = config or RepairConfig()
     if not vehicle_catalog:
         return False
     total_weight = sum(p.weight_kg for p in parcels)
@@ -69,6 +85,17 @@ def _fits_some_vehicle(parcels: list[Parcel], vehicle_catalog) -> bool:
         (max(p.length_cm or 0.0, p.width_cm or 0.0, p.height_cm or 0.0) for p in parcels),
         default=0.0,
     )
+    temporal_diameter_km = 0.0
+    reachable_span = 0
+    if config.enforce_temporal_feasibility and len(parcels) > 1:
+        starts = [minutes(p.time_window_start) for p in parcels]
+        ends = [minutes(p.time_window_end) for p in parcels]
+        reachable_span = max(ends) - min(starts)
+        coords = project_to_metric(parcels, depot_lat, depot_lon)
+        # Two-sweep farthest-point lower bound: O(n), deterministic, and
+        # deliberately cheaper than the former O(n^2) distance matrix.
+        first = int(np.argmax(np.linalg.norm(coords - coords[0], axis=1)))
+        temporal_diameter_km = float(np.max(np.linalg.norm(coords - coords[first], axis=1)))
     for vehicle in vehicle_catalog:
         if total_weight > vehicle.capacity_kg or total_volume > vehicle.capacity_m3:
             continue
@@ -77,6 +104,13 @@ def _fits_some_vehicle(parcels: list[Parcel], vehicle_catalog) -> bool:
         cargo_longest = max(vehicle.cargo_length_cm, vehicle.cargo_width_cm, vehicle.cargo_height_cm)
         if longest_side > cargo_longest:
             continue
+        if config.enforce_temporal_feasibility and len(parcels) > 1:
+            lower_bound_minutes = (
+                len(parcels) * config.service_time_minutes
+                + temporal_diameter_km / max(vehicle.avg_speed_kmh, 1e-6) * 60.0
+            )
+            if lower_bound_minutes > reachable_span:
+                continue
         if attempt_placement(parcels, vehicle, collect_exceptions=False) is not None:
             return True
     return False
@@ -139,7 +173,7 @@ def _split_oversize(
 
     while queue:
         cluster_id, parcels, depth = queue.pop(0)
-        fits = len(parcels) <= 1 or _fits_some_vehicle(parcels, vehicle_catalog)
+        fits = len(parcels) <= 1 or _fits_some_vehicle(parcels, vehicle_catalog, config, depot_lat, depot_lon)
         audit.append({
             "operation": "split_check",
             "cluster_id": cluster_id,
@@ -201,46 +235,55 @@ def _merge_undersize(
     audit: list[dict],
 ):
     n_merged = 0
-    cluster_ids = list(clusters.keys())
+    versions = {cid: 0 for cid in clusters}
+    centroids = {cid: project_to_metric(rows, depot_lat, depot_lon).mean(axis=0) for cid, rows in clusters.items()}
+    feasibility_cache: dict[tuple[int, int, int, int], bool] = {}
+    candidates: list[tuple[float, int, int, int, int]] = []
 
-    while True:
-        best_pair = None
-        best_distance = float("inf")
-        for i in range(len(cluster_ids)):
-            for j in range(i + 1, len(cluster_ids)):
-                cid_a, cid_b = cluster_ids[i], cluster_ids[j]
-                if cid_a not in clusters or cid_b not in clusters:
-                    continue
-                parcels_a, parcels_b = clusters[cid_a], clusters[cid_b]
-                if _cluster_handling_key(parcels_a) != _cluster_handling_key(parcels_b):
-                    continue
-                if not _fits_some_vehicle(parcels_a + parcels_b, vehicle_catalog):
-                    continue
+    def add_candidate(cid_a: int, cid_b: int) -> None:
+        if cid_a == cid_b or cid_a not in clusters or cid_b not in clusters:
+            return
+        cid_a, cid_b = sorted((cid_a, cid_b))
+        parcels_a, parcels_b = clusters[cid_a], clusters[cid_b]
+        if _cluster_handling_key(parcels_a) != _cluster_handling_key(parcels_b):
+            return
+        distance = float(np.linalg.norm(centroids[cid_a] - centroids[cid_b]))
+        if distance > config.merge_max_centroid_km:
+            return
+        start_a, end_a = _cluster_window_minutes(parcels_a)
+        start_b, end_b = _cluster_window_minutes(parcels_b)
+        if _overlap_minutes(start_a, end_a, start_b, end_b) <= 0:
+            return
+        key = (cid_a, versions[cid_a], cid_b, versions[cid_b])
+        feasible = feasibility_cache.get(key)
+        if feasible is None:
+            feasible = _fits_some_vehicle(parcels_a + parcels_b, vehicle_catalog, config, depot_lat, depot_lon)
+            feasibility_cache[key] = feasible
+        if feasible:
+            heapq.heappush(candidates, (distance, cid_a, cid_b, versions[cid_a], versions[cid_b]))
 
-                centroid_a = project_to_metric(parcels_a, depot_lat, depot_lon).mean(axis=0)
-                centroid_b = project_to_metric(parcels_b, depot_lat, depot_lon).mean(axis=0)
-                distance = float(np.linalg.norm(centroid_a - centroid_b))
-                if distance > config.merge_max_centroid_km:
-                    continue
+    ids = sorted(clusters)
+    for i, cid_a in enumerate(ids):
+        for cid_b in ids[i + 1:]:
+            add_candidate(cid_a, cid_b)
 
-                start_a, end_a = _cluster_window_minutes(parcels_a)
-                start_b, end_b = _cluster_window_minutes(parcels_b)
-                if _overlap_minutes(start_a, end_a, start_b, end_b) <= 0:
-                    continue
-
-                if distance < best_distance:
-                    best_distance = distance
-                    best_pair = (cid_a, cid_b)
-
-        if best_pair is None:
-            break
-
-        cid_a, cid_b = best_pair
+    while candidates:
+        best_distance, cid_a, cid_b, version_a, version_b = heapq.heappop(candidates)
+        if cid_a not in clusters or cid_b not in clusters:
+            continue
+        if versions[cid_a] != version_a or versions[cid_b] != version_b:
+            continue
         clusters[cid_a] = clusters[cid_a] + clusters[cid_b]
         del clusters[cid_b]
-        cluster_ids = [cid for cid in cluster_ids if cid != cid_b]
+        versions[cid_a] += 1
+        versions.pop(cid_b)
+        centroids[cid_a] = project_to_metric(clusters[cid_a], depot_lat, depot_lon).mean(axis=0)
+        centroids.pop(cid_b)
         n_merged += 1
         audit.append({"operation": "merge", "into": cid_a, "absorbed": cid_b, "centroid_distance_km": best_distance})
+        for other in sorted(clusters):
+            if other != cid_a:
+                add_candidate(cid_a, other)
 
     return clusters, n_merged
 
@@ -254,6 +297,8 @@ def repair_clusters(
     seed: int = 0,
 ) -> RepairedClusters:
     config = config or RepairConfig()
+    if not vehicle_catalog:
+        raise ValueError("capacity-aware repair requires a non-empty vehicle catalog")
     clusters = {cid: list(parcels) for cid, parcels in parcels_by_cluster.items()}
     clusters_before = len(clusters)
     total_before = sum(len(p) for p in clusters.values())
@@ -272,12 +317,37 @@ def repair_clusters(
             f"capacity-aware repair lost or duplicated parcels: {total_before} -> {total_after}"
         )
 
+    depth_cap_ids = {row["cluster_id"] for row in audit if row.get("operation") == "split_depth_cap"}
+    status_by_old_id = {}
+    no_temporal = replace(config, enforce_temporal_feasibility=False)
+    for cluster_id, members in clusters.items():
+        feasible = _fits_some_vehicle(members, vehicle_catalog, config, depot_lat, depot_lon)
+        reason = None
+        if not feasible:
+            if cluster_id in depth_cap_ids:
+                reason = "split_depth_cap"
+            elif _fits_some_vehicle(members, vehicle_catalog, no_temporal, depot_lat, depot_lon):
+                reason = "temporally_infeasible"
+            else:
+                reason = "no_fitting_vehicle"
+        status_by_old_id[cluster_id] = {"feasible": feasible, "reason": reason}
+
+    normalized_clusters = {}
+    normalized_status = {}
+    for normalized_id, old_id in enumerate(sorted(clusters)):
+        normalized_clusters[normalized_id] = clusters[old_id]
+        normalized_status[normalized_id] = status_by_old_id[old_id]
+        for parcel in clusters[old_id]:
+            parcel.cluster_id = normalized_id
+
     return RepairedClusters(
-        clusters=clusters,
+        clusters=normalized_clusters,
         n_split=n_split,
         n_merged=n_merged,
         clusters_before=clusters_before,
         clusters_after=len(clusters),
         max_depth_hit=max_depth_hit,
         audit=audit,
+        cluster_status=normalized_status,
+        excluded_infeasible_count=sum(not row["feasible"] for row in normalized_status.values()),
     )

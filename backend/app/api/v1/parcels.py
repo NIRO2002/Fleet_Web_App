@@ -1,71 +1,125 @@
 from datetime import date
+from uuid import uuid4
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
-from sqlalchemy.orm import Session
-
-from app.db.session import get_db
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from app.models.parcel import Parcel
 from app.schemas.parcel import (
     ParcelIn, ParcelResponse, ClusterPredictionRequest, CSVUploadResponse
 )
 from app.services.data_service import upsert_parcel, import_csv
 from app.services.clustering_service import predict_cluster, train_hdbscan, cluster_summary
+from app.services.clustering_common import ClusteringConfig
+from app.services.depot_service import get_depot_or_fail
 
 router = APIRouter(prefix="/parcels", tags=["parcels"])
 
 @router.post("", response_model=ParcelResponse)
-def create_parcel(payload: ParcelIn, db: Session = Depends(get_db)):
-    return upsert_parcel(db, payload)
+async def create_parcel(payload: ParcelIn):
+    return await upsert_parcel(payload)
 
 @router.get("", response_model=list[ParcelResponse])
-def list_parcels(
+async def list_parcels(
     depot_id: str | None = Query(default=None),
     delivery_date: date | None = Query(default=None),
-    db: Session = Depends(get_db),
+    dataset_id: str | None = Query(default=None),
 ):
-    query = db.query(Parcel)
+    filters = {}
     if depot_id is not None:
-        query = query.filter(Parcel.depot_id == depot_id)
+        filters["depot_id"] = depot_id
     if delivery_date is not None:
-        query = query.filter(Parcel.delivery_date == delivery_date)
-    return query.order_by(Parcel.created_at.desc()).all()
+        filters["delivery_date"] = delivery_date
+    if dataset_id is not None:
+        filters["dataset_id"] = dataset_id
+    return await Parcel.find(filters).sort("-created_at").to_list()
 
 @router.post("/upload-csv", response_model=CSVUploadResponse)
-async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)):
-    if not file.filename.lower().endswith(".csv"):
+async def upload_csv(
+    file: UploadFile = File(...),
+    depot_id: str | None = Query(default=None),
+    delivery_date: date | None = Query(default=None),
+):
+    filename = file.filename or ""
+    if not filename.lower().endswith(".csv"):
         raise HTTPException(status_code=400, detail="CSV file required")
-    return import_csv(db, await file.read())
+    content = await file.read()
+    dataset_id = f"IMPORT-{uuid4().hex}"
+    result = await import_csv(
+        content,
+        default_depot_id=depot_id,
+        default_delivery_date=delivery_date,
+        dataset_id=dataset_id,
+    )
+    return result
 
 @router.post("/clustering/train")
-def train_clustering(
+async def train_clustering(
     depot_id: str = Query(...),
     delivery_date: date = Query(...),
     seed: int = Query(default=0),
-    db: Session = Depends(get_db),
+    dataset_id: str | None = Query(default=None),
 ):
     """Trains HDBSCAN on exactly one (depot_id, delivery_date) planning
     instance — never the whole parcels table. See
     app/services/clustering_service.py."""
     try:
-        result, parcels = train_hdbscan(db, depot_id, delivery_date, seed=seed)
+        if dataset_id is None:
+            depot = await get_depot_or_fail(depot_id)
+            result, parcels = await train_hdbscan(
+                depot_id,
+                delivery_date,
+                seed=seed,
+                config=ClusteringConfig(depot_lat=depot.lat, depot_lon=depot.lng),
+            )
+            n_clusters = result.n_clusters
+            noise_count = result.noise_count
+            runtime_seconds = result.runtime_seconds
+        else:
+            dataset_rows = await Parcel.find({"dataset_id": dataset_id}).to_list()
+            instances = sorted({
+                (row.depot_id, row.delivery_date)
+                for row in dataset_rows
+                if row.depot_id is not None and row.delivery_date is not None
+            })
+            if not instances:
+                raise ValueError("The active dataset has no valid depot/date planning instances.")
+            parcels = []
+            n_clusters = 0
+            noise_count = 0
+            runtime_seconds = 0.0
+            label_offset = 0
+            for instance_depot, instance_date in instances:
+                depot = await get_depot_or_fail(instance_depot)
+                instance_result, instance_parcels = await train_hdbscan(
+                    instance_depot,
+                    instance_date,
+                    seed=seed,
+                    dataset_id=dataset_id,
+                    label_offset=label_offset,
+                    config=ClusteringConfig(depot_lat=depot.lat, depot_lon=depot.lng),
+                )
+                parcels.extend(instance_parcels)
+                n_clusters += instance_result.n_clusters
+                noise_count += instance_result.noise_count
+                runtime_seconds += instance_result.runtime_seconds
+                label_offset += instance_result.n_clusters
         return {
             "status": "trained",
             "parcel_count": len(parcels),
-            "n_clusters": result.n_clusters,
-            "noise_count": result.noise_count,
-            "runtime_seconds": result.runtime_seconds,
-            "clusters": cluster_summary(db, depot_id, delivery_date),
+            "n_clusters": n_clusters,
+            "noise_count": noise_count,
+            "runtime_seconds": runtime_seconds,
+            "clusters": await cluster_summary(depot_id, delivery_date, dataset_id=dataset_id),
         }
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
 @router.get("/clustering")
-def get_clusters(
+async def get_clusters(
     depot_id: str = Query(...),
     delivery_date: date = Query(...),
-    db: Session = Depends(get_db),
+    dataset_id: str | None = Query(default=None),
 ):
-    return cluster_summary(db, depot_id, delivery_date)
+    return await cluster_summary(depot_id, delivery_date, dataset_id=dataset_id)
 
 @router.post("/clustering/predict")
 def predict_new_parcel(

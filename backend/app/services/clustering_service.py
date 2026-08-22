@@ -13,7 +13,7 @@ from pathlib import Path
 
 import hdbscan
 import joblib
-from sqlalchemy.orm import Session
+from pymongo import UpdateOne
 
 from app.core.config import settings
 from app.models.parcel import Parcel
@@ -34,6 +34,9 @@ def cluster(parcels: list[Parcel], seed: int, config: ClusteringConfig | None = 
     inputs, so it is threaded through only for the metadata record, not
     used to seed anything internally today."""
     config = config or ClusteringConfig()
+    planning_keys = {(p.depot_id, p.delivery_date) for p in parcels}
+    if len(planning_keys) > 1:
+        raise ValueError("HDBSCAN input must contain exactly one depot/date planning instance.")
     if len(parcels) < config.min_cluster_size:
         raise ValueError(f"At least {config.min_cluster_size} parcels are required.")
 
@@ -53,16 +56,19 @@ def cluster(parcels: list[Parcel], seed: int, config: ClusteringConfig | None = 
 
     for parcel, label, probability in zip(parcels, final_labels, model.probabilities_):
         parcel.cluster_id = int(label)
-        parcel.cluster_probability = float(probability)
+        # -1.0 is the documented sentinel for a point HDBSCAN originally
+        # labelled noise, including points geographically reassigned later.
+        parcel.cluster_probability = -1.0 if parcel.is_noise else float(probability)
 
     runtime = time.perf_counter() - t0
     return ClusterResult(
         labels=final_labels,
-        n_clusters=len(set(final_labels.tolist())),
+        n_clusters=len({label for label in raw_labels.tolist() if label >= 0}),
         noise_count=noise_count,
         runtime_seconds=runtime,
         method="hdbscan",
         metadata={"seed": seed, "model": model, "scaler": scaler},
+        post_noise_cluster_count=len({label for label in final_labels.tolist() if label >= 0}),
     )
 
 
@@ -72,24 +78,42 @@ def _model_path(depot_id: str, delivery_date) -> Path:
     return model_dir / f"hdbscan_{depot_id}_{delivery_date}.joblib"
 
 
-def train_hdbscan(
-    db: Session,
+async def train_hdbscan(
     depot_id: str,
     delivery_date,
     seed: int = 0,
     config: ClusteringConfig | None = None,
+    dataset_id: str | None = None,
+    label_offset: int = 0,
 ):
     """DB- and persistence-aware wrapper around `cluster()`, scoped to one
     planning instance. Persists the fitted HDBSCAN model *and* the scaler
     it was fit with, so `predict_cluster` transforms new parcels
     consistently instead of re-fitting a scaler on a single row."""
-    parcels = get_planning_instance(db, depot_id, delivery_date)
+    parcels = await get_planning_instance(
+        depot_id,
+        delivery_date,
+        dataset_id=dataset_id,
+    )
     config = config or ClusteringConfig()
     result = cluster(parcels, seed, config)
-    db.commit()
+    if label_offset:
+        for parcel in parcels:
+            if parcel.cluster_id is not None and parcel.cluster_id >= 0:
+                parcel.cluster_id += label_offset
+    if parcels:
+        await Parcel.get_motor_collection().bulk_write([
+            UpdateOne({"parcel_id": p.parcel_id}, {"$set": {"cluster_id": p.cluster_id, "cluster_probability": p.cluster_probability, "is_noise": p.is_noise}})
+            for p in parcels
+        ])
 
     joblib.dump(
-        {"model": result.metadata["model"], "scaler": result.metadata["scaler"], "config": config},
+        {
+            "model": result.metadata["model"],
+            "scaler": result.metadata["scaler"],
+            "config": config,
+            "label_offset": label_offset,
+        },
         _model_path(depot_id, delivery_date),
     )
     return result, parcels
@@ -109,6 +133,8 @@ def predict_cluster(payload, depot_id: str, delivery_date):
     X = transform_with_scaler([temp], scaler, config)
     labels, strengths = hdbscan.approximate_predict(model, X)
     label = int(labels[0])
+    if label >= 0:
+        label += int(bundle.get("label_offset", 0))
     return {
         "cluster_id": label if label >= 0 else None,
         "cluster_probability": float(strengths[0]),
@@ -116,14 +142,16 @@ def predict_cluster(payload, depot_id: str, delivery_date):
     }
 
 
-def cluster_summary(db: Session, depot_id: str, delivery_date) -> dict:
-    rows = (
-        db.query(Parcel.cluster_id)
-        .filter(Parcel.depot_id == depot_id, Parcel.delivery_date == delivery_date)
-        .all()
+async def cluster_summary(depot_id: str, delivery_date, dataset_id: str | None = None) -> dict:
+    filters = (
+        {"dataset_id": dataset_id}
+        if dataset_id is not None
+        else {"depot_id": depot_id, "delivery_date": delivery_date}
     )
+    rows = await Parcel.find(filters).to_list()
     summary: dict[str, int] = {}
-    for (cluster_id,) in rows:
+    for row in rows:
+        cluster_id = row.cluster_id
         key = str(cluster_id)
         summary[key] = summary.get(key, 0) + 1
     return summary

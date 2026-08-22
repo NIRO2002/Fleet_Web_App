@@ -1,14 +1,7 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from app.core.config import settings
-from app.db.database import Base, engine
-
-# Import models before create_all
-from app.models.parcel import Parcel
-from app.models.virtual_vehicle import VirtualVehicle
-from app.models.vehicle_capability import VehicleCapability
-from app.models.vehicle_type import VehicleTypeCatalog
-from app.models.load_plan import LoadPlan
-from app.models.parcel_assignment import ParcelAssignment
+from app.db.database import init_database
 
 from app.api.v1 import (
     auth, vehicles, maintenance, predictions, demand, deliveries,
@@ -16,12 +9,17 @@ from app.api.v1 import (
     virtual_vehicles, vehicle_capabilities, vehicle_types, health
 )
 
-Base.metadata.create_all(bind=engine)
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    client = await init_database()
+    yield
+    client.close()
 
 app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
     description="Shared Fleet Web App backend with HDBSCAN + NSGA-II parcel consolidation.",
+    lifespan=lifespan,
 )
 
 for router in [
@@ -35,7 +33,7 @@ for router in [
     app.include_router(router, prefix="/api/v1")
 
 @app.get("/")
-def root():
+async def root():
     return {
         "service": settings.app_name,
         "version": settings.app_version,

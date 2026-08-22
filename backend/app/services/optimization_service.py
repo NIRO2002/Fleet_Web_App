@@ -18,13 +18,15 @@ it into a persisted `LoadPlan`.
 """
 import time
 import uuid
-from dataclasses import asdict
+from dataclasses import asdict, replace
 
 import numpy as np
-from sqlalchemy.orm import Session
+from pymongo import UpdateOne
+from starlette.concurrency import run_in_threadpool
 
 from app.core.reproducibility import run_manifest
 from app.models.load_plan import LoadPlan
+from app.models.parcel import Parcel
 from app.models.parcel_assignment import ParcelAssignment
 from app.models.virtual_vehicle import VirtualVehicle
 from app.optimization.assignment_problem import (
@@ -45,8 +47,12 @@ def _single_cluster_id(parcel_objs) -> int | None:
     return next(iter(ids)) if len(ids) == 1 else None
 
 
-def optimize_load(
-    db: Session,
+def _enforce_depot_vehicle_capacity(n_vehicles: int, capacity: int | None) -> None:
+    if capacity is not None and n_vehicles > capacity:
+        raise ValueError(f"Selected plan uses {n_vehicles} vehicles but depot fleet capacity is {capacity}.")
+
+
+async def _optimize_load(
     parcels: list,
     *,
     depot_id: str,
@@ -59,6 +65,9 @@ def optimize_load(
     warm_start_clusters: dict[int, list] | None = None,
     catalog_cache: VehicleCatalogCache | None = None,
     preference_weights: list[float] | None = None,
+    depot_operating_end: str | None = None,
+    depot_vehicle_capacity: int | None = None,
+    repair_cluster_status: dict[int, dict] | None = None,
 ):
     """Runs NSGA-II over `parcels` and persists the selected solution as a
     `LoadPlan` with one `VirtualVehicle` + a set of `ParcelAssignment` rows
@@ -72,23 +81,28 @@ def optimize_load(
 
     started = time.perf_counter()
     config = config or AssignmentConfig(depot_lat=depot_lat, depot_lon=depot_lon)
-    catalog = load_catalog_snapshot(db, depot_id, delivery_date, cache=catalog_cache)
+    catalog = await load_catalog_snapshot(depot_id, delivery_date, cache=catalog_cache)
+    if depot_operating_end is not None:
+        catalog = tuple(replace(v, available_until=min(v.available_until, depot_operating_end)) for v in catalog)
     # is_refrigerated/is_hazmat_certified are no longer optimizer constraints
     # (Fix Pass 3 G1 -- out of scope for commercial last-mile delivery) so
     # VehicleTypeSpec no longer carries them, but VirtualVehicle still
     # records the real catalog row's values for reporting. `catalog_cache`
     # (if passed) means this is a cache hit, not a second query.
     catalog_row_by_code = {
-        r.code: r for r in list_available_types(db, depot_id, delivery_date, cache=catalog_cache)
+        r.code: r for r in await list_available_types(depot_id, delivery_date, cache=catalog_cache)
     }
 
-    problem, res = run_nsga2(parcels, catalog, config, seed=seed, warm_start_clusters=warm_start_clusters)
+    problem, res = await run_in_threadpool(
+        lambda: run_nsga2(parcels, catalog, config, seed=seed, warm_start_clusters=warm_start_clusters)
+    )
     idx, F, X, G = select_solution(res, preference_weights)
     front_hypervolume = hypervolume(F)
 
     selected_row = X[idx]
     slots, type_of_slot = decode(selected_row, problem.n, problem.K)
     used_slots = {sidx: members for sidx, members in slots.items() if members}
+    _enforce_depot_vehicle_capacity(len(used_slots), depot_vehicle_capacity)
     slot_parcel_counts = sorted(len(members) for members in used_slots.values())
     final_population_g = res.pop.get("G") if res.pop is not None else np.empty((0, 0))
     feasible_individuals_final = int(
@@ -101,7 +115,6 @@ def optimize_load(
     plan_id = f"PLAN-{uuid.uuid4().hex[:10].upper()}"
     vehicles_summary = []
     virtual_vehicles = []
-    pending_assignments = []
     utilizations, distances, compliances, costs = [], [], [], []
 
     for slot_idx, parcel_indices in used_slots.items():
@@ -122,16 +135,14 @@ def optimize_load(
 
         vv = VirtualVehicle(
             virtual_vehicle_id=f"VV-{uuid.uuid4().hex[:10].upper()}",
-            depot_id=depot_id,
-            delivery_date=delivery_date,
-            plan_id=plan_id,
-            vehicle_type=vehicle_spec.code,
+            vehicle_type_code=vehicle_spec.code,
             capacity_kg=vehicle_spec.capacity_kg,
             capacity_m3=vehicle_spec.capacity_m3,
             used_weight_kg=m["weight"],
             used_volume_m3=m["volume"],
             parcel_count=m["count"],
             max_parcels=vehicle_spec.max_parcels,
+            utilization=m["utilization"],
             estimated_distance_km=m["distance"],
             time_window_compliance=m["compliance"],
             fleet_cost=m["cost"],
@@ -144,12 +155,11 @@ def optimize_load(
             destination_latitude=float(sum(p.latitude for p in parcel_objs) / len(parcel_objs)),
             destination_longitude=float(sum(p.longitude for p in parcel_objs) / len(parcel_objs)),
         )
-        db.add(vv)
         virtual_vehicles.append(vv)
 
         for position, parcel in enumerate(m["ordered_parcels"], start=1):
             placed = placement.placements.get(parcel.parcel_id) if placement else None
-            pending_assignments.append(
+            vv.assignments.append(
                 ParcelAssignment(
                     plan_id=plan_id,
                     virtual_vehicle_id=vv.virtual_vehicle_id,
@@ -184,9 +194,6 @@ def optimize_load(
             }
         )
 
-    for assignment in pending_assignments:
-        db.add(assignment)
-
     # Fix Pass 2 item C: every parcel this plan actually covers is now
     # claimed by it. optimize_load assumes full assignment (every input
     # parcel lands in some slot -- see test_selected_solution_satisfies_all_
@@ -207,6 +214,10 @@ def optimize_load(
         n_vehicles=len(vehicles_summary),
         n_parcels_with_imputed_dimensions=sum(1 for p in parcels if getattr(p, "dimensions_imputed", False)),
         n_carryover_parcels=n_carryover_parcels,
+        repair_cluster_status={str(key): value for key, value in (repair_cluster_status or {}).items()},
+        excluded_infeasible_cluster_count=sum(
+            not value.get("feasible", False) for value in (repair_cluster_status or {}).values()
+        ),
         run_manifest=run_manifest(catalog=catalog),
         mean_utilization=sum(utilizations) / len(utilizations) if utilizations else 0.0,
         total_distance_km=sum(distances),
@@ -214,11 +225,21 @@ def optimize_load(
         total_fleet_cost=sum(costs),
         hypervolume=front_hypervolume,
         runtime_seconds=time.perf_counter() - started,
+        vehicles=virtual_vehicles,
     )
-    db.add(plan)
-    db.commit()
-    for vv in virtual_vehicles:
-        db.refresh(vv)
+    await plan.insert()
+    await Parcel.get_motor_collection().bulk_write([
+        UpdateOne(
+            {"parcel_id": p.parcel_id},
+            {"$set": {
+                "status": "PLANNED",
+                "plan_id": plan_id,
+                "delivery_date": p.delivery_date,
+                "carried_over_from_date": getattr(p, "carried_over_from_date", None),
+            }},
+        )
+        for p in parcels
+    ])
 
     result = {
         "plan_id": plan_id,
@@ -251,8 +272,13 @@ def optimize_load(
     }
     return result, virtual_vehicles
 
+def optimize_load(*args, **kwargs):
+    if args and hasattr(args[0], "run"):
+        return args[0].run(_optimize_load(*args[1:], **kwargs))
+    return _optimize_load(*args, **kwargs)
 
-def try_insert(db: Session, virtual_vehicle: VirtualVehicle, parcel):
+
+async def try_insert(plan: LoadPlan, virtual_vehicle: VirtualVehicle, parcel):
     """Weight/volume-only fit check. Deliberately left as-is (Phase 5 —
     `insertion_service.py` — replaces this wholesale with the full
     constraint set: dimensions, hazmat/refrigeration, actual re-run
@@ -265,5 +291,5 @@ def try_insert(db: Session, virtual_vehicle: VirtualVehicle, parcel):
     virtual_vehicle.used_weight_kg += parcel.weight_kg
     virtual_vehicle.used_volume_m3 += parcel.volume_m3
     virtual_vehicle.updated_at = utcnow()
-    db.commit()
+    await plan.save()
     return True, "Parcel inserted into existing virtual vehicle"

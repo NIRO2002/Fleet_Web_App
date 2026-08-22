@@ -9,16 +9,22 @@ def test_evaluation_workers_limit_numerical_thread_pools():
         assert os.environ[name] == "1"
 
 
-def test_capacity_aware_audit_differs_when_repair_fires(monkeypatch):
-    clusters = {0: [object()]}
-    repaired = SimpleNamespace(clusters={1: [object()]}, n_split=1, n_merged=2)
+def test_capacity_aware_audit_carries_current_cluster_status(monkeypatch):
+    repaired = SimpleNamespace(clusters={1: [object()]}, n_split=1, n_merged=2,
+        clusters_before=1, clusters_after=1, cluster_status={1: {"feasible": True, "reason": None}},
+        excluded_infeasible_count=0)
     monkeypatch.setattr(harness, "repair_clusters", lambda *args, **kwargs: repaired)
+    clusters, audit = harness._prepare_warm_clusters({0: [object()]}, [], True,
+        depot_lat=1., depot_lon=2., seed=7)
+    assert clusters == repaired.clusters
+    assert audit["n_split"] == 1 and audit["n_merged"] == 2
+    assert audit["cluster_status"] == repaired.cluster_status
 
-    off_clusters, off_audit = harness._prepare_warm_clusters(clusters, [], False, seed=7)
-    on_clusters, on_audit = harness._prepare_warm_clusters(clusters, [], True, seed=7)
 
-    assert off_clusters is clusters
-    assert on_clusters is repaired.clusters
-    assert off_audit == {"enabled": False, "n_split": 0, "n_merged": 0}
-    assert on_audit == {"enabled": True, "n_split": 1, "n_merged": 2}
-    assert on_audit != off_audit
+def test_parallelism_is_gated_until_stage_four():
+    try:
+        harness.run_pipeline_batch([], n_jobs=2, out_dir="unused")
+    except ValueError as error:
+        assert "Stage 4" in str(error)
+    else:
+        raise AssertionError("parallel execution must remain gated")
