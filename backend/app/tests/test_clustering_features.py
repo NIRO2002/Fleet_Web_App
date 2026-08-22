@@ -101,6 +101,10 @@ def test_clustering_and_capacity_repair_are_deterministic_and_conservative():
 
     assert assignment_a == assignment_b
     assert first.audit == second.audit
+    assert all(
+        isinstance(row["temporal_split_predicate_fired"], bool)
+        for row in first.audit if row["operation"] == "split_check"
+    )
     assert {parcel.parcel_id for parcel in first_rows} == {
         parcel.parcel_id for members in first.clusters.values() for parcel in members
     }
