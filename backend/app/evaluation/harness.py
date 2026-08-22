@@ -68,7 +68,10 @@ class PipelineRunConfig:
 
     @property
     def run_id(self):
-        return f"{self.depot_id}_{self.delivery_date}_{self.method}_cap{int(self.capacity_aware)}_seed{self.seed}"
+        return (
+            f"{self.depot_id}_{self.delivery_date}_{self.method}_"
+            f"features-{self.feature_set}_cap{int(self.capacity_aware)}_seed{self.seed}"
+        )
 
 
 async def evaluation_catalog_snapshot(depot_id="D-CMB-001", delivery_date=None):

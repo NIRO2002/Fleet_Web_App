@@ -28,3 +28,17 @@ def test_parallelism_is_gated_until_stage_four():
         assert "Stage 4" in str(error)
     else:
         raise AssertionError("parallel execution must remain gated")
+
+
+def test_feature_set_is_part_of_pipeline_run_identity():
+    common = dict(
+        depot_id="D-CMB-001", delivery_date="2026-01-05",
+        method="hdbscan", capacity_aware=True, seed=7,
+    )
+    location = harness.PipelineRunConfig(**common, feature_set="location")
+    location_time = harness.PipelineRunConfig(**common, feature_set="location_time")
+
+    assert location.run_id != location_time.run_id
+    assert "features-location_" in location.run_id
+    assert "features-location_time_" in location_time.run_id
+    assert harness.PipelineRunConfig(**common).feature_set == "location"
