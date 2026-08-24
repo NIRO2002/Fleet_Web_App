@@ -43,6 +43,16 @@ async def export_plan_csv(plan_id: str):
 async def run(payload: OptimizationRequest):
     if payload.parcel_ids:
         parcels = await Parcel.find({"parcel_id": {"$in": payload.parcel_ids}}).to_list()
+        # optimize_load sets status=PLANNED/plan_id on every parcel it
+        # covers (app/services/optimization_service.py). An explicit
+        # parcel_ids request can name a parcel a prior run already claimed
+        # -- unlike the cluster_id branch's PENDING filter below, there's no
+        # query-level way to silently skip just one id out of a caller-given
+        # list, so this must fail loudly rather than silently re-plan it.
+        already_planned = [p for p in parcels if p.plan_id is not None]
+        if already_planned:
+            detail = "; ".join(f"{p.parcel_id} (plan_id={p.plan_id})" for p in already_planned)
+            raise HTTPException(status_code=409, detail=f"Already planned: {detail}")
     elif payload.cluster_id is not None:
         if payload.cluster_id == -1:
             # -1 marks HDBSCAN noise that handle_noise
@@ -59,10 +69,18 @@ async def run(payload: OptimizationRequest):
         # app/services/clustering_service.py), so the same cluster_id exists
         # across many instances. OptimizationRequest's validator guarantees
         # depot_id/delivery_date are present whenever cluster_id is.
+        #
+        # status=PENDING matches get_planning_instance's own definition of
+        # "this planning instance" (app/services/clustering_common.py) and
+        # prevents double-planning: optimize_load sets every covered parcel
+        # to PLANNED, so a second run against the same cluster_id finds
+        # nothing left to plan (404 below) instead of silently creating a
+        # second LoadPlan over the same parcels.
         parcels = await Parcel.find({
             "cluster_id": payload.cluster_id,
             "depot_id": payload.depot_id,
             "delivery_date": payload.delivery_date,
+            "status": "PENDING",
         }).to_list()
     else:
         raise HTTPException(status_code=400, detail="Provide cluster_id or parcel_ids")
@@ -71,14 +89,22 @@ async def run(payload: OptimizationRequest):
         raise HTTPException(status_code=404, detail="No matching parcels")
 
     # The cluster_id branch's query above already guarantees a single
-    # depot_id/delivery_date by construction, so these are now unreachable
-    # for that branch. The parcel_ids branch is NOT scoped by that query --
-    # an arbitrary parcel_ids list can still span depots/dates -- so these
-    # remain real (if now assertion-style) checks, not dead code.
+    # depot_id/delivery_date by construction, so these are unreachable for
+    # that branch in normal operation. The parcel_ids branch is NOT scoped
+    # by that query -- an arbitrary parcel_ids list can still span
+    # depots/dates -- so these remain real, load-bearing input validation
+    # for that branch, not defensive-only checks. Deliberately
+    # HTTPException, not `assert` (see docs/DESIGN_DECISIONS.md's "guards
+    # must be HTTPException, not assert" entry): an AssertionError here
+    # would surface as an unhandled 500 instead of a 400, and `python -O`
+    # strips `assert` entirely, silently removing the guard in an
+    # optimized deployment.
     depot_ids = {p.depot_id for p in parcels}
-    assert len(depot_ids) == 1 and None not in depot_ids, "Selected parcels must share exactly one depot_id"
+    if len(depot_ids) != 1 or None in depot_ids:
+        raise HTTPException(status_code=400, detail="Selected parcels must share exactly one depot_id")
     delivery_dates = {p.delivery_date for p in parcels}
-    assert len(delivery_dates) == 1, "Selected parcels must share exactly one delivery_date"
+    if len(delivery_dates) != 1:
+        raise HTTPException(status_code=400, detail="Selected parcels must share exactly one delivery_date")
 
     resolved_depot_id = next(iter(depot_ids))
 
@@ -87,18 +113,21 @@ async def run(payload: OptimizationRequest):
         if (payload.depot_latitude is None) != (payload.depot_longitude is None):
             raise ValueError("depot_latitude and depot_longitude overrides must be supplied together")
         # A depot_latitude/depot_longitude override is only ever meaningful
-        # for the depot the resolved parcels actually belong to. The
-        # cluster_id branch's query makes payload.depot_id == resolved_depot_id
-        # unreachable-mismatch by construction; this guards the parcel_ids
-        # branch, where a caller-supplied depot_id is only a hint and can
-        # legitimately disagree with the parcels actually resolved.
-        if (
-            payload.depot_latitude is not None
-            and payload.depot_id is not None
-            and payload.depot_id != resolved_depot_id
-        ):
+        # for the depot the resolved parcels actually belong to, and we have
+        # no way to verify a raw lat/lon pair "belongs" to a depot other
+        # than comparing the caller's own stated depot_id -- so an override
+        # supplied WITHOUT a depot_id is unverifiable and must be rejected
+        # too, not silently allowed through (the pre-fix gap: `payload.depot_id
+        # is not None` short-circuited this whole check to a no-op whenever
+        # depot_id was omitted). Comparing unconditionally against
+        # resolved_depot_id covers both a bare mismatch and a missing
+        # depot_id (None != any real resolved_depot_id string) with one
+        # condition. The cluster_id branch's query makes
+        # payload.depot_id == resolved_depot_id guaranteed by construction
+        # there, so this is only ever reachable for the parcel_ids branch.
+        if payload.depot_latitude is not None and payload.depot_id != resolved_depot_id:
             raise ValueError(
-                f"depot_latitude/depot_longitude override does not match the resolved parcels' depot_id "
+                f"depot_latitude/depot_longitude override requires a matching depot_id "
                 f"(requested depot_id={payload.depot_id!r}, resolved depot_id={resolved_depot_id!r})"
             )
         depot_lat = payload.depot_latitude if payload.depot_latitude is not None else depot.lat

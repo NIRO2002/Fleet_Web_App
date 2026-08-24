@@ -409,3 +409,134 @@ entirely from `train_hdbscan`, the persisted joblib bundle, and
 `predict_cluster`; per-instance labels starting at 0 are the natural,
 correct output of clustering once every consumer resolves them with their
 instance scope.
+
+## `/optimization/run`'s depot_id/delivery_date guards must be HTTPException, not `assert` (2026-08-25)
+
+A short-lived intermediate version of `api/v1/optimization.py` converted the
+"selected parcels must share exactly one depot_id/delivery_date" guards to
+bare `assert` statements, reasoning that the `cluster_id` branch's scoped
+query (see the entry above) makes them unreachable there. That reasoning
+only holds for the `cluster_id` branch: the `parcel_ids` branch is **not**
+scoped by that query, so a caller-supplied `parcel_ids` list spanning
+multiple depots/dates can still legitimately reach this code, and did.
+
+`assert` is the wrong tool here for two independent reasons, either one
+sufficient on its own:
+
+1. An `AssertionError` here is raised *before* the `try/except Exception`
+   block that turns other failures into a clean `HTTPException(400, ...)`,
+   so it surfaces as an unhandled 500 instead -- worse for the caller and
+   for anyone reading server logs expecting 4xx-vs-5xx to mean
+   caller-error-vs-server-bug.
+2. Python's `-O`/`-OO` flags strip `assert` statements entirely at compile
+   time. Running under `-O` would silently remove this guard altogether,
+   not just downgrade its error code -- a production deployment flag
+   quietly deleting input validation is not an acceptable failure mode.
+
+Reverted to `HTTPException(status_code=400, ...)` for both guards. Do not
+"simplify" these back to `assert` on the grounds that they look unreachable
+for the `cluster_id` branch -- they are real, load-bearing validation for
+the `parcel_ids` branch, and must keep behaving as normal 4xx input
+validation, not defensive-only assertions.
+
+## `predict_cluster` cannot return a post-repair cluster_id (2026-08-25)
+
+`GET /parcels/clustering/predict`'s joblib bundle (`clustering_service.py`'s
+`_model_path`) holds only the fitted HDBSCAN model, scaler and config from
+`train_hdbscan` -- never the capacity-aware repair outcome
+(`app/services/capacity_aware_clustering.py`) that now runs immediately
+afterward in the live training path (see the R5 entry). Repair splits
+oversize raw clusters and merges undersize ones, then renumbers every
+surviving cluster; that renumbered id, not HDBSCAN's raw
+`approximate_predict` label, is what actually gets persisted onto `Parcel`
+documents. Returning the raw label as `cluster_id` -- the pre-existing
+behavior -- was therefore a real-looking but frequently wrong answer: on
+the live D-CMB-001/2026-01-05 instance, repair changed 20 of the 372
+parcels' cluster assignments (3 splits, 17 merges) relative to raw HDBSCAN
+output.
+
+Two fixes were considered:
+
+**(a) Persist a `raw_label -> repaired_cluster_id` map in the joblib bundle
+at repair time, translate in `predict_cluster`.** Rejected: this map is
+only well-defined for merge-origin clusters, where every raw label that got
+absorbed into a surviving cluster maps cleanly to one final id. It is
+**not** well-defined for split-origin clusters: `_split_oversize`
+partitions one raw cluster's individual *points* by a `KMeans(n_clusters=2)`
+boundary fit on that specific cluster's coordinates, not by any rule
+expressible as `f(raw_label)`. A new point predicted into a since-split raw
+cluster could belong to either child depending on exactly where it falls
+relative to that fitted boundary; a label-keyed map has no way to encode
+that boundary, only a mapping from *cluster*, so it would have to either
+guess a child (violating "do not return a number that may not correspond
+to a real cluster" for a meaningful fraction of predictions, given splits
+are common -- 3 of the 31 pre-repair clusters in the same live run) or
+persist the actual fitted split boundaries recursively, which is
+substantially more than a per-label map and drifts into re-implementing a
+second prediction model for repair's internal splitting decisions.
+
+**(b) Return `status="UNASSIGNED"`, `cluster_id=None`, and a `reason`
+explaining why, unconditionally.** **Chosen.** Simple, and by construction
+can never return a wrong cluster_id. Also chosen to apply
+*unconditionally* -- not only when repair happened to run for that
+instance's current model -- because: repair is now the default live
+training path (R5) and only skips when a depot has zero active vehicle
+types, an atypical/transient setup state in a deployment that ships a
+seeded catalog; correctly detecting "is this specific persisted bundle
+still repair-fresh" would require the bundle to carry a repair-applied
+flag that stays valid across every subsequent re-train/re-repair of that
+instance, adding real staleness-tracking complexity for a condition that
+in practice is very rarely true. `cluster_probability` (HDBSCAN's
+membership-strength metric) is still returned since it remains meaningful
+independent of which specific cluster id a point would land in.
+
+`predict_cluster` was, and remains, unused by the frontend (`parcelService.
+predictCluster` is defined but no page calls it), so this changes no
+observed UI behavior today.
+
+## Stale cluster_id is cleared at planning time, not left to per-query filtering (2026-08-25)
+
+`Parcel.cluster_id` is a transient clustering *input*, not a durable fact:
+HDBSCAN restarts label numbering at 0 on every retrain of a
+`(depot_id, delivery_date)` instance (see the `label_offset` entry above),
+and `get_planning_instance` only ever re-clusters `status=PENDING` parcels.
+Once `optimize_load` marks a parcel `PLANNED`, its old `cluster_id` becomes
+permanently stale but was, before this change, left in place -- a later
+retrain of the *same* instance legitimately reuses that same numeric label
+for a *different*, currently-PENDING group of parcels. Any reader that
+queries or groups by `cluster_id` without also filtering by
+`status=PENDING` would silently merge the old, already-planned group in
+with the new one under one label.
+
+Audited every `cluster_id`-keyed read (grep for `cluster_id` across
+`backend/app`):
+
+- `api/v1/optimization.py`'s `/run` cluster_id branch -- filters
+  `status="PENDING"` (see the double-planning entry below). Safe either way.
+- `api/v1/parcels.py`'s `GET /clustering/unassigned` -- filters
+  `status="PENDING"`. Safe either way.
+- `services/clustering_service.py`'s `cluster_summary()` (backs
+  `GET /clustering` and the `clusters` field of `POST /clustering/train`'s
+  response) -- **no status filter**. This is the real bug: without clearing,
+  a retrained instance's summary would silently combine an old PLANNED
+  batch's parcels into the same numeric bucket as a new PENDING batch that
+  reused its label.
+- `services/optimization_service.py`'s `_single_cluster_id` (captures
+  `VirtualVehicle.cluster_id` and the `/optimization/run` response's
+  `cluster_id`) -- reads from the in-memory `parcel` objects *before* the
+  bulk_write below runs, so it is unaffected either way.
+
+**Chosen: clear `cluster_id`, `cluster_probability`, and `is_noise` to
+`None`/`None`/`False` in the exact same `bulk_write` in `optimize_load`
+that sets `status=PLANNED`/`plan_id`** (`services/optimization_service.py`),
+over the alternative of auditing and relying on every present *and future*
+`cluster_id` query to remember a `status=PENDING` filter. A structural
+guarantee at the write site cannot regress the way a documentation-only
+convention can when a new query is added later and forgets the filter --
+`cluster_summary()` above is exactly that omission already having happened
+once. No information is lost: `VirtualVehicle.cluster_id` (set from the
+same parcels' `cluster_id` before this write) is the durable, correct
+record of which cluster a plan's vehicle was built from, and it is what
+`/optimization/run`'s own response and `LoadPlan`/`VirtualVehicle` records
+report -- `Parcel.cluster_id` was never the system of record for that once
+a plan exists.

@@ -13,6 +13,13 @@ from app.services.depot_service import get_depot_or_fail
 
 router = APIRouter(prefix="/parcels", tags=["parcels"])
 
+
+def _distinct_cluster_count(parcels) -> int:
+    """Real (non-negative) cluster ids currently on these parcels -- used
+    post-repair, where the raw HDBSCAN per-instance count no longer applies
+    (repair splits/merges clusters and reassigns infeasible ones to -1)."""
+    return len({p.cluster_id for p in parcels if p.cluster_id is not None and p.cluster_id >= 0})
+
 @router.post("", response_model=ParcelResponse, status_code=201)
 async def create_parcel(payload: ParcelCreate):
     created = await create_parcel_record(payload)
@@ -86,7 +93,7 @@ async def train_clustering(
                 seed=seed,
                 config=ClusteringConfig(depot_lat=depot.lat, depot_lon=depot.lng),
             )
-            n_clusters = result.n_clusters
+            n_clusters_pre_repair = result.n_clusters
             noise_count = result.noise_count
             runtime_seconds = result.runtime_seconds
             repaired = await repair_planning_instance(
@@ -96,6 +103,7 @@ async def train_clustering(
                 repair_applied = True
                 n_split, n_merged = repaired.n_split, repaired.n_merged
                 excluded_infeasible_count = repaired.excluded_infeasible_count
+            n_clusters_post_repair = _distinct_cluster_count(parcels)
         else:
             dataset_rows = await Parcel.find({"dataset_id": dataset_id}).to_list()
             instances = sorted({
@@ -106,7 +114,8 @@ async def train_clustering(
             if not instances:
                 raise ValueError("The active dataset has no valid depot/date planning instances.")
             parcels = []
-            n_clusters = 0
+            n_clusters_pre_repair = 0
+            n_clusters_post_repair = 0
             noise_count = 0
             runtime_seconds = 0.0
             for instance_depot, instance_date in instances:
@@ -119,7 +128,13 @@ async def train_clustering(
                     config=ClusteringConfig(depot_lat=depot.lat, depot_lon=depot.lng),
                 )
                 parcels.extend(instance_parcels)
-                n_clusters += instance_result.n_clusters
+                # Summed per-instance, not counted as distinct values across
+                # the combined parcels list: cluster_id restarts at 0 in
+                # every instance, so instance A's cluster 0 and instance B's
+                # cluster 0 are different real clusters that happen to share
+                # a label -- a global distinct-count would wrongly collapse
+                # them.
+                n_clusters_pre_repair += instance_result.n_clusters
                 noise_count += instance_result.noise_count
                 runtime_seconds += instance_result.runtime_seconds
                 repaired = await repair_planning_instance(
@@ -130,6 +145,7 @@ async def train_clustering(
                     n_split += repaired.n_split
                     n_merged += repaired.n_merged
                     excluded_infeasible_count += repaired.excluded_infeasible_count
+                n_clusters_post_repair += _distinct_cluster_count(instance_parcels)
         # Final, post-repair count of parcels left genuinely unassignable
         # (cluster_id still -1) -- smaller than noise_count, which is
         # HDBSCAN's raw pre-reassignment noise, since repair gets a second,
@@ -141,7 +157,14 @@ async def train_clustering(
         return {
             "status": "trained",
             "parcel_count": len(parcels),
-            "n_clusters": n_clusters,
+            # Split, not a single ambiguous n_clusters: pre-repair is HDBSCAN's
+            # raw cluster count; post-repair reflects the split/merge/infeasible
+            # -to--1 outcome that's what's actually persisted and what the
+            # `clusters` summary below reflects. Reporting only one of these
+            # under a bare `n_clusters` silently contradicted whichever of the
+            # two the caller assumed it meant.
+            "n_clusters_pre_repair": n_clusters_pre_repair,
+            "n_clusters_post_repair": n_clusters_post_repair,
             "noise_count": noise_count,
             "unassigned_count": unassigned_count,
             "runtime_seconds": runtime_seconds,

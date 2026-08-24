@@ -22,6 +22,8 @@ class FakeParcel:
     depot_id: str
     delivery_date: date
     cluster_id: int
+    status: str = "PENDING"
+    plan_id: str | None = None
 
 
 class FakeDepot:
@@ -99,6 +101,32 @@ def test_unscoped_cluster_id_request_is_rejected():
         OptimizationRequest(cluster_id=0)
 
 
+def test_parcel_ids_spanning_depots_returns_400_not_500(monkeypatch):
+    """The parcel_ids branch is not scoped by the cluster_id branch's
+    (depot_id, delivery_date, cluster_id) query, so a caller-supplied
+    parcel_ids list spanning multiple depots is real, reachable bad input --
+    it must be a clean HTTPException(400, ...), not an AssertionError
+    (which would surface as an unhandled 500, and vanish entirely under
+    `python -O`). See docs/DESIGN_DECISIONS.md."""
+    from fastapi import HTTPException
+
+    parcels = [
+        FakeParcel("A-1", "D-CMB-001", date(2026, 1, 5), 0),
+        FakeParcel("B-1", "D-CMB-002", date(2026, 1, 6), 0),
+    ]
+    _install_fake_parcels(monkeypatch, parcels)
+    captured = {}
+    _install_fake_optimize(monkeypatch, captured)
+
+    payload = OptimizationRequest(parcel_ids=["A-1", "B-1"])
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(optimization_api.run(payload))
+
+    assert exc_info.value.status_code == 400
+    assert "depot_id" in exc_info.value.detail
+    assert "parcels" not in captured
+
+
 def test_mismatched_depot_override_is_rejected(monkeypatch):
     """A request claims depot_id=D-CMB-001, but the parcel_ids it actually
     supplies resolve to D-CMB-002's parcels, and it also supplies a
@@ -124,3 +152,31 @@ def test_mismatched_depot_override_is_rejected(monkeypatch):
     assert exc_info.value.status_code == 400
     assert "depot_id" in exc_info.value.detail
     assert "parcels" not in captured  # optimize_load must never have been called
+
+
+def test_override_without_depot_id_is_rejected(monkeypatch):
+    """A depot_latitude/depot_longitude override with NO depot_id at all is
+    unverifiable -- there's nothing to compare the override against -- and
+    must be rejected just like an explicit mismatch, not silently passed
+    through (the pre-fix gap: `payload.depot_id is not None` skipped this
+    check entirely whenever depot_id was omitted)."""
+    from fastapi import HTTPException
+
+    parcels = [
+        FakeParcel("X-1", "D-CMB-002", date(2026, 1, 5), 3),
+    ]
+    _install_fake_parcels(monkeypatch, parcels)
+    captured = {}
+    _install_fake_optimize(monkeypatch, captured)
+
+    payload = OptimizationRequest(
+        parcel_ids=["X-1"],
+        # no depot_id supplied at all
+        depot_latitude=6.85,
+        depot_longitude=79.95,
+    )
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(optimization_api.run(payload))
+    assert exc_info.value.status_code == 400
+    assert "depot_id" in exc_info.value.detail
+    assert "parcels" not in captured

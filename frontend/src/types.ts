@@ -82,9 +82,15 @@ export interface Depot { depot_id: string; depot_name: string; lat: number; lng:
 export interface PlanSummary { plan_id: string; depot_id: string; delivery_date: string; created_at: string; vehicle_count: number; feasible: boolean }
 
 export interface ClusterPrediction {
-  cluster_id: number | null
+  // Always null: the persisted cluster_id is post-capacity-repair
+  // (split/merge against vehicle_type_catalog), which a raw HDBSCAN
+  // prediction cannot be reliably translated into. See backend
+  // docs/DESIGN_DECISIONS.md's "predict_cluster cannot return a
+  // post-repair cluster_id" entry.
+  cluster_id: null
   cluster_probability: number
-  status: 'ASSIGNED' | 'UNASSIGNED'
+  status: 'UNASSIGNED'
+  reason: string
 }
 
 /** Keyed by cluster_id as a string ("-1" = noise/unassigned). */
@@ -100,7 +106,14 @@ export interface ClusteringRepairSummary {
 export interface ClusteringTrainResult {
   status: string
   parcel_count: number
-  n_clusters: number
+  /** HDBSCAN's raw cluster count, before capacity-aware repair's
+   * split/merge. Will disagree with n_clusters_post_repair (and with the
+   * `clusters` summary below, which reflects the post-repair, actually
+   * persisted state) whenever repair changed anything. */
+  n_clusters_pre_repair: number
+  /** What's actually persisted after repair's split/merge (and any
+   * infeasible cluster reassigned to -1/unassigned). */
+  n_clusters_post_repair: number
   noise_count: number
   /** Final, post-repair count of parcels left genuinely unassignable
    * (cluster_id still -1) - smaller than noise_count, which is HDBSCAN's

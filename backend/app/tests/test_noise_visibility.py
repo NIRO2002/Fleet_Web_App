@@ -93,3 +93,48 @@ def test_train_response_counts_unassigned_parcels(monkeypatch):
     assert response["unassigned_count"] == 1
     assert response["noise_count"] == 1
     assert response["repair"]["applied"] is False
+    # Repair was skipped entirely, so nothing changed the persisted
+    # cluster_id values -- pre- and post-repair counts must agree.
+    assert response["n_clusters_pre_repair"] == 1
+    assert response["n_clusters_post_repair"] == 1
+
+
+def test_train_response_splits_pre_and_post_repair_cluster_counts(monkeypatch):
+    """n_clusters_pre_repair (HDBSCAN's raw count) and n_clusters_post_repair
+    (what's actually persisted after split/merge) must be reported
+    separately and can genuinely differ -- reporting only one under a bare
+    `n_clusters` would silently contradict the `clusters` summary in the
+    same response whenever repair changed anything."""
+    depot_id, delivery_date = "D-CMB-001", date(2026, 1, 5)
+    # Two raw HDBSCAN clusters (0 and 1) that repair merges into one (0).
+    trained_parcels = [
+        FakeParcel("P-1", depot_id, delivery_date, cluster_id=0),
+        FakeParcel("P-2", depot_id, delivery_date, cluster_id=1),
+    ]
+    fake_result = SimpleNamespace(n_clusters=2, noise_count=0, runtime_seconds=0.01)
+
+    async def fake_get_depot_or_fail(depot_id):
+        return SimpleNamespace(lat=6.9271, lng=79.8612)
+
+    async def fake_train_hdbscan(depot_id, delivery_date, seed=0, config=None, dataset_id=None):
+        return fake_result, trained_parcels
+
+    async def fake_repair_planning_instance(depot_id, parcels, *, depot_lat, depot_lon, seed=0):
+        for p in parcels:
+            p.cluster_id = 0  # simulates repair merging cluster 1 into cluster 0
+        return SimpleNamespace(n_split=0, n_merged=1, excluded_infeasible_count=0)
+
+    async def fake_cluster_summary(depot_id, delivery_date, dataset_id=None):
+        return {"0": 2}
+
+    monkeypatch.setattr(parcels_api, "get_depot_or_fail", fake_get_depot_or_fail)
+    monkeypatch.setattr(parcels_api, "train_hdbscan", fake_train_hdbscan)
+    monkeypatch.setattr(parcels_api, "repair_planning_instance", fake_repair_planning_instance)
+    monkeypatch.setattr(parcels_api, "cluster_summary", fake_cluster_summary)
+
+    response = asyncio.run(parcels_api.train_clustering(depot_id=depot_id, delivery_date=delivery_date, seed=0, dataset_id=None))
+
+    assert response["n_clusters_pre_repair"] == 2
+    assert response["n_clusters_post_repair"] == 1
+    assert response["repair"]["applied"] is True
+    assert response["repair"]["n_merged"] == 1

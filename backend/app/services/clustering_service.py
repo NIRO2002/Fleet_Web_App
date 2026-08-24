@@ -168,6 +168,25 @@ async def repair_planning_instance(
 
 
 def predict_cluster(payload, depot_id: str, delivery_date):
+    """Returns cluster_id=None/status=UNASSIGNED unconditionally -- never a
+    raw HDBSCAN label. The joblib bundle holds only the fitted HDBSCAN
+    model, not the capacity-aware repair outcome
+    (app/services/capacity_aware_clustering.py) that runs afterward and is
+    what actually determines a parcel's *persisted* cluster_id, so a raw
+    `approximate_predict` label does not correspond to any real, currently
+    persisted cluster. Translating it would require a raw_label ->
+    repaired_cluster_id map, but that map is only well-defined for
+    merge-origin clusters -- a split partitions one raw cluster's *points*
+    by a KMeans boundary that is not reproducible from a label alone, so
+    guessing which child a new point landed in could return a real-looking
+    but wrong cluster_id. See docs/DESIGN_DECISIONS.md's "predict_cluster
+    cannot return a post-repair cluster_id" entry for the full reasoning
+    and the rejected alternative.
+
+    `cluster_probability` (HDBSCAN's own membership-strength metric) is
+    still returned -- it says how confidently this point fits the trained
+    density model at all, which stays meaningful independent of which
+    specific (possibly repair-renumbered) cluster it would land in."""
     path = _model_path(depot_id, delivery_date)
     if not path.exists():
         raise FileNotFoundError(
@@ -179,12 +198,12 @@ def predict_cluster(payload, depot_id: str, delivery_date):
 
     temp = type("ParcelLike", (), payload.model_dump())()
     X = transform_with_scaler([temp], scaler, config)
-    labels, strengths = hdbscan.approximate_predict(model, X)
-    label = int(labels[0])
+    _labels, strengths = hdbscan.approximate_predict(model, X)
     return {
-        "cluster_id": label if label >= 0 else None,
+        "cluster_id": None,
         "cluster_probability": float(strengths[0]),
-        "status": "ASSIGNED" if label >= 0 else "UNASSIGNED",
+        "status": "UNASSIGNED",
+        "reason": "prediction unavailable after capacity repair",
     }
 
 

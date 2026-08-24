@@ -237,6 +237,25 @@ async def _optimize_load(
                 "plan_id": plan_id,
                 "delivery_date": p.delivery_date,
                 "carried_over_from_date": getattr(p, "carried_over_from_date", None),
+                # Cleared, not left stale, in the same write that plans the
+                # parcel: cluster_id/cluster_probability/is_noise describe a
+                # transient clustering *input*, not a durable fact about a
+                # planned parcel. HDBSCAN restarts label numbering at 0 on
+                # every retrain of this (depot_id, delivery_date) instance
+                # (see docs/DESIGN_DECISIONS.md), so a stale, un-cleared
+                # cluster_id here would collide with a *different*, later
+                # PENDING cluster that happens to reuse the same number --
+                # any reader that queries by cluster_id without also
+                # filtering by status (e.g. cluster_summary) would then
+                # silently mix an old, already-planned group in with a
+                # fresh one under one label. The plan's own record of which
+                # cluster a vehicle came from is unaffected: VirtualVehicle.
+                # cluster_id (see _single_cluster_id above) is captured
+                # before this write, from the in-memory parcel objects, not
+                # re-read from the database afterward.
+                "cluster_id": None,
+                "cluster_probability": None,
+                "is_noise": False,
             })},
         )
         for p in parcels
