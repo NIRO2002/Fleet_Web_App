@@ -22,7 +22,6 @@ import {
 } from '../components/UI'
 import { DEFAULT_DEPOT } from '../data/mockData'
 import { optimizationService } from '../services/optimizationService'
-import { parcelService } from '../services/parcelService'
 import { vehicleTypeService } from '../services/vehicleTypeService'
 import type {
   ClusterSummary,
@@ -87,7 +86,7 @@ export function LoadOptimizationPage() {
     if (navState?.parcelIds && navState.parcelIds.length > 0) return 'parcels'
     return readSession('optimize.mode', 'cluster')
   })
-  const [clusterSummary, setClusterSummary] = useState<ClusterSummary | null>(null)
+  const [clusterSummary] = useState<ClusterSummary | null>(null)
   const [selectedCluster, setSelectedCluster] = useState(() =>
     navState?.clusterId !== undefined ? String(navState.clusterId) : readSession('optimize.selectedCluster', ''),
   )
@@ -149,14 +148,6 @@ export function LoadOptimizationPage() {
   const [inserting, setInserting] = useState(false)
   const [insertNotice, setInsertNotice] = useState<Notice>(null)
 
-  const refreshClusters = async () => {
-    try {
-      setClusterSummary(await parcelService.getClusterSummary())
-    } catch {
-      // Non-fatal: the cluster dropdown just stays empty until the request succeeds.
-    }
-  }
-
   const refreshVehicles = async () => {
     setVehiclesLoading(true)
     try {
@@ -178,7 +169,6 @@ export function LoadOptimizationPage() {
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      void refreshClusters()
       void refreshVehicles()
       void refreshVehicleTypes()
     }, 0)

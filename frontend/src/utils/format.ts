@@ -60,6 +60,11 @@ export const emptyParcelDraft = (parcelId = ''): ParcelDraft => ({
   time_window_start: '',
   time_window_end: '',
   fragile: false,
+  dataset_id: '', depot_id: '', delivery_date: '', length_cm: '', width_cm: '', height_cm: '',
+  stackable: true, max_stack_weight_kg: '0', loading_orientation_fixed: false,
+  hazardous: false, hazmat_class: '', requires_refrigeration: false,
+  temp_min_celsius: '', temp_max_celsius: '', two_person_lift: false, do_not_tilt: false,
+  priority_level: 'standard', service_type: 'door_to_door',
 })
 
 export const nextParcelId = (existing: string[]) => {
@@ -95,6 +100,17 @@ export const parcelDraftToInput = (draft: ParcelDraft): ParcelInput => {
   if (!/^\d{2}:\d{2}$/.test(draft.time_window_start) || !/^\d{2}:\d{2}$/.test(draft.time_window_end)) {
     throw new ParcelDraftError('Both time window fields are required (HH:MM).')
   }
+  if (draft.time_window_end <= draft.time_window_start) throw new ParcelDraftError('Time window end must be after its start.')
+  const dimensions = [draft.length_cm, draft.width_cm, draft.height_cm]
+  if (dimensions.some(Boolean) && !dimensions.every(Boolean)) throw new ParcelDraftError('Provide all three dimensions or leave all three blank.')
+  const numberOrNull = (raw: string) => raw.trim() ? Number(raw) : null
+  const length_cm = numberOrNull(draft.length_cm), width_cm = numberOrNull(draft.width_cm), height_cm = numberOrNull(draft.height_cm)
+  if ([length_cm, width_cm, height_cm].some((v) => v !== null && (!Number.isFinite(v) || v <= 0))) throw new ParcelDraftError('Dimensions must be positive numbers.')
+  const max_stack_weight_kg = Number(draft.max_stack_weight_kg || 0)
+  if (!Number.isFinite(max_stack_weight_kg) || max_stack_weight_kg < 0) throw new ParcelDraftError('Max stack weight must be zero or greater.')
+  const temp_min_celsius = draft.requires_refrigeration ? numberOrNull(draft.temp_min_celsius) : null
+  const temp_max_celsius = draft.requires_refrigeration ? numberOrNull(draft.temp_max_celsius) : null
+  if (temp_min_celsius !== null && temp_max_celsius !== null && temp_min_celsius > temp_max_celsius) throw new ParcelDraftError('Minimum temperature cannot exceed maximum temperature.')
 
   return {
     parcel_id: draft.parcel_id.trim(),
@@ -105,6 +121,13 @@ export const parcelDraftToInput = (draft: ParcelDraft): ParcelInput => {
     time_window_start: draft.time_window_start,
     time_window_end: draft.time_window_end,
     fragile: draft.fragile,
+    dataset_id: draft.dataset_id.trim() || null, depot_id: draft.depot_id, delivery_date: draft.delivery_date,
+    length_cm, width_cm, height_cm, stackable: draft.stackable, max_stack_weight_kg,
+    loading_orientation_fixed: draft.loading_orientation_fixed, hazardous: draft.hazardous,
+    hazmat_class: draft.hazardous ? draft.hazmat_class.trim() || null : null,
+    requires_refrigeration: draft.requires_refrigeration, temp_min_celsius, temp_max_celsius,
+    two_person_lift: draft.two_person_lift, do_not_tilt: draft.do_not_tilt,
+    priority_level: draft.priority_level, service_type: draft.service_type,
   }
 }
 

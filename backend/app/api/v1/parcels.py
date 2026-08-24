@@ -4,24 +4,30 @@ from uuid import uuid4
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from app.models.parcel import Parcel
 from app.schemas.parcel import (
-    ParcelIn, ParcelResponse, ClusterPredictionRequest, CSVUploadResponse
+    ParcelCreate, ParcelIn, ParcelResponse, ClusterPredictionRequest, CSVUploadResponse
 )
-from app.services.data_service import upsert_parcel, import_csv
+from app.services.data_service import create_parcel as create_parcel_record, import_csv
 from app.services.clustering_service import predict_cluster, train_hdbscan, cluster_summary
 from app.services.clustering_common import ClusteringConfig
 from app.services.depot_service import get_depot_or_fail
 
 router = APIRouter(prefix="/parcels", tags=["parcels"])
 
-@router.post("", response_model=ParcelResponse)
-async def create_parcel(payload: ParcelIn):
-    return await upsert_parcel(payload)
+@router.post("", response_model=ParcelResponse, status_code=201)
+async def create_parcel(payload: ParcelCreate):
+    created = await create_parcel_record(payload)
+    if created is None:
+        raise HTTPException(status_code=409, detail="Parcel ID already exists")
+    return created
 
-@router.get("", response_model=list[ParcelResponse])
+@router.get("")
 async def list_parcels(
     depot_id: str | None = Query(default=None),
     delivery_date: date | None = Query(default=None),
     dataset_id: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    paginated: bool = Query(default=False),
 ):
     filters = {}
     if depot_id is not None:
@@ -30,7 +36,11 @@ async def list_parcels(
         filters["delivery_date"] = delivery_date
     if dataset_id is not None:
         filters["dataset_id"] = dataset_id
-    return await Parcel.find(filters).sort("-created_at").to_list()
+    if not paginated:
+        return await Parcel.find(filters).sort("-created_at").to_list()
+    total = await Parcel.find(filters).count()
+    items = await Parcel.find(filters).sort("-created_at").skip(offset).limit(limit).to_list()
+    return {"items": items, "total": total, "limit": limit, "offset": offset}
 
 @router.post("/upload-csv", response_model=CSVUploadResponse)
 async def upload_csv(

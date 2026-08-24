@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from app.models.load_plan import LoadPlan
 from app.schemas.parcel import ParcelIn
@@ -16,9 +16,15 @@ class StatusUpdate(BaseModel):
     status: str
 
 @router.get("")
-async def list_virtual_vehicles():
-    plans = await LoadPlan.find_all().sort("-created_at").to_list()
-    return [vehicle for plan in plans for vehicle in plan.vehicles]
+async def list_virtual_vehicles(plan_id: str | None = Query(default=None), vehicle_type: str | None = Query(default=None), status: str | None = Query(default=None)):
+    plans = await LoadPlan.find({"plan_id": plan_id} if plan_id else {}).sort("-created_at").to_list()
+    rows = []
+    for plan in plans:
+        for vehicle in plan.vehicles:
+            if vehicle_type and vehicle.vehicle_type_code != vehicle_type: continue
+            if status and vehicle.status != status: continue
+            rows.append({**vehicle.model_dump(), "plan_id": plan.plan_id})
+    return rows
 
 @router.patch("/{virtual_vehicle_id}/status")
 async def update_status(virtual_vehicle_id: str, payload: StatusUpdate):

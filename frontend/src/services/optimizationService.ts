@@ -1,5 +1,5 @@
 import { api } from './api'
-import type { InsertionResult, LoadPlan, OptimizationResult, OptimizationRunRequest, ParcelInput, ReadyVehicle, VirtualVehicle } from '../types'
+import type { InsertionResult, LoadPlan, OptimizationResult, OptimizationRunRequest, ParcelInput, PlanSummary, ReadyVehicle, VirtualVehicle } from '../types'
 
 export const optimizationService = {
   run: (payload: OptimizationRunRequest) => api.post<OptimizationResult>('/optimization/run', payload),
@@ -9,7 +9,14 @@ export const optimizationService = {
     api.get<LoadPlan | null>(`/optimization/plans?depot_id=${encodeURIComponent(depotId)}&delivery_date=${encodeURIComponent(deliveryDate)}`),
   planCsvUrl: (planId: string) => `/api/v1/optimization/plans/${encodeURIComponent(planId)}/export.csv`,
 
-  listVirtualVehicles: () => api.get<VirtualVehicle[]>('/virtual-vehicles'),
+  listPlans: () => api.get<PlanSummary[]>('/plans'),
+  listVirtualVehicles: (planId?: string, vehicleType?: string, status?: string) => {
+    const params = new URLSearchParams()
+    if (planId) params.set('plan_id', planId)
+    if (vehicleType) params.set('vehicle_type', vehicleType)
+    if (status) params.set('status', status)
+    return api.get<VirtualVehicle[]>(`/virtual-vehicles${params.size ? `?${params}` : ''}`)
+  },
 
   insertParcel: (virtualVehicleId: string, parcel: ParcelInput) =>
     api.post<InsertionResult>(`/virtual-vehicles/${encodeURIComponent(virtualVehicleId)}/insert-parcel`, parcel),

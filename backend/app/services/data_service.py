@@ -16,7 +16,7 @@ from pydantic import ValidationError
 from app.core.config import settings
 from app.db.bson import encode_mongo_document
 from app.models.parcel import Parcel
-from app.schemas.parcel import ParcelIn
+from app.schemas.parcel import ParcelCreate, ParcelIn
 
 logger = logging.getLogger(__name__)
 
@@ -269,6 +269,13 @@ async def _upsert_parcel(payload: ParcelIn) -> Parcel:
     await obj.save()
     return obj
 
+async def _create_parcel(payload: ParcelCreate) -> Parcel | None:
+    if await Parcel.find_one(Parcel.parcel_id == payload.parcel_id) is not None:
+        return None
+    obj = Parcel(**payload.model_dump())
+    await obj.insert()
+    return obj
+
 
 async def _bulk_upsert_parcels(payloads: list[ParcelIn]) -> tuple[int, int]:
     """Bulk insert/update path used by `import_csv` (F10). `upsert_parcel`
@@ -377,6 +384,11 @@ def upsert_parcel(*args, **kwargs):
     if args and hasattr(args[0], "run"):
         return args[0].run(_upsert_parcel(*args[1:], **kwargs))
     return _upsert_parcel(*args, **kwargs)
+
+def create_parcel(*args, **kwargs):
+    if args and hasattr(args[0], "run"):
+        return args[0].run(_create_parcel(*args[1:], **kwargs))
+    return _create_parcel(*args, **kwargs)
 
 def import_csv(*args, **kwargs):
     if args and hasattr(args[0], "run"):

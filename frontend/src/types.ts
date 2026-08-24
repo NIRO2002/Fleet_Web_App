@@ -22,11 +22,29 @@ export interface ParcelInput {
   time_window_start: string // "HH:MM"
   time_window_end: string // "HH:MM"
   fragile: boolean
+  length_cm?: number | null
+  width_cm?: number | null
+  height_cm?: number | null
+  stackable: boolean
+  max_stack_weight_kg: number
+  loading_orientation_fixed: boolean
+  hazardous: boolean
+  hazmat_class?: string | null
+  requires_refrigeration: boolean
+  temp_min_celsius?: number | null
+  temp_max_celsius?: number | null
+  two_person_lift: boolean
+  do_not_tilt: boolean
+  priority_level: string
+  service_type: string
 }
 
 export interface Parcel extends ParcelInput {
   cluster_id: number | null
   cluster_probability: number | null
+  status: string
+  dimensions_imputed: boolean
+  is_noise: boolean
 }
 
 /** String-valued mirror of ParcelInput used for controlled form fields. */
@@ -39,7 +57,29 @@ export interface ParcelDraft {
   time_window_start: string
   time_window_end: string
   fragile: boolean
+  dataset_id: string
+  depot_id: string
+  delivery_date: string
+  length_cm: string
+  width_cm: string
+  height_cm: string
+  stackable: boolean
+  max_stack_weight_kg: string
+  loading_orientation_fixed: boolean
+  hazardous: boolean
+  hazmat_class: string
+  requires_refrigeration: boolean
+  temp_min_celsius: string
+  temp_max_celsius: string
+  two_person_lift: boolean
+  do_not_tilt: boolean
+  priority_level: string
+  service_type: string
 }
+
+export interface PaginatedParcels { items: Parcel[]; total: number; limit: number; offset: number }
+export interface Depot { depot_id: string; depot_name: string; lat: number; lng: number }
+export interface PlanSummary { plan_id: string; depot_id: string; delivery_date: string; created_at: string; vehicle_count: number; feasible: boolean }
 
 export interface ClusterPrediction {
   cluster_id: number | null
@@ -53,6 +93,9 @@ export type ClusterSummary = Record<string, number>
 export interface ClusteringTrainResult {
   status: string
   parcel_count: number
+  n_clusters: number
+  noise_count: number
+  runtime_seconds: number
   clusters: ClusterSummary
 }
 
@@ -182,6 +225,7 @@ export interface VirtualVehicle {
   destination_latitude: number | null
   destination_longitude: number | null
   updated_at: string
+  plan_id?: string
 }
 
 // --- Loaded Vehicles / fleet-optimizer handoff ("READY") -----------------
