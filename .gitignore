@@ -28,6 +28,7 @@ backend/results/det_a/
 backend/results/det_b/
 backend/results/det_parallel_a/
 backend/results/det_parallel_b/
+backend/results/feature_set_downstream_raw/
 
 # OS
 .DS_Store

@@ -28,6 +28,24 @@ from app.services.depot_service import get_depot_or_fail
 from app.services.vehicle_catalog_service import VehicleCatalogCache, list_available_types
 
 
+def _clustering_context(parcels, clustered):
+    non_noise_labels = [int(label) for label in clustered.labels if int(label) >= 0]
+    counts = np.asarray([
+        non_noise_labels.count(label) for label in sorted(set(non_noise_labels))
+    ], dtype=float)
+    if not len(counts):
+        return {"max_cluster_share": 0.0, "normalized_cluster_size_entropy": 0.0, "degenerate": False}
+    max_share = float(counts.max() / len(parcels))
+    shares = counts / counts.sum()
+    entropy = float(-(shares * np.log(shares)).sum())
+    normalized = entropy / np.log(len(counts)) if len(counts) > 1 else 0.0
+    return {
+        "max_cluster_share": max_share,
+        "normalized_cluster_size_entropy": normalized,
+        "degenerate": max_share > 0.60,
+    }
+
+
 def _prepare_warm_clusters(clusters, catalog, capacity_aware, *, depot_lat, depot_lon, seed):
     if not capacity_aware:
         status = {cid: {"feasible": True, "reason": None} for cid in clusters}
@@ -38,6 +56,7 @@ def _prepare_warm_clusters(clusters, catalog, capacity_aware, *, depot_lat, depo
         "enabled": True, "n_split": repaired.n_split, "n_merged": repaired.n_merged,
         "clusters_before": repaired.clusters_before, "clusters_after": repaired.clusters_after,
         "cluster_status": repaired.cluster_status,
+        "audit": repaired.audit,
         "excluded_infeasible_count": repaired.excluded_infeasible_count,
     }
 
@@ -64,11 +83,17 @@ class PipelineRunConfig:
     population: int = 100
     generations: int = 200
     feature_set: str = "location"
+    time_weight: float = 5.0
+    include_window_width: bool = False
     enforce_weight_order: bool = False
 
     @property
     def run_id(self):
-        return f"{self.depot_id}_{self.delivery_date}_{self.method}_cap{int(self.capacity_aware)}_seed{self.seed}"
+        return (
+            f"{self.depot_id}_{self.delivery_date}_{self.method}_"
+            f"features-{self.feature_set}_tw{self.time_weight:g}_"
+            f"ww{int(self.include_window_width)}_cap{int(self.capacity_aware)}_seed{self.seed}"
+        )
 
 
 async def evaluation_catalog_snapshot(depot_id="D-CMB-001", delivery_date=None):
@@ -95,7 +120,12 @@ async def run_pipeline_one(cfg):
     catalog = await load_catalog_snapshot(cfg.depot_id, target_date, cache=cache)
     parcels = [p.model_copy(deep=True) for p in await get_planning_instance(cfg.depot_id, target_date, include_carryover=False)]
     mean_capacity = sum(v.capacity_m3 for v in rows) / len(rows)
-    cluster_config = ClusteringConfig(depot_lat=depot.lat, depot_lon=depot.lng, feature_set=cfg.feature_set, mean_vehicle_capacity_m3=mean_capacity if cfg.method == "kmeans" else None)
+    cluster_config = ClusteringConfig(
+        depot_lat=depot.lat, depot_lon=depot.lng,
+        feature_set=cfg.feature_set, time_weight=cfg.time_weight,
+        include_window_width=cfg.include_window_width,
+        mean_vehicle_capacity_m3=mean_capacity if cfg.method == "kmeans" else None,
+    )
     cluster_fn = clustering_service.cluster if cfg.method == "hdbscan" else baseline_clustering.cluster
     started = time.perf_counter()
     clustered = cluster_fn(parcels, cfg.seed, cluster_config)
@@ -114,12 +144,24 @@ async def run_pipeline_one(cfg):
     ceiling = compute_utilization_ceiling(sum(p.weight_kg for p in included), sum(p.volume_m3 for p in included), catalog)
     greedy = compute_utilization_greedy_reference(included, catalog, enforce_weight_order=cfg.enforce_weight_order)
     mean_util = sum(m["utilization"] for m in metrics) / len(metrics)
+    clustering_context = _clustering_context(parcels, clustered)
+    temporal_split_count = sum(
+        bool(row.get("temporal_split_predicate_fired"))
+        for row in audit.get("audit", [])
+    )
     return {
         "run_id": cfg.run_id, "depot_id": cfg.depot_id, "delivery_date": cfg.delivery_date,
         "method": cfg.method, "capacity_aware": cfg.capacity_aware, "seed": cfg.seed,
-        "feature_set": cfg.feature_set, "n_parcels": len(included), "excluded_parcels": len(parcels) - len(included),
+        "feature_set": cfg.feature_set, "time_weight": cfg.time_weight,
+        "include_window_width": cfg.include_window_width,
+        "n_parcels": len(included), "excluded_parcels": len(parcels) - len(included),
         "raw_cluster_count": clustered.n_clusters, "post_noise_cluster_count": clustered.post_noise_cluster_count,
-        "noise_count": clustered.noise_count, "mean_utilization": mean_util,
+        "noise_count": clustered.noise_count,
+        "noise_fraction": clustered.noise_count / len(parcels),
+        **clustering_context,
+        "mean_utilization": mean_util,
+        "mean_weight_utilization": sum(m["util_weight"] for m in metrics) / len(metrics),
+        "mean_volume_utilization": sum(m["util_volume"] for m in metrics) / len(metrics),
         "utilization_ceiling_capacity": ceiling.utilization, "utilization_greedy_reference": greedy.utilization,
         "achieved_vs_greedy_reference": mean_util / greedy.utilization if greedy.utilization else 0.0,
         "total_distance_km": sum(m["distance"] for m in metrics),
@@ -129,15 +171,12 @@ async def run_pipeline_one(cfg):
         "feasible": bool(np.all(selected_violation <= 1e-12)),
         "feasible_individuals_final": int(np.sum(np.all(final_g <= 1e-12, axis=1))) if len(final_g) else 0,
         "max_constraint_violation": float(np.max(selected_violation, initial=0.0)),
+        "temporal_split_predicate_count": temporal_split_count,
         "runtime_seconds": time.perf_counter() - started, "repair_audit": audit,
     }
 
 
-def _run_pipeline_sync(cfg):
-    return asyncio.run(run_pipeline_one(cfg))
-
-
-def run_pipeline_batch(configs, *, n_jobs=1, out_dir):
+async def run_pipeline_batch_async(configs, *, n_jobs=1, out_dir):
     """Stage 1 uses serial execution; process parallelism is added in Stage 4."""
     if n_jobs != 1:
         raise ValueError("Parallel evaluation is not enabled until the Stage 4 determinism gate passes.")
@@ -145,7 +184,11 @@ def run_pipeline_batch(configs, *, n_jobs=1, out_dir):
     output = []
     for cfg in configs:
         target = path / f"{cfg.run_id}.json"
-        row = json.loads(target.read_text()) if target.exists() else _run_pipeline_sync(cfg)
+        row = json.loads(target.read_text()) if target.exists() else await run_pipeline_one(cfg)
         if not target.exists(): target.write_text(json.dumps(row, indent=2, default=str))
         output.append(row)
     return output
+
+
+def run_pipeline_batch(configs, *, n_jobs=1, out_dir):
+    return asyncio.run(run_pipeline_batch_async(configs, n_jobs=n_jobs, out_dir=out_dir))

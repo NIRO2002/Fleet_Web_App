@@ -76,9 +76,20 @@ def _fits_some_vehicle(
     parcels: list[Parcel], vehicle_catalog, config: RepairConfig | None = None,
     depot_lat: float = settings.depot_latitude, depot_lon: float = settings.depot_longitude,
 ) -> bool:
+    fits, _ = _fits_some_vehicle_details(
+        parcels, vehicle_catalog, config, depot_lat, depot_lon
+    )
+    return fits
+
+
+def _fits_some_vehicle_details(
+    parcels: list[Parcel], vehicle_catalog, config: RepairConfig | None = None,
+    depot_lat: float = settings.depot_latitude, depot_lon: float = settings.depot_longitude,
+) -> tuple[bool, bool]:
+    """Return fit plus whether time rejected an otherwise eligible vehicle."""
     config = config or RepairConfig()
     if not vehicle_catalog:
-        return False
+        return False, False
     total_weight = sum(p.weight_kg for p in parcels)
     total_volume = sum(p.volume_m3 for p in parcels)
     longest_side = max(
@@ -87,6 +98,7 @@ def _fits_some_vehicle(
     )
     temporal_diameter_km = 0.0
     reachable_span = 0
+    temporal_rejected = False
     if config.enforce_temporal_feasibility and len(parcels) > 1:
         starts = [minutes(p.time_window_start) for p in parcels]
         ends = [minutes(p.time_window_end) for p in parcels]
@@ -110,10 +122,11 @@ def _fits_some_vehicle(
                 + temporal_diameter_km / max(vehicle.avg_speed_kmh, 1e-6) * 60.0
             )
             if lower_bound_minutes > reachable_span:
+                temporal_rejected = True
                 continue
         if attempt_placement(parcels, vehicle, collect_exceptions=False) is not None:
-            return True
-    return False
+            return True, temporal_rejected
+    return False, temporal_rejected
 
 
 def _split_decision_inputs(parcels, vehicle_catalog) -> dict:
@@ -173,12 +186,18 @@ def _split_oversize(
 
     while queue:
         cluster_id, parcels, depth = queue.pop(0)
-        fits = len(parcels) <= 1 or _fits_some_vehicle(parcels, vehicle_catalog, config, depot_lat, depot_lon)
+        if len(parcels) <= 1:
+            fits, temporal_rejected = True, False
+        else:
+            fits, temporal_rejected = _fits_some_vehicle_details(
+                parcels, vehicle_catalog, config, depot_lat, depot_lon
+            )
         audit.append({
             "operation": "split_check",
             "cluster_id": cluster_id,
             "depth": depth,
             "fits_some_vehicle": fits,
+            "temporal_split_predicate_fired": bool(not fits and temporal_rejected),
             **_split_decision_inputs(parcels, vehicle_catalog),
         })
         if fits:
