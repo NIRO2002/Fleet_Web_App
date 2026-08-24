@@ -17,6 +17,7 @@ from pymongo import UpdateOne
 
 from app.core.config import settings
 from app.models.parcel import Parcel
+from app.services.capacity_aware_clustering import RepairConfig, RepairedClusters, group_by_cluster, repair_clusters
 from app.services.clustering_common import (
     ClusterResult,
     ClusteringConfig,
@@ -25,6 +26,7 @@ from app.services.clustering_common import (
     handle_noise,
     transform_with_scaler,
 )
+from app.services.vehicle_catalog_service import list_available_types
 
 
 def cluster(parcels: list[Parcel], seed: int, config: ClusteringConfig | None = None) -> ClusterResult:
@@ -84,12 +86,17 @@ async def train_hdbscan(
     seed: int = 0,
     config: ClusteringConfig | None = None,
     dataset_id: str | None = None,
-    label_offset: int = 0,
 ):
     """DB- and persistence-aware wrapper around `cluster()`, scoped to one
     planning instance. Persists the fitted HDBSCAN model *and* the scaler
     it was fit with, so `predict_cluster` transforms new parcels
-    consistently instead of re-fitting a scaler on a single row."""
+    consistently instead of re-fitting a scaler on a single row.
+
+    Per-instance labels start at 0 -- this is the natural output of
+    clustering, not a defect. Callers must resolve cluster_id together with
+    (depot_id, delivery_date), never on cluster_id alone (see
+    app/api/v1/optimization.py); an offset here only papered over that
+    missing scope instead of fixing it. See docs/DESIGN_DECISIONS.md."""
     parcels = await get_planning_instance(
         depot_id,
         delivery_date,
@@ -97,10 +104,6 @@ async def train_hdbscan(
     )
     config = config or ClusteringConfig()
     result = cluster(parcels, seed, config)
-    if label_offset:
-        for parcel in parcels:
-            if parcel.cluster_id is not None and parcel.cluster_id >= 0:
-                parcel.cluster_id += label_offset
     if parcels:
         await Parcel.get_motor_collection().bulk_write([
             UpdateOne({"parcel_id": p.parcel_id}, {"$set": {"cluster_id": p.cluster_id, "cluster_probability": p.cluster_probability, "is_noise": p.is_noise}})
@@ -112,11 +115,56 @@ async def train_hdbscan(
             "model": result.metadata["model"],
             "scaler": result.metadata["scaler"],
             "config": config,
-            "label_offset": label_offset,
         },
         _model_path(depot_id, delivery_date),
     )
     return result, parcels
+
+
+async def repair_planning_instance(
+    depot_id: str,
+    parcels: list[Parcel],
+    *,
+    depot_lat: float,
+    depot_lon: float,
+    seed: int = 0,
+) -> RepairedClusters | None:
+    """Capacity-aware repair (split oversize / merge undersize clusters
+    against `vehicle_type_catalog`) on a just-trained instance -- the same
+    HDBSCAN -> repair -> NSGA-II pipeline app/evaluation/harness.py
+    exercises for evaluation, reusing its exact `repair_clusters`/
+    `RepairConfig`/`group_by_cluster` rather than a forked copy, now wired
+    into the live training path instead of only the offline harness.
+
+    Persists the repaired cluster_id back to Parcel. A cluster repair marks
+    infeasible (no catalog vehicle can carry it, even split/merged) is
+    persisted as cluster_id=-1, not as an ordinary optimizable cluster --
+    repair must never launder an unroutable parcel into something
+    /optimization/run will silently accept (see the noise-handling
+    guarantee in api/v1/optimization.py and GET /parcels/clustering/unassigned).
+
+    Returns None (repair skipped, not applied) if the depot has no active
+    vehicle types yet -- vehicle catalog setup and HDBSCAN training are
+    independent prerequisites, so an empty catalog should not hard-fail
+    training itself."""
+    catalog = await list_available_types(depot_id)
+    if not catalog:
+        return None
+
+    clusters = group_by_cluster(parcels)
+    repaired = repair_clusters(clusters, catalog, RepairConfig(), depot_lat, depot_lon, seed=seed)
+
+    updates = []
+    for cluster_id, members in repaired.clusters.items():
+        feasible = repaired.cluster_status[cluster_id]["feasible"]
+        persisted_id = cluster_id if feasible else -1
+        for parcel in members:
+            parcel.cluster_id = persisted_id
+            updates.append(UpdateOne({"parcel_id": parcel.parcel_id}, {"$set": {"cluster_id": persisted_id}}))
+    if updates:
+        await Parcel.get_motor_collection().bulk_write(updates)
+
+    return repaired
 
 
 def predict_cluster(payload, depot_id: str, delivery_date):
@@ -133,8 +181,6 @@ def predict_cluster(payload, depot_id: str, delivery_date):
     X = transform_with_scaler([temp], scaler, config)
     labels, strengths = hdbscan.approximate_predict(model, X)
     label = int(labels[0])
-    if label >= 0:
-        label += int(bundle.get("label_offset", 0))
     return {
         "cluster_id": label if label >= 0 else None,
         "cluster_probability": float(strengths[0]),

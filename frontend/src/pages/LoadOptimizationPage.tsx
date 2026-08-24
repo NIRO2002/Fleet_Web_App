@@ -52,6 +52,15 @@ interface NavState {
   parcelIds?: string[]
   clusterId?: number
   clusterIds?: number[]
+  // HDBSCAN labels restart at 0 per (depot_id, delivery_date) planning
+  // instance, so cluster_id alone is ambiguous -- the backend now requires
+  // this scope alongside cluster_id (see backend/app/api/v1/optimization.py).
+  // Forwarded from ParcelConsolidationPage's "Continue to Optimization".
+  depotId?: string
+  deliveryDate?: string
+  /** From the training run that produced clusterIds: parcels left
+   * genuinely unassignable after HDBSCAN + repair. Never auto-optimized. */
+  unassignedCount?: number
 }
 
 interface BatchResult {
@@ -205,7 +214,13 @@ export function LoadOptimizationPage() {
         setRunNotice({ tone: 'error', text: 'Choose a cluster to optimize.' })
         return
       }
+      if (!navState?.depotId || !navState?.deliveryDate) {
+        setRunNotice({ tone: 'error', text: 'Missing depot/delivery date scope for this cluster - return to Parcel Consolidation and continue from there.' })
+        return
+      }
       payload.cluster_id = Number(selectedCluster)
+      payload.depot_id = navState.depotId
+      payload.delivery_date = navState.deliveryDate
     } else {
       const ids = parseIdList(parcelIdsText)
       if (ids.length === 0) {
@@ -247,6 +262,11 @@ export function LoadOptimizationPage() {
       setRunNotice({ tone: 'error', text: 'No clusters available to optimize.' })
       return
     }
+    if (!navState?.depotId || !navState?.deliveryDate) {
+      setRunNotice({ tone: 'error', text: 'Missing depot/delivery date scope for these clusters - return to Parcel Consolidation and continue from there.' })
+      return
+    }
+    const { depotId, deliveryDate } = navState
 
     setBatchResults([])
     setBatchRunning(true)
@@ -258,7 +278,13 @@ export function LoadOptimizationPage() {
         setBatchClusterProgress((prev) => (prev >= 90 ? 90 : prev + (90 - prev) * 0.12))
       }, 200)
       try {
-        const response = await optimizationService.run({ cluster_id: clusterId, depot_latitude: lat, depot_longitude: lon })
+        const response = await optimizationService.run({
+          cluster_id: clusterId,
+          depot_id: depotId,
+          delivery_date: deliveryDate,
+          depot_latitude: lat,
+          depot_longitude: lon,
+        })
         setBatchClusterProgress(100)
         setBatchResults((prev) => [...prev, { clusterId, status: 'success', result: response }])
       } catch (err) {
@@ -531,6 +557,13 @@ export function LoadOptimizationPage() {
 
       {batchResults.length > 0 && (
         <Card className="mt-5" title={`Batch Results (${batchResults.length}/${batchClusterIds.length})`}>
+          {!!navState?.unassignedCount && (
+            <div className="mb-4">
+              <InlineAlert tone="info">
+                {navState.unassignedCount} parcel{navState.unassignedCount === 1 ? '' : 's'} from this planning instance could not be assigned to any cluster (HDBSCAN + capacity-aware repair) and {navState.unassignedCount === 1 ? "isn't" : "aren't"} included in this batch - see the Parcel Consolidation page.
+              </InlineAlert>
+            </div>
+          )}
           <DataTable headers={['Cluster', 'Status', 'Vehicle Type', 'Weight Util', 'Distance', 'Cost', '']}>
             {batchResults.map((row) => (
               <tr className="transition hover:bg-blue-50/40" key={row.clusterId}>

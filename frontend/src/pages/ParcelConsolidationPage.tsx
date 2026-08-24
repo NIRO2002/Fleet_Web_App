@@ -114,7 +114,7 @@ export function ParcelConsolidationPage() {
         <PrimaryButton disabled={!selectedDepot || !selectedDate || total===0} loading={training} onClick={runClustering}><Sparkles className="h-4 w-4" /> Run HDBSCAN Clustering</PrimaryButton><span className="ml-3 text-xs font-bold text-fleet-muted">{total} parcels in scope</span>
         {total===0 && <p className="mt-3 text-sm text-amber-700">No parcels match this depot and date.</p>}
         <div className="mt-4 space-y-2">{clusterRows.map((r)=><div className="flex justify-between gap-3 text-sm" key={String(r.id)}><span>{clusterLabel(r.id)}</span><span><b>{r.count}</b> · {formatKg(clusterMetrics[String(r.id)]?.weight??0)} · {formatM3(clusterMetrics[String(r.id)]?.volume??0)}</span></div>)}</div>
-        {clustered>0 && <div className="mt-4"><PrimaryButton onClick={()=>navigate('/load-optimization',{state:{clusterIds:clusterRows.filter((r)=>r.id!==null&&r.id>=0).map((r)=>r.id)}})} >Continue to Optimization <ArrowRight className="h-4 w-4" /></PrimaryButton></div>}
+        {clustered>0 && <div className="mt-4"><PrimaryButton onClick={()=>navigate('/load-optimization',{state:{clusterIds:clusterRows.filter((r)=>r.id!==null&&r.id>=0).map((r)=>r.id),depotId:selectedDepot,deliveryDate:selectedDate,unassignedCount:noise}})} >Continue to Optimization <ArrowRight className="h-4 w-4" /></PrimaryButton></div>}
       </Card>
     </div>
     <Card className="mt-5" title={`Parcels — ${total} matching`}>

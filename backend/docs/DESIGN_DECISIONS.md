@@ -381,3 +381,31 @@ HDBSCAN similarity while remaining on complete Parcel objects for unchanged
 capacity-aware repair, NSGA-II and placement. The feature set stays
 configurable so this decision can be re-evaluated on datasets with stronger
 time-window separation.
+
+## cluster_id is scoped, not globally unique -- `label_offset` removed (2026-08-24)
+
+HDBSCAN labels restart at 0 for every `(depot_id, delivery_date)` planning
+instance (`app/services/clustering_service.py`'s `cluster()` always fits
+fresh per instance). `Parcel.cluster_id` is a bare int with no instance
+scope baked in, so the same `cluster_id` value legitimately exists across
+many unrelated instances -- it was never meant to be a global identifier.
+
+The multi-instance CSV/dataset training path (`api/v1/parcels.py`'s
+`dataset_id` branch) previously worked around this by accumulating a
+`label_offset` across instances so cluster IDs looked dataset-wide unique;
+the single depot+date training path never did the same. This inconsistency
+was symptomatic of the real bug: `POST /optimization/run`'s `cluster_id`
+branch resolved parcels with a global `{"cluster_id": N}` query
+(`api/v1/optimization.py`), so for most clusters it silently pulled in
+parcels from every instance that happened to reuse that label, tripping the
+"parcels must share exactly one delivery_date" guard.
+
+The fix is to resolve `cluster_id` together with `(depot_id, delivery_date)`
+everywhere it's used (see `OptimizationRequest`'s new required-when-
+`cluster_id`-is-set `depot_id`/`delivery_date` fields, and the compound
+`(depot_id, delivery_date, cluster_id)` index on `Parcel`), not to keep
+papering over the missing scope with an offset. `label_offset` is removed
+entirely from `train_hdbscan`, the persisted joblib bundle, and
+`predict_cluster`; per-instance labels starting at 0 are the natural,
+correct output of clustering once every consumer resolves them with their
+instance scope.

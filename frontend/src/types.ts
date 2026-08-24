@@ -90,12 +90,24 @@ export interface ClusterPrediction {
 /** Keyed by cluster_id as a string ("-1" = noise/unassigned). */
 export type ClusterSummary = Record<string, number>
 
+export interface ClusteringRepairSummary {
+  applied: boolean
+  n_split: number
+  n_merged: number
+  excluded_infeasible_count: number
+}
+
 export interface ClusteringTrainResult {
   status: string
   parcel_count: number
   n_clusters: number
   noise_count: number
+  /** Final, post-repair count of parcels left genuinely unassignable
+   * (cluster_id still -1) - smaller than noise_count, which is HDBSCAN's
+   * raw pre-reassignment noise. See GET /parcels/clustering/unassigned. */
+  unassigned_count: number
   runtime_seconds: number
+  repair: ClusteringRepairSummary
   clusters: ClusterSummary
 }
 
@@ -126,6 +138,12 @@ export type VehicleType = KnownVehicleType | (string & {})
 export interface OptimizationRunRequest {
   cluster_id?: number
   parcel_ids?: string[]
+  // Required by the backend whenever cluster_id is set: HDBSCAN labels
+  // restart at 0 per (depot_id, delivery_date) planning instance, so a bare
+  // cluster_id is ambiguous without this scope (see
+  // backend/app/api/v1/optimization.py).
+  depot_id?: string
+  delivery_date?: string
   depot_latitude?: number
   depot_longitude?: number
 }

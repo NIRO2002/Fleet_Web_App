@@ -7,7 +7,7 @@ from app.schemas.parcel import (
     ParcelCreate, ParcelIn, ParcelResponse, ClusterPredictionRequest, CSVUploadResponse
 )
 from app.services.data_service import create_parcel as create_parcel_record, import_csv
-from app.services.clustering_service import predict_cluster, train_hdbscan, cluster_summary
+from app.services.clustering_service import predict_cluster, train_hdbscan, cluster_summary, repair_planning_instance
 from app.services.clustering_common import ClusteringConfig
 from app.services.depot_service import get_depot_or_fail
 
@@ -69,9 +69,15 @@ async def train_clustering(
     dataset_id: str | None = Query(default=None),
 ):
     """Trains HDBSCAN on exactly one (depot_id, delivery_date) planning
-    instance - never the whole parcels table. See
-    app/services/clustering_service.py."""
+    instance - never the whole parcels table - then runs capacity-aware
+    repair against that instance's vehicle catalog (skipped, not failed, if
+    the depot has no active vehicle types yet). This is the same
+    HDBSCAN -> repair pipeline app/evaluation/harness.py exercises for
+    evaluation; NSGA-II is the caller's separate, explicit next step via
+    POST /optimization/run. See app/services/clustering_service.py."""
     try:
+        repair_applied = False
+        n_split = n_merged = excluded_infeasible_count = 0
         if dataset_id is None:
             depot = await get_depot_or_fail(depot_id)
             result, parcels = await train_hdbscan(
@@ -83,6 +89,13 @@ async def train_clustering(
             n_clusters = result.n_clusters
             noise_count = result.noise_count
             runtime_seconds = result.runtime_seconds
+            repaired = await repair_planning_instance(
+                depot_id, parcels, depot_lat=depot.lat, depot_lon=depot.lng, seed=seed,
+            )
+            if repaired is not None:
+                repair_applied = True
+                n_split, n_merged = repaired.n_split, repaired.n_merged
+                excluded_infeasible_count = repaired.excluded_infeasible_count
         else:
             dataset_rows = await Parcel.find({"dataset_id": dataset_id}).to_list()
             instances = sorted({
@@ -96,7 +109,6 @@ async def train_clustering(
             n_clusters = 0
             noise_count = 0
             runtime_seconds = 0.0
-            label_offset = 0
             for instance_depot, instance_date in instances:
                 depot = await get_depot_or_fail(instance_depot)
                 instance_result, instance_parcels = await train_hdbscan(
@@ -104,20 +116,41 @@ async def train_clustering(
                     instance_date,
                     seed=seed,
                     dataset_id=dataset_id,
-                    label_offset=label_offset,
                     config=ClusteringConfig(depot_lat=depot.lat, depot_lon=depot.lng),
                 )
                 parcels.extend(instance_parcels)
                 n_clusters += instance_result.n_clusters
                 noise_count += instance_result.noise_count
                 runtime_seconds += instance_result.runtime_seconds
-                label_offset += instance_result.n_clusters
+                repaired = await repair_planning_instance(
+                    instance_depot, instance_parcels, depot_lat=depot.lat, depot_lon=depot.lng, seed=seed,
+                )
+                if repaired is not None:
+                    repair_applied = True
+                    n_split += repaired.n_split
+                    n_merged += repaired.n_merged
+                    excluded_infeasible_count += repaired.excluded_infeasible_count
+        # Final, post-repair count of parcels left genuinely unassignable
+        # (cluster_id still -1) -- smaller than noise_count, which is
+        # HDBSCAN's raw pre-reassignment noise, since repair gets a second,
+        # capacity-aware chance to merge noise-origin parcels into a real
+        # cluster (see repair_planning_instance). Surfaced so the UI can
+        # show it; these parcels are never auto-optimized (see
+        # GET /parcels/clustering/unassigned).
+        unassigned_count = sum(1 for p in parcels if p.cluster_id == -1)
         return {
             "status": "trained",
             "parcel_count": len(parcels),
             "n_clusters": n_clusters,
             "noise_count": noise_count,
+            "unassigned_count": unassigned_count,
             "runtime_seconds": runtime_seconds,
+            "repair": {
+                "applied": repair_applied,
+                "n_split": n_split,
+                "n_merged": n_merged,
+                "excluded_infeasible_count": excluded_infeasible_count,
+            },
             "clusters": await cluster_summary(depot_id, delivery_date, dataset_id=dataset_id),
         }
     except ValueError as exc:
@@ -130,6 +163,31 @@ async def get_clusters(
     dataset_id: str | None = Query(default=None),
 ):
     return await cluster_summary(depot_id, delivery_date, dataset_id=dataset_id)
+
+@router.get("/clustering/unassigned")
+async def list_unassigned_parcels(
+    depot_id: str = Query(...),
+    delivery_date: date = Query(...),
+):
+    """Parcels HDBSCAN could not cluster and neither handle_noise
+    (app/services/clustering_common.py) nor capacity-aware repair could
+    place into a real, feasible cluster -- left honestly at cluster_id=-1
+    rather than silently dropped. Never auto-optimized; surfaced so a human
+    can decide what to do with them (retry with different params, manual
+    routing, etc.).
+
+    Scoped to status=PENDING to match get_planning_instance -- the same
+    definition of "this planning instance" that training/repair itself
+    used, so this count agrees with /clustering/train's unassigned_count.
+    A PLANNED/DELIVERED/FAILED parcel that happens to carry a stale
+    cluster_id=-1 from before it left PENDING isn't awaiting attention
+    anymore and would otherwise show up here misleadingly."""
+    return await Parcel.find({
+        "depot_id": depot_id,
+        "delivery_date": delivery_date,
+        "cluster_id": -1,
+        "status": "PENDING",
+    }).to_list()
 
 @router.post("/clustering/predict")
 def predict_new_parcel(

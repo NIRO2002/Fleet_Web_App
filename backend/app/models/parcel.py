@@ -67,4 +67,12 @@ class Parcel(Document):
     class Settings:
         name = "parcels"
         bson_encoders = DATE_BSON_ENCODERS
-        indexes = [IndexModel([("depot_id", ASCENDING), ("delivery_date", ASCENDING)]), "dataset_id", "status"]
+        # Supersedes the old (depot_id, delivery_date)-only index: MongoDB
+        # compound indexes serve any query on a leading prefix of their
+        # fields, so this one covers both the plain planning-instance scope
+        # and the cluster_id-scoped lookup in api/v1/optimization.py without
+        # needing two separate indexes.
+        indexes = [
+            IndexModel([("depot_id", ASCENDING), ("delivery_date", ASCENDING), ("cluster_id", ASCENDING)]),
+            "dataset_id", "status",
+        ]
