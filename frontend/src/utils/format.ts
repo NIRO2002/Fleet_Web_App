@@ -1,4 +1,4 @@
-import type { ParcelDraft, ParcelInput, VehicleCapabilityDraft, VehicleCapabilityInput, VehicleType } from '../types'
+import type { KnownVehicleType, ParcelDraft, ParcelInput, VehicleTypeCatalogDraft, VehicleTypeCatalogInput, VehicleType } from '../types'
 
 export const formatNumber = (value: number) => value.toLocaleString('en-US')
 
@@ -32,7 +32,7 @@ export const clusterTone = (clusterId: number | null): 'blue' | 'slate' => (clus
 /** GET /parcels/clustering returns keys via Python's str(cluster_id): "None" | "-1" | "0" | "1" ... */
 export const parseClusterKey = (key: string): number | null => (key === 'None' ? null : Number(key))
 
-const VEHICLE_TONE: Record<VehicleType, string> = {
+const VEHICLE_TONE: Record<KnownVehicleType, string> = {
   BIKE: 'bg-slate-100 text-slate-700',
   APE_CARGO: 'bg-cyan-50 text-cyan-700',
   TVS_KING: 'bg-cyan-50 text-cyan-700',
@@ -42,7 +42,11 @@ const VEHICLE_TONE: Record<VehicleType, string> = {
   TRUCK_4T: 'bg-indigo-50 text-indigo-700',
 }
 
-export const vehicleToneClass = (type: VehicleType) => VEHICLE_TONE[type]
+const DEFAULT_VEHICLE_TONE = 'bg-slate-100 text-slate-700'
+
+/** Falls back to a neutral tone for any vehicle type added to the catalog
+ * beyond the original 7 field-data codes. */
+export const vehicleToneClass = (type: VehicleType) => VEHICLE_TONE[type as KnownVehicleType] ?? DEFAULT_VEHICLE_TONE
 
 export const utilizationBarTone = (fraction: number) =>
   fraction >= 0.9 ? 'bg-red-500' : fraction >= 0.7 ? 'bg-amber-500' : 'bg-emerald-500'
@@ -122,76 +126,137 @@ export const normalizePositions = (points: { latitude: number; longitude: number
   }))
 }
 
-export const emptyVehicleCapabilityDraft = (): VehicleCapabilityDraft => ({
-  name: '',
+export const emptyVehicleTypeDraft = (): VehicleTypeCatalogDraft => ({
+  code: '',
+  display_name: '',
   category: '',
-  brand: '',
-  model: '',
-  max_weight_kg: '',
-  max_length_cm: '',
-  max_width_cm: '',
-  max_height_cm: '',
-  status: 'ACTIVE',
+  model_name: '',
+  capacity_kg: '',
+  capacity_m3: '',
+  cargo_length_cm: '',
+  cargo_width_cm: '',
+  cargo_height_cm: '',
+  max_parcels: '',
+  max_stack_layers: '1',
+  vehicle_max_stack_weight_kg: '1000000',
+  fixed_cost: '',
+  cost_per_km: '',
+  avg_speed_kmh: '',
+  max_speed_kmh: '',
+  gross_vehicle_weight_kg: '',
+  available_from: '00:00',
+  available_until: '23:59',
+  is_refrigerated: false,
+  temp_min_celsius: '',
+  temp_max_celsius: '',
+  is_hazmat_certified: false,
+  has_tail_lift: false,
+  min_road_width_m: '',
+  cost_per_trip_reference: '',
+  source_reference: '',
+  depot_id: '',
+  source: '',
+  is_active: true,
 })
 
-export class VehicleCapabilityDraftError extends Error {}
+export class VehicleTypeDraftError extends Error {}
 
-/** Parses + validates a VehicleCapabilityDraft into the numeric input the API expects. */
-export const vehicleCapabilityDraftToInput = (draft: VehicleCapabilityDraft): VehicleCapabilityInput => {
-  if (!draft.name.trim()) throw new VehicleCapabilityDraftError('Vehicle name is required.')
-  if (!draft.category.trim()) throw new VehicleCapabilityDraftError('Category is required.')
+const requirePositiveNumber = (raw: string, field: string): number => {
+  const value = Number(raw)
+  if (!Number.isFinite(value) || value <= 0) throw new VehicleTypeDraftError(`${field} must be a positive number.`)
+  return value
+}
 
-  const max_weight_kg = Number(draft.max_weight_kg)
-  const max_length_cm = Number(draft.max_length_cm)
-  const max_width_cm = Number(draft.max_width_cm)
-  const max_height_cm = Number(draft.max_height_cm)
+const optionalNumber = (raw: string): number | null => {
+  const trimmed = raw.trim()
+  if (!trimmed) return null
+  const value = Number(trimmed)
+  if (!Number.isFinite(value)) throw new VehicleTypeDraftError('Expected a number.')
+  return value
+}
 
-  if (!Number.isFinite(max_weight_kg) || max_weight_kg <= 0) {
-    throw new VehicleCapabilityDraftError('Maximum weight must be a positive number.')
+/** Parses + validates a VehicleTypeCatalogDraft into the numeric input the API expects. */
+export const vehicleTypeDraftToInput = (draft: VehicleTypeCatalogDraft): VehicleTypeCatalogInput => {
+  if (!draft.code.trim()) throw new VehicleTypeDraftError('Code is required.')
+  if (!draft.display_name.trim()) throw new VehicleTypeDraftError('Display name is required.')
+  if (!/^\d{2}:\d{2}$/.test(draft.available_from) || !/^\d{2}:\d{2}$/.test(draft.available_until)) {
+    throw new VehicleTypeDraftError('Both operating-window fields are required (HH:MM).')
   }
-  if (!Number.isFinite(max_length_cm) || max_length_cm <= 0) {
-    throw new VehicleCapabilityDraftError('Length must be a positive number.')
+
+  const max_parcels = Number(draft.max_parcels)
+  const max_stack_layers = Number(draft.max_stack_layers)
+  if (!Number.isInteger(max_parcels) || max_parcels <= 0) {
+    throw new VehicleTypeDraftError('Max parcels must be a positive whole number.')
   }
-  if (!Number.isFinite(max_width_cm) || max_width_cm <= 0) {
-    throw new VehicleCapabilityDraftError('Width must be a positive number.')
-  }
-  if (!Number.isFinite(max_height_cm) || max_height_cm <= 0) {
-    throw new VehicleCapabilityDraftError('Height must be a positive number.')
+  if (!Number.isInteger(max_stack_layers) || max_stack_layers < 1) {
+    throw new VehicleTypeDraftError('Max stack layers must be a whole number of at least 1.')
   }
 
   return {
-    name: draft.name.trim(),
-    category: draft.category.trim(),
-    brand: draft.brand.trim() || null,
-    model: draft.model.trim() || null,
-    max_weight_kg,
-    max_length_cm,
-    max_width_cm,
-    max_height_cm,
-    status: draft.status,
+    code: draft.code.trim().toUpperCase(),
+    display_name: draft.display_name.trim(),
+    category: draft.category.trim() || null,
+    model_name: draft.model_name.trim() || null,
+    capacity_kg: requirePositiveNumber(draft.capacity_kg, 'Capacity (kg)'),
+    capacity_m3: requirePositiveNumber(draft.capacity_m3, 'Capacity (m³)'),
+    cargo_length_cm: requirePositiveNumber(draft.cargo_length_cm, 'Cargo length'),
+    cargo_width_cm: requirePositiveNumber(draft.cargo_width_cm, 'Cargo width'),
+    cargo_height_cm: requirePositiveNumber(draft.cargo_height_cm, 'Cargo height'),
+    max_parcels,
+    max_stack_layers,
+    vehicle_max_stack_weight_kg: optionalNumber(draft.vehicle_max_stack_weight_kg) ?? 1_000_000,
+    fixed_cost: optionalNumber(draft.fixed_cost) ?? 0,
+    cost_per_km: optionalNumber(draft.cost_per_km) ?? 0,
+    avg_speed_kmh: requirePositiveNumber(draft.avg_speed_kmh, 'Average speed'),
+    max_speed_kmh: optionalNumber(draft.max_speed_kmh),
+    gross_vehicle_weight_kg: optionalNumber(draft.gross_vehicle_weight_kg),
+    available_from: draft.available_from,
+    available_until: draft.available_until,
+    is_refrigerated: draft.is_refrigerated,
+    temp_min_celsius: optionalNumber(draft.temp_min_celsius),
+    temp_max_celsius: optionalNumber(draft.temp_max_celsius),
+    is_hazmat_certified: draft.is_hazmat_certified,
+    has_tail_lift: draft.has_tail_lift,
+    min_road_width_m: optionalNumber(draft.min_road_width_m),
+    cost_per_trip_reference: optionalNumber(draft.cost_per_trip_reference),
+    source_reference: draft.source_reference.trim() || null,
+    depot_id: draft.depot_id.trim() || null,
+    source: draft.source.trim() || null,
+    is_active: draft.is_active,
   }
 }
 
-export const vehicleCapabilityToDraft = (capability: {
-  name: string
-  category: string
-  brand: string | null
-  model: string | null
-  max_weight_kg: number
-  max_length_cm: number
-  max_width_cm: number
-  max_height_cm: number
-  status: 'ACTIVE' | 'INACTIVE'
-}): VehicleCapabilityDraft => ({
-  name: capability.name,
-  category: capability.category,
-  brand: capability.brand ?? '',
-  model: capability.model ?? '',
-  max_weight_kg: String(capability.max_weight_kg),
-  max_length_cm: String(capability.max_length_cm),
-  max_width_cm: String(capability.max_width_cm),
-  max_height_cm: String(capability.max_height_cm),
-  status: capability.status,
+export const vehicleTypeToDraft = (vehicleType: VehicleTypeCatalogInput): VehicleTypeCatalogDraft => ({
+  code: vehicleType.code,
+  display_name: vehicleType.display_name,
+  category: vehicleType.category ?? '',
+  model_name: vehicleType.model_name ?? '',
+  capacity_kg: String(vehicleType.capacity_kg),
+  capacity_m3: String(vehicleType.capacity_m3),
+  cargo_length_cm: String(vehicleType.cargo_length_cm),
+  cargo_width_cm: String(vehicleType.cargo_width_cm),
+  cargo_height_cm: String(vehicleType.cargo_height_cm),
+  max_parcels: String(vehicleType.max_parcels),
+  max_stack_layers: String(vehicleType.max_stack_layers),
+  vehicle_max_stack_weight_kg: String(vehicleType.vehicle_max_stack_weight_kg),
+  fixed_cost: String(vehicleType.fixed_cost),
+  cost_per_km: String(vehicleType.cost_per_km),
+  avg_speed_kmh: String(vehicleType.avg_speed_kmh),
+  max_speed_kmh: vehicleType.max_speed_kmh === null ? '' : String(vehicleType.max_speed_kmh),
+  gross_vehicle_weight_kg: vehicleType.gross_vehicle_weight_kg === null ? '' : String(vehicleType.gross_vehicle_weight_kg),
+  available_from: vehicleType.available_from,
+  available_until: vehicleType.available_until,
+  is_refrigerated: vehicleType.is_refrigerated,
+  temp_min_celsius: vehicleType.temp_min_celsius === null ? '' : String(vehicleType.temp_min_celsius),
+  temp_max_celsius: vehicleType.temp_max_celsius === null ? '' : String(vehicleType.temp_max_celsius),
+  is_hazmat_certified: vehicleType.is_hazmat_certified,
+  has_tail_lift: vehicleType.has_tail_lift,
+  min_road_width_m: vehicleType.min_road_width_m === null ? '' : String(vehicleType.min_road_width_m),
+  cost_per_trip_reference: vehicleType.cost_per_trip_reference === null ? '' : String(vehicleType.cost_per_trip_reference),
+  source_reference: vehicleType.source_reference ?? '',
+  depot_id: vehicleType.depot_id ?? '',
+  source: vehicleType.source ?? '',
+  is_active: vehicleType.is_active,
 })
 
 export const parseIdList = (raw: string): string[] =>

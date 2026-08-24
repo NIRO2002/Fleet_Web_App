@@ -72,7 +72,13 @@ export interface CsvUploadResult {
 
 // --- Optimization (mirrors backend app/schemas/optimization.py) ----------
 
-export type VehicleType = 'BIKE' | 'APE_CARGO' | 'TVS_KING' | 'MICRO_VAN' | 'VAN_MED' | 'TRUCK_2T' | 'TRUCK_4T'
+/** The 7 field-data codes seeded into `vehicle_type_catalog` (see backend
+ * app/db/seed_vehicle_types.py). Kept for icon/tone lookups and
+ * autocomplete, but the catalog is admin-editable, so `VehicleType` itself
+ * is NOT closed to these -- any string `vehicle_type_catalog` accepts is a
+ * valid vehicle type at runtime. */
+export type KnownVehicleType = 'BIKE' | 'APE_CARGO' | 'TVS_KING' | 'MICRO_VAN' | 'VAN_MED' | 'TRUCK_2T' | 'TRUCK_4T'
+export type VehicleType = KnownVehicleType | (string & {})
 
 export interface OptimizationRunRequest {
   cluster_id?: number
@@ -213,41 +219,88 @@ export interface InsertionResult {
   remaining_volume_m3: number
 }
 
-// --- Vehicle Capabilities (mirrors backend app/schemas/vehicle_capability.py) ---
-// A capability/type definition (e.g. "Bajaj Three Wheeler") - not a physical,
-// registered vehicle. Registered Vehicles will reference these once that
-// feature exists.
+// --- Vehicle Type Catalog (mirrors backend app/schemas/vehicle_type.py) ---
+// The single source of truth for vehicle specs: both the Vehicle Types CRUD
+// page and NSGA-II read/write this same catalog, keyed by `code`.
 
-export type VehicleCapabilityStatus = 'ACTIVE' | 'INACTIVE'
+export interface VehicleTypeCatalogInput {
+  code: string
+  display_name: string
+  category: string | null
+  model_name: string | null
 
-export interface VehicleCapabilityInput {
-  name: string
-  category: string
-  brand: string | null
-  model: string | null
-  max_weight_kg: number
-  max_length_cm: number
-  max_width_cm: number
-  max_height_cm: number
-  status: VehicleCapabilityStatus
+  capacity_kg: number
+  capacity_m3: number
+  cargo_length_cm: number
+  cargo_width_cm: number
+  cargo_height_cm: number
+  max_parcels: number
+  max_stack_layers: number
+  vehicle_max_stack_weight_kg: number
+
+  fixed_cost: number
+  cost_per_km: number
+  avg_speed_kmh: number
+  max_speed_kmh: number | null
+  gross_vehicle_weight_kg: number | null
+
+  available_from: string
+  available_until: string
+
+  is_refrigerated: boolean
+  temp_min_celsius: number | null
+  temp_max_celsius: number | null
+  is_hazmat_certified: boolean
+  has_tail_lift: boolean
+  min_road_width_m: number | null
+
+  cost_per_trip_reference: number | null
+  source_reference: string | null
+  depot_id: string | null
+  source: string | null
+  is_active: boolean
 }
 
-export interface VehicleCapability extends VehicleCapabilityInput {
-  id: number
-  max_volume_m3: number
+export interface VehicleTypeCatalog extends VehicleTypeCatalogInput {
   created_at: string
   updated_at: string
 }
 
-/** String-valued mirror of VehicleCapabilityInput used for controlled form fields. */
-export interface VehicleCapabilityDraft {
-  name: string
+/** String-valued mirror of VehicleTypeCatalogInput used for controlled form fields. */
+export interface VehicleTypeCatalogDraft {
+  code: string
+  display_name: string
   category: string
-  brand: string
-  model: string
-  max_weight_kg: string
-  max_length_cm: string
-  max_width_cm: string
-  max_height_cm: string
-  status: VehicleCapabilityStatus
+  model_name: string
+
+  capacity_kg: string
+  capacity_m3: string
+  cargo_length_cm: string
+  cargo_width_cm: string
+  cargo_height_cm: string
+  max_parcels: string
+  max_stack_layers: string
+  vehicle_max_stack_weight_kg: string
+
+  fixed_cost: string
+  cost_per_km: string
+  avg_speed_kmh: string
+  max_speed_kmh: string
+  gross_vehicle_weight_kg: string
+
+  available_from: string
+  available_until: string
+
+  is_refrigerated: boolean
+  temp_min_celsius: string
+  temp_max_celsius: string
+  is_hazmat_certified: boolean
+  has_tail_lift: boolean
+  min_road_width_m: string
+
+  cost_per_trip_reference: string
+  source_reference: string
+  depot_id: string
+  source: string
+  is_active: boolean
 }

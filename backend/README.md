@@ -69,20 +69,13 @@ All routes use the `/api/v1` prefix.
 | `POST /vehicle-types` | `VehicleTypeCatalogIn` JSON | created row | `curl -X POST localhost:8000/api/v1/vehicle-types -H "Content-Type: application/json" --data @vehicle-type.json` |
 | `PATCH /vehicle-types/{code}` | complete `VehicleTypeCatalogIn` JSON | updated row | `curl -X PATCH localhost:8000/api/v1/vehicle-types/TRUCK_4T -H "Content-Type: application/json" --data @vehicle-type.json` |
 | `DELETE /vehicle-types/{code}` | path code | 204; deactivates row | `curl -X DELETE localhost:8000/api/v1/vehicle-types/TRUCK_4T` |
-| `GET /vehicle-capabilities` | optional `status` | capability list | `curl "localhost:8000/api/v1/vehicle-capabilities?status=ACTIVE"` |
-| `GET /vehicle-capabilities/{id}` | numeric ID | capability | `curl localhost:8000/api/v1/vehicle-capabilities/1` |
-| `POST /vehicle-capabilities` | `VehicleCapabilityIn` JSON | created capability | `curl -X POST localhost:8000/api/v1/vehicle-capabilities -H "Content-Type: application/json" -d '{"name":"Van","category":"VAN","max_weight_kg":1000,"max_length_cm":280,"max_width_cm":170,"max_height_cm":170}'` |
-| `PUT /vehicle-capabilities/{id}` | complete `VehicleCapabilityIn` JSON | updated capability | `curl -X PUT localhost:8000/api/v1/vehicle-capabilities/1 -H "Content-Type: application/json" --data @capability.json` |
-| `DELETE /vehicle-capabilities/{id}` | numeric ID | 204 | `curl -X DELETE localhost:8000/api/v1/vehicle-capabilities/1` |
-
 The integration placeholders `GET /vehicles/status`, `/maintenance/status`, `/predictions/status`, `/demand/status`, `/deliveries/status`, `/routes/status`, `/trips/status`, `/alerts/status`, and `/reports/status` return a lightweight module status. Example: `curl localhost:8000/api/v1/vehicles/status`; substitute each listed module name to test every placeholder.
 
 ## MongoDB data model
 
 - `parcels`: independently queried parcel documents. A compound `(depot_id, delivery_date)` index scopes planning instances; `status` and unique `parcel_id` are indexed.
-- `vehicle_type_catalog`: seven seeded optimizer vehicle types, uniquely indexed by `code`.
+- `vehicle_type_catalog`: seven seeded optimizer vehicle types, uniquely indexed by `code` -- the single source of truth for vehicle specs, used by both the Vehicle Types CRUD page and NSGA-II.
 - `load_plans`: aggregate metrics, catalog/run snapshots, and embedded virtual vehicles. Every virtual vehicle embeds its parcel assignments and 3D placement.
-- `vehicle_capabilities`: the separate team-owned capability catalog.
 
 ## Integration notes
 

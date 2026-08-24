@@ -20,9 +20,10 @@ import {
   SecondaryButton,
   StatusBadge,
 } from '../components/UI'
-import { DEFAULT_DEPOT, VEHICLE_CATALOG } from '../data/mockData'
+import { DEFAULT_DEPOT } from '../data/mockData'
 import { optimizationService } from '../services/optimizationService'
 import { parcelService } from '../services/parcelService'
+import { vehicleTypeService } from '../services/vehicleTypeService'
 import type {
   ClusterSummary,
   OptimizationResult,
@@ -30,6 +31,7 @@ import type {
   ParcelDraft,
   VehicleOption,
   VehicleType,
+  VehicleTypeCatalog,
   VirtualVehicle,
 } from '../types'
 import {
@@ -60,7 +62,7 @@ interface BatchResult {
   message?: string
 }
 
-const VEHICLE_ICON: Record<VehicleType, LucideIcon> = {
+const VEHICLE_ICON_MAP: Record<string, LucideIcon> = {
   BIKE: Bike,
   APE_CARGO: Car,
   TVS_KING: Car,
@@ -69,6 +71,10 @@ const VEHICLE_ICON: Record<VehicleType, LucideIcon> = {
   TRUCK_2T: Container,
   TRUCK_4T: Container,
 }
+
+/** Falls back to a generic truck icon for any vehicle type added to the
+ * catalog beyond the original 7 field-data codes. */
+const vehicleIcon = (type: VehicleType): LucideIcon => VEHICLE_ICON_MAP[type] ?? Truck
 
 export function LoadOptimizationPage() {
   const location = useLocation()
@@ -136,6 +142,8 @@ export function LoadOptimizationPage() {
   const [vehiclesLoading, setVehiclesLoading] = useState(true)
   const [vehiclesNotice, setVehiclesNotice] = useState<Notice>(null)
 
+  const [vehicleTypes, setVehicleTypes] = useState<VehicleTypeCatalog[]>([])
+
   const [insertVehicleId, setInsertVehicleId] = useState('')
   const [insertDraft, setInsertDraft] = useState<ParcelDraft>(() => emptyParcelDraft())
   const [inserting, setInserting] = useState(false)
@@ -160,10 +168,19 @@ export function LoadOptimizationPage() {
     }
   }
 
+  const refreshVehicleTypes = async () => {
+    try {
+      setVehicleTypes(await vehicleTypeService.list())
+    } catch {
+      // Non-fatal: the reference card just stays empty until the request succeeds.
+    }
+  }
+
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void refreshClusters()
       void refreshVehicles()
+      void refreshVehicleTypes()
     }, 0)
     return () => window.clearTimeout(timer)
   }, [])
@@ -439,26 +456,32 @@ export function LoadOptimizationPage() {
         </Card>
 
         <Card title="Vehicle Type Reference">
-          <p className="mb-4 text-sm font-medium text-fleet-muted">Capacity ceiling per virtual vehicle type considered by NSGA-II.</p>
+          <p className="mb-4 text-sm font-medium text-fleet-muted">Capacity ceiling per virtual vehicle type considered by NSGA-II - live from the Vehicle Types catalog.</p>
           <div className="space-y-3">
-            {VEHICLE_CATALOG.map((entry) => {
-              const Icon = VEHICLE_ICON[entry.type]
-              return (
-                <div className="flex items-center justify-between rounded-xl bg-slate-50 p-3" key={entry.type}>
-                  <span className="flex items-center gap-2 font-extrabold text-fleet-ink">
-                    <span className={clsx('grid h-8 w-8 place-items-center rounded-lg', vehicleToneClass(entry.type))}>
-                      <Icon className="h-4 w-4" />
+            {vehicleTypes.length === 0 ? (
+              <p className="text-xs font-medium text-fleet-muted">
+                No vehicle types yet - add one on the Vehicle Types page.
+              </p>
+            ) : (
+              vehicleTypes.map((entry) => {
+                const Icon = vehicleIcon(entry.code)
+                return (
+                  <div className="flex items-center justify-between rounded-xl bg-slate-50 p-3" key={entry.code}>
+                    <span className="flex items-center gap-2 font-extrabold text-fleet-ink">
+                      <span className={clsx('grid h-8 w-8 place-items-center rounded-lg', vehicleToneClass(entry.code))}>
+                        <Icon className="h-4 w-4" />
+                      </span>
+                      {entry.display_name}
                     </span>
-                    {entry.label}
-                  </span>
-                  <span className="text-right text-xs font-bold text-fleet-muted">
-                    {entry.capacity_kg} kg
-                    <br />
-                    {entry.capacity_m3} m³
-                  </span>
-                </div>
-              )
-            })}
+                    <span className="text-right text-xs font-bold text-fleet-muted">
+                      {entry.capacity_kg} kg
+                      <br />
+                      {entry.capacity_m3} m³
+                    </span>
+                  </div>
+                )
+              })
+            )}
           </div>
         </Card>
       </div>
@@ -467,7 +490,7 @@ export function LoadOptimizationPage() {
         <div className="mt-5 space-y-5">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <MetricCard
-              icon={VEHICLE_ICON[result.selected_vehicle.vehicle_type]}
+              icon={vehicleIcon(result.selected_vehicle.vehicle_type)}
               label="Selected Vehicle"
               tone="blue"
               value={result.selected_vehicle.vehicle_type.replace('_', ' ')}
@@ -571,7 +594,7 @@ export function LoadOptimizationPage() {
         ) : (
           <DataTable headers={['Virtual Vehicle', 'Type', 'Weight Load', 'Volume Load', 'Cluster', 'Destination', 'Updated']}>
             {vehicles.map((vehicle) => {
-              const Icon = VEHICLE_ICON[vehicle.vehicle_type_code]
+              const Icon = vehicleIcon(vehicle.vehicle_type_code)
               return (
                 <tr className="transition hover:bg-blue-50/40" key={vehicle.virtual_vehicle_id}>
                   <td className="px-5 py-4 font-black text-fleet-ink">{vehicle.virtual_vehicle_id}</td>
@@ -643,7 +666,7 @@ export function LoadOptimizationPage() {
 }
 
 function ParetoRow({ option, selected }: { option: VehicleOption; selected: boolean }) {
-  const Icon = VEHICLE_ICON[option.vehicle_type]
+  const Icon = vehicleIcon(option.vehicle_type)
   return (
     <tr className={clsx('transition', selected ? 'bg-blue-50/60' : 'hover:bg-blue-50/30')}>
       <td className="px-5 py-4">
