@@ -85,7 +85,7 @@ export function ParcelConsolidationPage() {
   const runClustering = async () => {
     if (!selectedDepot || !selectedDate || total === 0) return
     setTraining(true); setNotice({ tone: 'info', text: `Running HDBSCAN on ${total} parcels for ${selectedDepot} on ${selectedDate}...` })
-    try { const result = await parcelService.trainClustering(selectedDepot, selectedDate); setNotice({ tone: 'success', text: `Clustered ${result.parcel_count} parcels into ${result.n_clusters_pre_repair} clusters (HDBSCAN), ${result.n_clusters_post_repair} after capacity-aware repair.${result.unassigned_count ? ` ${result.unassigned_count} parcel${result.unassigned_count === 1 ? '' : 's'} unassigned.` : ''}` }); await loadPage() }
+    try { const result = await parcelService.trainClustering(selectedDepot, selectedDate); setNotice({ tone: 'success', text: `Clustered ${result.parcel_count} parcels into ${result.n_clusters_pre_repair} clusters (HDBSCAN), ${result.n_clusters_post_repair} after capacity-aware repair. ${result.n_singleton_clusters} singleton cluster${result.n_singleton_clusters === 1 ? '' : 's'}; ${result.n_clusters_below_viability} cluster${result.n_clusters_below_viability === 1 ? '' : 's'} below viability (<6 parcels); ${result.unassigned_count} parcel${result.unassigned_count === 1 ? '' : 's'} unassigned.` }); await loadPage() }
     catch (err) { setNotice({ tone: 'error', text: err instanceof Error ? err.message : 'Clustering failed.' }) }
     finally { setTraining(false) }
   }

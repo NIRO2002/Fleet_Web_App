@@ -91,6 +91,8 @@ def test_train_response_counts_unassigned_parcels(monkeypatch):
     response = asyncio.run(parcels_api.train_clustering(depot_id=depot_id, delivery_date=delivery_date, seed=0, dataset_id=None))
 
     assert response["unassigned_count"] == 1
+    assert response["n_singleton_clusters"] == 0
+    assert response["n_clusters_below_viability"] == 1
     assert response["noise_count"] == 1
     assert response["repair"]["applied"] is False
     # Repair was skipped entirely, so nothing changed the persisted
@@ -136,5 +138,7 @@ def test_train_response_splits_pre_and_post_repair_cluster_counts(monkeypatch):
 
     assert response["n_clusters_pre_repair"] == 2
     assert response["n_clusters_post_repair"] == 1
+    assert response["n_singleton_clusters"] == 0
+    assert response["n_clusters_below_viability"] == 1
     assert response["repair"]["applied"] is True
     assert response["repair"]["n_merged"] == 1

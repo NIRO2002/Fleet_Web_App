@@ -119,6 +119,11 @@ export interface ClusteringTrainResult {
    * (cluster_id still -1) - smaller than noise_count, which is HDBSCAN's
    * raw pre-reassignment noise. See GET /parcels/clustering/unassigned. */
   unassigned_count: number
+  /** Positive persisted clusters containing exactly one parcel. */
+  n_singleton_clusters: number
+  /** Positive persisted clusters containing fewer than six parcels. This is
+   * reporting only; it does not currently change repair feasibility. */
+  n_clusters_below_viability: number
   runtime_seconds: number
   repair: ClusteringRepairSummary
   clusters: ClusterSummary

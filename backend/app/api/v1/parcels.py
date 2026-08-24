@@ -13,12 +13,31 @@ from app.services.depot_service import get_depot_or_fail
 
 router = APIRouter(prefix="/parcels", tags=["parcels"])
 
+# Reporting threshold only. D4 proposes making this a RepairConfig policy,
+# but this pass deliberately does not alter feasibility or persistence.
+MIN_VIABLE_CLUSTER_PARCELS = 6
+
 
 def _distinct_cluster_count(parcels) -> int:
     """Real (non-negative) cluster ids currently on these parcels -- used
     post-repair, where the raw HDBSCAN per-instance count no longer applies
     (repair splits/merges clusters and reassigns infeasible ones to -1)."""
     return len({p.cluster_id for p in parcels if p.cluster_id is not None and p.cluster_id >= 0})
+
+
+def _small_cluster_counts(parcels) -> tuple[int, int]:
+    """Count persisted positive clusters by planning instance, since cluster
+    ids restart for each depot/date in a multi-instance dataset request."""
+    sizes: dict[tuple, int] = {}
+    for parcel in parcels:
+        if parcel.cluster_id is None or parcel.cluster_id < 0:
+            continue
+        key = (parcel.depot_id, parcel.delivery_date, parcel.cluster_id)
+        sizes[key] = sizes.get(key, 0) + 1
+    return (
+        sum(size == 1 for size in sizes.values()),
+        sum(size < MIN_VIABLE_CLUSTER_PARCELS for size in sizes.values()),
+    )
 
 @router.post("", response_model=ParcelResponse, status_code=201)
 async def create_parcel(payload: ParcelCreate):
@@ -154,6 +173,7 @@ async def train_clustering(
         # show it; these parcels are never auto-optimized (see
         # GET /parcels/clustering/unassigned).
         unassigned_count = sum(1 for p in parcels if p.cluster_id == -1)
+        n_singleton_clusters, n_clusters_below_viability = _small_cluster_counts(parcels)
         return {
             "status": "trained",
             "parcel_count": len(parcels),
@@ -167,6 +187,8 @@ async def train_clustering(
             "n_clusters_post_repair": n_clusters_post_repair,
             "noise_count": noise_count,
             "unassigned_count": unassigned_count,
+            "n_singleton_clusters": n_singleton_clusters,
+            "n_clusters_below_viability": n_clusters_below_viability,
             "runtime_seconds": runtime_seconds,
             "repair": {
                 "applied": repair_applied,

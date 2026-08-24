@@ -540,3 +540,108 @@ record of which cluster a plan's vehicle was built from, and it is what
 `/optimization/run`'s own response and `LoadPlan`/`VirtualVehicle` records
 report -- `Parcel.cluster_id` was never the system of record for that once
 a plan exists.
+
+## Proposed dispatch-viability policy for repaired clusters (2026-08-25; decision pending)
+
+This is a decision memo, not an implemented behavior change. `RepairConfig`,
+`_fits_some_vehicle`, persistence, and `merge_max_centroid_km=2.0` remain
+unchanged.
+
+### Evidence and the predicate gap
+
+A seed-0 diagnostic ran the production `cluster -> group_by_cluster ->
+repair_clusters` path over 30 real 400-parcel instances: ten dates from each
+of D-CMB-001, D-CMB-002, and D-CMB-003. Across instances, post-repair cluster
+count had min/Q1/median/Q3/max `25/30/31.5/34/41`; singleton count
+`5/10/11.5/14/21`; size-two count `0/3/4/5/7`; and count of clusters with at
+most five parcels `14/16.25/18/22/30`. Those small clusters held
+`4.0%/7.0%/8.125%/10.5%/14.5%` of parcels while forming
+`48.28%/54.62%/58.44%/64.24%/74.29%` of repaired clusters. Thus
+D-CMB-001/2026-01-05 -- 30/41 (73.17%) clusters holding 44/400 (11.0%)
+parcels in this production-function run -- is near the high end, but not an
+isolated failure mode.
+
+The present feasibility predicate has a dispatch-viability hole.
+`_split_oversize` declares a one-parcel group fitting without calling
+`_fits_some_vehicle_details`; the final status pass then calls
+`_fits_some_vehicle`, whose capacity, dimensions, placement, and temporal
+checks normally accept any individually placeable parcel. Repair marks
+noise-origin singletons feasible, normalizes them to positive cluster IDs,
+and `repair_planning_instance` persists those IDs. This **violates** its
+stated guarantee that repair must never launder an unroutable parcel into
+something `/optimization/run` silently accepts: “routable” currently means
+only “can physically fit,” not “is viable to dispatch.”
+
+### Option A -- add a viability floor (recommended for evaluation)
+
+Add explicit fields to `RepairConfig`, then classify a repaired cluster as
+dispatch-viable only when it has at least **6 parcels OR 20% projected
+utilization of its smallest eligible vehicle**. Equivalently, mark it below
+viability only when it has fewer than 6 parcels *and* falls below 20%
+projected utilization. The utilization escape preserves a genuinely large or
+heavy single-parcel delivery. It must use the existing weight/volume
+utilization definition and must not change placement geometry.
+
+Six is a provisional, interpretable starting point: it matches the measured
+`<=5` tail, which contains a median 8.125% of parcels but 58.44% of cluster
+IDs, and six is the smallest catalog vehicle's documented parcel-count
+capacity. The 20% floor is also provisional. Both thresholds must be swept
+prospectively across all real instances, including carryover accumulation,
+with utilization, carryover age, service delay, fleet cost, coverage, and
+feasibility reported before selection.
+
+Below-floor clusters would receive `feasible=False` with a
+`below_viability` reason, be persisted as `cluster_id=-1`, appear in
+`GET /parcels/clustering/unassigned`, and enter the next date through the
+existing carryover path in `_get_planning_instance`. An age/priority escape
+is required so sparse demand cannot roll forever.
+
+- **Load utilization:** expected to rise by suppressing lightly loaded
+  dispatches, at the cost of next-day delay and larger carryover instances.
+- **NSGA-II vs K-Means:** apply the identical post-repair rule to both.
+  Excluding only HDBSCAN's sparse tail would bias utilization and fleet-cost
+  comparisons. Report coverage with utilization so deferral cannot create an
+  artificial gain.
+- **Existing results:** remain valid under the old policy but are not evidence
+  for the new one. Label them pre-floor and regenerate affected experiments.
+
+### Option B -- relax the merge radius
+
+A larger `merge_max_centroid_km` could give more noise-origin groups a merge
+candidate. It may reduce singletons, but can increase route distance, weaken
+geographic cohesion, and combine windows that only narrowly pass the coarse
+temporal bound.
+
+This parameter **must be selected by a predeclared sweep across all real
+instances, never tuned after observing D-CMB-001/2026-01-05**. A candidate
+sweep such as `1, 2, 3, 4, 5 km` should report distributions of small-cluster
+rate, utilization, distance, time-window compliance, fleet cost, and
+infeasible/carryover parcels. No radius change is proposed before that evidence
+exists.
+
+- **Load utilization:** may improve if extra merges replace lightly loaded
+  vehicles, while distance and time-window performance may worsen.
+- **NSGA-II vs K-Means:** use the same sweep and selection rule for both;
+  tuning shared repair on HDBSCAN outcomes would contaminate the comparison.
+- **Existing results:** a new radius changes warm starts and downstream
+  optimizer results. Keep prior results labeled as 2 km and regenerate.
+
+### Option C -- retain behavior and disclose the limitation
+
+Keep every physically feasible singleton optimizable, report
+`n_singleton_clusters` and `n_clusters_below_viability`, and describe the
+small-cluster rate as a limitation of density-based clustering on sparse
+instances.
+
+- **Load utilization:** unchanged and likely depressed by viable-but-small
+  dispatch groups unless optimization combines across cluster boundaries.
+- **NSGA-II vs K-Means:** preserves comparability with existing runs, but
+  reports must separate fragmentation from optimizer quality and publish the
+  small-cluster distributions for both methods.
+- **Existing results:** remain directly comparable; only disclosure and
+  interpretation change.
+
+**Recommendation:** evaluate Option A with a declared threshold sweep and
+Option B with an independent radius sweep, using coverage/delay alongside
+utilization. Until then, retain Option C behavior and D3's honest response
+fields; do not silently equate physical fit with dispatch viability.
