@@ -49,7 +49,11 @@ def _install_fake_parcels(monkeypatch, parcels):
             ids = set(query["parcel_id"]["$in"])
             matches = [p for p in parcels if p.parcel_id in ids]
         else:
-            matches = [p for p in parcels if all(getattr(p, key) == value for key, value in query.items())]
+            matches = [p for p in parcels if all(
+                getattr(p, key) in value["$in"] if isinstance(value, dict) and "$in" in value
+                else getattr(p, key) == value
+                for key, value in query.items()
+            )]
         return FakeQuery(matches)
 
     monkeypatch.setattr(optimization_api.Parcel, "find", staticmethod(fake_find))

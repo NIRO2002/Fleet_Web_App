@@ -70,7 +70,7 @@ async def run(payload: OptimizationRequest):
         # across many instances. OptimizationRequest's validator guarantees
         # depot_id/delivery_date are present whenever cluster_id is.
         #
-        # status=PENDING matches get_planning_instance's own definition of
+        # PENDING/FAILED matches get_planning_instance's own definition of
         # "this planning instance" (app/services/clustering_common.py) and
         # prevents double-planning: optimize_load sets every covered parcel
         # to PLANNED, so a second run against the same cluster_id finds
@@ -80,7 +80,7 @@ async def run(payload: OptimizationRequest):
             "cluster_id": payload.cluster_id,
             "depot_id": payload.depot_id,
             "delivery_date": payload.delivery_date,
-            "status": "PENDING",
+            "status": {"$in": ["PENDING", "FAILED"]},
         }).to_list()
     else:
         raise HTTPException(status_code=400, detail="Provide cluster_id or parcel_ids")

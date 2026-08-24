@@ -16,6 +16,7 @@ import joblib
 from pymongo import UpdateOne
 
 from app.core.config import settings
+from app.db.bson import to_bson_safe
 from app.models.parcel import Parcel
 from app.services.capacity_aware_clustering import RepairConfig, RepairedClusters, group_by_cluster, repair_clusters
 from app.services.clustering_common import (
@@ -27,6 +28,21 @@ from app.services.clustering_common import (
     transform_with_scaler,
 )
 from app.services.vehicle_catalog_service import list_available_types
+
+
+def _planning_persistence_fields(parcel, fields: dict) -> dict:
+    """Add a carryover's date transition at the clustering commit boundary.
+
+    get_planning_instance deliberately returns detached forwarded copies. Once
+    clustering is committed, the stored document must describe the exact
+    planning instance whose cluster assignment is being persisted.
+    """
+    if getattr(parcel, "carried_over_from_date", None) is not None:
+        fields.update({
+            "carried_over_from_date": parcel.carried_over_from_date,
+            "delivery_date": parcel.delivery_date,
+        })
+    return to_bson_safe(fields)
 
 
 def cluster(parcels: list[Parcel], seed: int, config: ClusteringConfig | None = None) -> ClusterResult:
@@ -106,7 +122,14 @@ async def train_hdbscan(
     result = cluster(parcels, seed, config)
     if parcels:
         await Parcel.get_motor_collection().bulk_write([
-            UpdateOne({"parcel_id": p.parcel_id}, {"$set": {"cluster_id": p.cluster_id, "cluster_probability": p.cluster_probability, "is_noise": p.is_noise}})
+            UpdateOne(
+                {"parcel_id": p.parcel_id},
+                {"$set": _planning_persistence_fields(p, {
+                    "cluster_id": p.cluster_id,
+                    "cluster_probability": p.cluster_probability,
+                    "is_noise": p.is_noise,
+                })},
+            )
             for p in parcels
         ])
 
@@ -160,7 +183,10 @@ async def repair_planning_instance(
         persisted_id = cluster_id if feasible else -1
         for parcel in members:
             parcel.cluster_id = persisted_id
-            updates.append(UpdateOne({"parcel_id": parcel.parcel_id}, {"$set": {"cluster_id": persisted_id}}))
+            updates.append(UpdateOne(
+                {"parcel_id": parcel.parcel_id},
+                {"$set": _planning_persistence_fields(parcel, {"cluster_id": persisted_id})},
+            ))
     if updates:
         await Parcel.get_motor_collection().bulk_write(updates)
 

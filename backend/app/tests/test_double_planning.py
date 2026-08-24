@@ -48,7 +48,11 @@ def _install_fake_parcels(monkeypatch, parcels):
             ids = set(query["parcel_id"]["$in"])
             matches = [p for p in parcels if p.parcel_id in ids]
         else:
-            matches = [p for p in parcels if all(getattr(p, key) == value for key, value in query.items())]
+            matches = [p for p in parcels if all(
+                getattr(p, key) in value["$in"] if isinstance(value, dict) and "$in" in value
+                else getattr(p, key) == value
+                for key, value in query.items()
+            )]
         return FakeQuery(matches)
 
     monkeypatch.setattr(optimization_api.Parcel, "find", staticmethod(fake_find))
@@ -89,14 +93,12 @@ def test_second_run_on_same_cluster_does_not_create_second_plan(monkeypatch):
     assert run_count["n"] == 1
     assert all(p.status == "PLANNED" and p.plan_id == "PLAN-1" for p in parcels)
 
-    # Second call: both parcels are now PLANNED, so the PENDING-scoped query
-    # finds nothing left in this cluster -- 404, not a second LoadPlan.
+    # Second call: both parcels are now PLANNED, so the eligible query finds
+    # nothing left in this cluster -- not a second LoadPlan.
     with pytest.raises(HTTPException) as exc_info:
         asyncio.run(optimization_api.run(payload))
     assert exc_info.value.status_code == 404
     assert run_count["n"] == 1  # optimize_load must not have run again
-
-
 def test_parcel_ids_already_planned_is_rejected_with_409(monkeypatch):
     parcels = [
         FakeParcel("X-1", "D-CMB-001", date(2026, 1, 5), cluster_id=2, status="PLANNED", plan_id="PLAN-OLD"),
