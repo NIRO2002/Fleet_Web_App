@@ -144,6 +144,7 @@ async def run_pipeline_one(cfg):
     ceiling = compute_utilization_ceiling(sum(p.weight_kg for p in included), sum(p.volume_m3 for p in included), catalog)
     greedy = compute_utilization_greedy_reference(included, catalog, enforce_weight_order=cfg.enforce_weight_order)
     mean_util = sum(m["utilization"] for m in metrics) / len(metrics)
+    total_fleet_cost = sum(m["cost"] for m in metrics)
     clustering_context = _clustering_context(parcels, clustered)
     temporal_split_count = sum(
         bool(row.get("temporal_split_predicate_fired"))
@@ -160,13 +161,14 @@ async def run_pipeline_one(cfg):
         "noise_fraction": clustered.noise_count / len(parcels),
         **clustering_context,
         "mean_utilization": mean_util,
+        "cost_per_parcel": total_fleet_cost / len(included),
         "mean_weight_utilization": sum(m["util_weight"] for m in metrics) / len(metrics),
         "mean_volume_utilization": sum(m["util_volume"] for m in metrics) / len(metrics),
         "utilization_ceiling_capacity": ceiling.utilization, "utilization_greedy_reference": greedy.utilization,
         "achieved_vs_greedy_reference": mean_util / greedy.utilization if greedy.utilization else 0.0,
         "total_distance_km": sum(m["distance"] for m in metrics),
         "mean_time_window_compliance": sum(m["compliance"] for m in metrics) / len(metrics),
-        "total_fleet_cost": sum(m["cost"] for m in metrics), "n_vehicles": len(metrics),
+        "total_fleet_cost": total_fleet_cost, "n_vehicles": len(metrics),
         "hypervolume": hypervolume(front), "pareto_front_size": len(front),
         "feasible": bool(np.all(selected_violation <= 1e-12)),
         "feasible_individuals_final": int(np.sum(np.all(final_g <= 1e-12, axis=1))) if len(final_g) else 0,

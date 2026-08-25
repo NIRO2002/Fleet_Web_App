@@ -24,6 +24,7 @@ class LoadPlan(Document):
     total_distance_km: float
     mean_time_window_compliance: float
     total_fleet_cost: float
+    cost_per_parcel: float = 0.0
     hypervolume: float | None = None
     runtime_seconds: float
     vehicles: list[VirtualVehicle] = Field(default_factory=list)

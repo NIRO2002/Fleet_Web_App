@@ -645,3 +645,91 @@ instances.
 Option B with an independent radius sweep, using coverage/delay alongside
 utilization. Until then, retain Option C behavior and D3's honest response
 fields; do not silently equate physical fit with dispatch viability.
+
+## Small-cluster vehicle economics and utilization objective (2026-08-25; decision pending)
+
+The corrected E1 diagnostic compares each selected vehicle with the cheapest
+physically feasible catalog type at that cluster's actual routed distance,
+using `fixed_cost + cost_per_km * distance`. Across the same 585 repaired
+clusters of size at most five, 267 selections (45.64%) were strictly more
+expensive than a feasible alternative, by LKR 160,889.50 in total. The
+cheapest-feasible/selected cross-tab was: BIKE/BIKE 197; TVS_KING/TVS_KING
+118; TVS_KING/APE_CARGO 156; TVS_KING/MICRO_VAN 111; VAN_MED/VAN_MED 1;
+VAN_MED/two APE_CARGO vehicles 1; and TRUCK_2T/two APE_CARGO vehicles 1.
+
+APE_CARGO's catalog presence is deliberate, not an oversight. TVS_KING is
+both cheaper (fixed LKR 350 versus 400; LKR 85/km versus 95/km) and roomier
+by volume (3.40 versus 2.90 m3), but APE_CARGO is not globally dominated:
+it has the higher payload (496 versus 450 kg) and cargo height (125 versus
+115 cm). Those constraints can make it the only feasible member of the pair.
+
+For the 111 APE_CARGO-feasible clusters selected as MICRO_VAN, changing only
+the type from APE_CARGO to MICRO_VAN increases the unchanged load's reported
+utilization because `f1 = -max(weight/capacity, volume/capacity)` uses the
+selected vehicle's capacity. It also increases `f4` because MICRO_VAN is more
+expensive. Thus APE_CARGO does not dominate those MICRO_VAN points: each is a
+real utilization/cost trade-off under the current objective definition, not
+evidence that a dominated solution leaked onto the Pareto front.
+
+The default knee selector independently min-max normalizes each of the four
+front objectives to `[0, 1]` using that front's ideal and nadir, substitutes a
+span of 1 for a constant objective, then minimizes unweighted Euclidean
+distance to the normalized ideal. Consequently objective units disappear: a
+utilization improvement of only 0.005 can contribute as much as a large LKR
+cost difference when it occupies a comparable fraction of the observed f1
+range. An LKR 825 increase can therefore be outweighed. The pathology is
+**both** the type-dependent utilization objective, which creates the trade-off,
+and the unweighted, front-relative knee rule, which can select it. Neither is
+changed in this pass.
+
+### Proposed f1 reformulations (no code change)
+
+1. **Fixed-reference utilization.** Normalize the unchanged cluster load
+   against a vehicle-independent reference: either the capacity of the
+   cluster's smallest physically feasible type or one predeclared catalog
+   constant. Vehicle choice could no longer improve f1 merely by shrinking
+   the denominator. This changes Pareto fronts and selected plans, so it
+   invalidates direct comparison with all results generated under the current
+   f1. It could also change HDBSCAN versus K-Means differently because their
+   cluster load distributions differ. If adopted, the reference definitions
+   must be a predeclared sweep across all 90 instances and both arms, never a
+   choice made after inspecting existing output.
+
+2. **Retain the selected-capacity ratio.** Keep f1 unchanged and always report
+   `cost_per_parcel` beside utilization. This preserves existing HDBSCAN versus
+   K-Means runs and makes the efficiency/cost trade-off visible, but it does
+   not remove the optimizer's incentive to raise utilization by choosing a
+   smaller, more expensive vehicle. It is a reporting interpretation, not an
+   objective repair, and does not require a parameter sweep.
+
+X1 (the reported 25% versus 2% noise discrepancy) has not been started on
+this branch. Its resolution remains higher priority because it may change the
+small-cluster population to which either proposal would apply.
+
+## Noise repair boundary and X1 reproduction (2026-08-25)
+
+Capacity-aware repair now excludes the `cluster_id=-1` bucket entirely.
+Noise is persisted only as `-1`; split and merge remain unchanged for real
+HDBSCAN clusters. On D-CMB-001/2026-01-05, seed 0, this changes the recorded
+post-repair result from 41 positive clusters and 0 unassigned parcels to 9
+positive clusters and 73 unassigned parcels (with the live depot coordinate).
+
+The requested X1 matrix audit contradicts the supplied 8-cluster/6-noise
+reference in this environment. The production call builds a `(400, 2)`
+matrix with `feature_set="location"`; runtime `min_cluster_size` and
+`min_samples` are exactly 8 and 4. No time, physical, urgency, scaler, or
+non-uniform weighting block is active. The actual fit matrix equals the
+two-column equirectangular km projection multiplied uniformly by 1000, with
+maximum absolute difference 0.0. Direct `hdbscan` 0.8.44 fits of both matrices
+and the pipeline each return 6 clusters, 101 noise, and real-cluster sizes
+89/86/71/20/19/14. `scikit-learn` is 1.7.2. There is therefore no feature-path
+cause to fix locally; resolving the external 8/6 reference requires its exact
+implementation/package version or matrix artifact.
+
+After excluding noise from repair, the seed-0 30-instance distribution
+(ten dates per depot) is min/Q1/median/Q3/max: positive post-repair clusters
+`8/10/10/11/17`; singletons `0/0/0/0/2`; size-two clusters `0/0/0/0/1`;
+clusters of size at most five `0/0/0/1/4`; share of all parcels in those
+small positive clusters `0%/0%/0%/0.6875%/2.25%`; and unassigned parcels
+`34/58.5/71/79/94`. E3 and F4 must be re-evaluated against this distribution,
+not the prior noise-laundered singleton tail.

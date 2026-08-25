@@ -159,7 +159,8 @@ async def repair_planning_instance(
     `RepairConfig`/`group_by_cluster` rather than a forked copy, now wired
     into the live training path instead of only the offline harness.
 
-    Persists the repaired cluster_id back to Parcel. A cluster repair marks
+    Noise remains cluster_id=-1 and bypasses repair entirely. Persists the
+    repaired cluster_id back to Parcel. A real cluster repair marks
     infeasible (no catalog vehicle can carry it, even split/merged) is
     persisted as cluster_id=-1, not as an ordinary optimizable cluster --
     repair must never launder an unroutable parcel into something

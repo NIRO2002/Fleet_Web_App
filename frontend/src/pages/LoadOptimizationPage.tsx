@@ -21,6 +21,7 @@ import {
   StatusBadge,
 } from '../components/UI'
 import { DEFAULT_DEPOT } from '../data/mockData'
+import { ParetoParallelCoordinates } from '../components/ParetoParallelCoordinates'
 import { optimizationService } from '../services/optimizationService'
 import { vehicleTypeService } from '../services/vehicleTypeService'
 import type {
@@ -511,7 +512,7 @@ export function LoadOptimizationPage() {
               tone="blue"
               value={result.selected_vehicle.vehicle_type.replace('_', ' ')}
             />
-            <MetricCard icon={Gauge} label="Weight Utilization" tone="green" value={formatPercent(result.selected_vehicle.utilization_weight)} />
+            <MetricCard icon={Gauge} label="Weight Utilization" tone="green" value={`${formatPercent(result.selected_vehicle.utilization_weight)} · LKR ${formatNumber(result.selected_vehicle.cost_per_parcel)} / parcel`} />
             <MetricCard icon={Route} label="Est. Distance" tone="amber" value={`${result.selected_vehicle.estimated_distance_km.toFixed(1)} km`} />
             <MetricCard
               icon={ListChecks}
@@ -552,6 +553,9 @@ export function LoadOptimizationPage() {
               ))}
             </DataTable>
           </Card>
+          <Card title={`Pareto Front (${result.pareto_solutions.length} non-dominated solutions)`}>
+            <ParetoParallelCoordinates solutions={result.pareto_solutions} />
+          </Card>
         </div>
       )}
 
@@ -574,7 +578,7 @@ export function LoadOptimizationPage() {
                 {row.status === 'success' && row.result ? (
                   <>
                     <td className="px-5 py-4 font-semibold">{row.result.selected_vehicle.vehicle_type.replace('_', ' ')}</td>
-                    <td className="px-5 py-4 font-semibold">{formatPercent(row.result.selected_vehicle.utilization_weight)}</td>
+                    <td className="px-5 py-4 font-semibold">{formatPercent(row.result.selected_vehicle.utilization_weight)}<br/><span className="text-xs text-fleet-muted">LKR {formatNumber(row.result.selected_vehicle.cost_per_parcel)} / parcel</span></td>
                     <td className="px-5 py-4 font-semibold">{row.result.selected_vehicle.estimated_distance_km.toFixed(1)} km</td>
                     <td className="px-5 py-4 font-black">{formatNumber(row.result.selected_vehicle.fleet_cost)}</td>
                     <td className="px-5 py-4">
@@ -707,8 +711,8 @@ function ParetoRow({ option, selected }: { option: VehicleOption; selected: bool
       <td className="px-5 py-4 font-semibold">
         {option.load_weight_kg.toFixed(1)} kg / {option.load_volume_m3.toFixed(2)} m³
       </td>
-      <td className="px-5 py-4 font-semibold">{formatPercent(option.utilization_weight)}</td>
-      <td className="px-5 py-4 font-semibold">{formatPercent(option.utilization_volume)}</td>
+      <td className="px-5 py-4 font-semibold">{formatPercent(option.utilization_weight)}<br/><span className="text-xs text-fleet-muted">LKR {formatNumber(option.cost_per_parcel)} / parcel</span></td>
+      <td className="px-5 py-4 font-semibold">{formatPercent(option.utilization_volume)}<br/><span className="text-xs text-fleet-muted">LKR {formatNumber(option.cost_per_parcel)} / parcel</span></td>
       <td className="px-5 py-4 font-semibold">{option.estimated_distance_km.toFixed(1)} km</td>
       <td className="px-5 py-4 font-semibold">{formatPercent(option.time_window_compliance)}</td>
       <td className="px-5 py-4 font-black">{formatNumber(option.fleet_cost)}</td>

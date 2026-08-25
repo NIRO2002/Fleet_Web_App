@@ -174,6 +174,7 @@ export interface VehicleOption {
   load_volume_m3: number
   utilization_weight: number
   utilization_volume: number
+  cost_per_parcel: number
   estimated_distance_km: number
   time_window_compliance: number
   fleet_cost: number
@@ -188,6 +189,17 @@ export interface OptimizationResult {
   cluster_id: number | null
   virtual_vehicle_id: string | null
   virtual_vehicle_ids: string[]
+  pareto_solutions: ParetoSolution[]
+}
+
+export interface ParetoSolution {
+  utilization: number
+  estimated_distance_km: number
+  time_window_compliance: number
+  fleet_cost: number
+  n_vehicles: number
+  cost_per_parcel: number
+  selected: boolean
 }
 
 export interface LoadPlanParcel {
@@ -219,6 +231,7 @@ export interface LoadPlanVehicle {
   used_weight_kg: number
   used_volume_m3: number
   utilization: number
+  cost_per_parcel: number
   parcel_count: number
   cargo_length_cm: number
   cargo_width_cm: number
@@ -237,6 +250,7 @@ export interface LoadPlan {
   n_parcels: number
   n_vehicles: number
   mean_utilization: number
+  cost_per_parcel: number
   total_distance_km: number
   mean_time_window_compliance: number
   total_fleet_cost: number

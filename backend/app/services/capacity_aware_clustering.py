@@ -60,14 +60,10 @@ class RepairedClusters:
 
 def group_by_cluster(parcels: list[Parcel]) -> dict[int, list[Parcel]]:
     groups: dict[int, list[Parcel]] = {}
-    next_noise_id = -1
     for parcel in parcels:
         cluster_id = parcel.cluster_id
-        if cluster_id == -1:
-            # Noise points remain individually identifiable until repair;
-            # negative IDs mark them as mergeable noise-origin singletons.
-            cluster_id = next_noise_id
-            next_noise_id -= 1
+        # HDBSCAN noise is one unassigned bucket, not a collection of
+        # synthetic singleton clusters. Repair operates only on real labels.
         groups.setdefault(cluster_id, []).append(parcel)
     return groups
 
@@ -318,9 +314,10 @@ def repair_clusters(
     config = config or RepairConfig()
     if not vehicle_catalog:
         raise ValueError("capacity-aware repair requires a non-empty vehicle catalog")
-    clusters = {cid: list(parcels) for cid, parcels in parcels_by_cluster.items()}
+    noise = list(parcels_by_cluster.get(-1, []))
+    clusters = {cid: list(parcels) for cid, parcels in parcels_by_cluster.items() if cid >= 0}
     clusters_before = len(clusters)
-    total_before = sum(len(p) for p in clusters.values())
+    total_before = len(noise) + sum(len(p) for p in clusters.values())
 
     audit: list[dict] = []
     next_id = (max(clusters.keys()) + 1) if clusters else 0
@@ -330,7 +327,7 @@ def repair_clusters(
     )
     clusters, n_merged = _merge_undersize(clusters, vehicle_catalog, config, depot_lat, depot_lon, audit)
 
-    total_after = sum(len(p) for p in clusters.values())
+    total_after = len(noise) + sum(len(p) for p in clusters.values())
     if total_after != total_before:
         raise AssertionError(
             f"capacity-aware repair lost or duplicated parcels: {total_before} -> {total_after}"
@@ -358,6 +355,12 @@ def repair_clusters(
         normalized_status[normalized_id] = status_by_old_id[old_id]
         for parcel in clusters[old_id]:
             parcel.cluster_id = normalized_id
+
+    if noise:
+        normalized_clusters[-1] = noise
+        normalized_status[-1] = {"feasible": False, "reason": "hdbscan_noise"}
+        for parcel in noise:
+            parcel.cluster_id = -1
 
     return RepairedClusters(
         clusters=normalized_clusters,
