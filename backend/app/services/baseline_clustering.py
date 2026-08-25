@@ -20,7 +20,7 @@ def _select_k(parcels: list[Parcel], X, config: ClusteringConfig, seed: int) -> 
     """k = ceil(total_volume / mean_vehicle_capacity_m3) as a capacity-
     derived starting estimate, refined by silhouette score over
     [k_est-2, k_est+2]. `mean_vehicle_capacity_m3` must come from the
-    caller (sourced from vehicle_type_catalog) — this module holds no
+    caller (sourced from vehicle_type_catalog) - this module holds no
     vehicle capacity literal."""
     if config.mean_vehicle_capacity_m3 is None or config.mean_vehicle_capacity_m3 <= 0:
         raise ValueError(

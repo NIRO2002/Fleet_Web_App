@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
-import { CheckCircle2, Pencil, Plus, RefreshCw, Trash2, Truck, XCircle } from 'lucide-react'
+import { CheckCircle2, Pencil, Plus, RefreshCw, Trash2, Truck, X, XCircle } from 'lucide-react'
 import {
   Card,
   DataTable,
@@ -12,32 +12,32 @@ import {
   PrimaryButton,
   SecondaryButton,
   StatusBadge,
-  VehicleCapabilityFieldsFieldset,
+  VehicleTypeFieldsFieldset,
 } from '../components/UI'
-import { ApiError } from '../services/api'
-import { vehicleCapabilityService } from '../services/vehicleCapabilityService'
-import type { VehicleCapability, VehicleCapabilityDraft } from '../types'
-import { emptyVehicleCapabilityDraft, formatNumber, vehicleCapabilityDraftToInput, vehicleCapabilityToDraft } from '../utils/format'
+import { vehicleTypeService } from '../services/vehicleTypeService'
+import type { VehicleTypeCatalog, VehicleTypeCatalogDraft } from '../types'
+import { emptyVehicleTypeDraft, formatNumber, vehicleTypeDraftToInput, vehicleTypeToDraft } from '../utils/format'
 
 type Notice = { tone: 'success' | 'error' | 'info'; text: string } | null
 
 export function VehicleTypesPage() {
-  const [capabilities, setCapabilities] = useState<VehicleCapability[]>([])
+  const [vehicleTypes, setVehicleTypes] = useState<VehicleTypeCatalog[]>([])
   const [loading, setLoading] = useState(true)
   const [pageNotice, setPageNotice] = useState<Notice>(null)
 
-  const [editingId, setEditingId] = useState<number | null>(null)
-  const [draft, setDraft] = useState<VehicleCapabilityDraft>(() => emptyVehicleCapabilityDraft())
+  const [editingCode, setEditingCode] = useState<string | null>(null)
+  const [draft, setDraft] = useState<VehicleTypeCatalogDraft>(() => emptyVehicleTypeDraft())
   const [submitting, setSubmitting] = useState(false)
   const [formNotice, setFormNotice] = useState<Notice>(null)
+  const [isModalOpen, setIsModalOpen] = useState(false)
 
-  const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [deactivatingCode, setDeactivatingCode] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<'all' | 'ACTIVE' | 'INACTIVE'>('all')
 
   const refresh = async () => {
     setLoading(true)
     try {
-      setCapabilities(await vehicleCapabilityService.list())
+      setVehicleTypes(await vehicleTypeService.list())
     } catch (err) {
       setPageNotice({ tone: 'error', text: err instanceof Error ? err.message : 'Failed to load vehicle types.' })
     } finally {
@@ -50,33 +50,43 @@ export function VehicleTypesPage() {
     return () => window.clearTimeout(timer)
   }, [])
 
-  const startEdit = (capability: VehicleCapability) => {
-    setEditingId(capability.id)
-    setDraft(vehicleCapabilityToDraft(capability))
+  const startEdit = (vehicleType: VehicleTypeCatalog) => {
+    setEditingCode(vehicleType.code)
+    setDraft(vehicleTypeToDraft(vehicleType))
     setFormNotice(null)
+    setIsModalOpen(true)
+  }
+
+  const openAddModal = () => {
+    setEditingCode(null)
+    setDraft(emptyVehicleTypeDraft())
+    setFormNotice(null)
+    setIsModalOpen(true)
   }
 
   const cancelEdit = () => {
-    setEditingId(null)
-    setDraft(emptyVehicleCapabilityDraft())
+    setEditingCode(null)
+    setDraft(emptyVehicleTypeDraft())
     setFormNotice(null)
+    setIsModalOpen(false)
   }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setFormNotice(null)
     try {
-      const payload = vehicleCapabilityDraftToInput(draft)
+      const payload = vehicleTypeDraftToInput(draft)
       setSubmitting(true)
-      if (editingId !== null) {
-        await vehicleCapabilityService.update(editingId, payload)
-        setFormNotice({ tone: 'success', text: `${payload.name} updated.` })
+      if (editingCode !== null) {
+        await vehicleTypeService.update(editingCode, payload)
+        setFormNotice({ tone: 'success', text: `${payload.display_name} updated.` })
       } else {
-        await vehicleCapabilityService.create(payload)
-        setFormNotice({ tone: 'success', text: `${payload.name} added.` })
+        await vehicleTypeService.create(payload)
+        setFormNotice({ tone: 'success', text: `${payload.display_name} added.` })
       }
-      setEditingId(null)
-      setDraft(emptyVehicleCapabilityDraft())
+      setEditingCode(null)
+      setDraft(emptyVehicleTypeDraft())
+      setIsModalOpen(false)
       await refresh()
     } catch (err) {
       setFormNotice({ tone: 'error', text: err instanceof Error ? err.message : 'Failed to save vehicle type.' })
@@ -85,44 +95,46 @@ export function VehicleTypesPage() {
     }
   }
 
-  const handleDelete = async (capability: VehicleCapability) => {
-    if (!window.confirm(`Delete "${capability.name}"? This cannot be undone.`)) return
-    setDeletingId(capability.id)
+  const handleDeactivate = async (vehicleType: VehicleTypeCatalog) => {
+    if (!window.confirm(`Deactivate "${vehicleType.display_name}"? It will be hidden from new optimization runs but historical records stay intact.`)) return
+    setDeactivatingCode(vehicleType.code)
     setPageNotice(null)
     try {
-      await vehicleCapabilityService.remove(capability.id)
-      if (editingId === capability.id) cancelEdit()
+      await vehicleTypeService.deactivate(vehicleType.code)
+      if (editingCode === vehicleType.code) cancelEdit()
       await refresh()
     } catch (err) {
-      const text =
-        err instanceof ApiError && err.status === 409
-          ? 'This vehicle type is currently assigned to registered vehicles and cannot be deleted.'
-          : err instanceof Error
-            ? err.message
-            : 'Failed to delete vehicle type.'
-      setPageNotice({ tone: 'error', text })
+      setPageNotice({ tone: 'error', text: err instanceof Error ? err.message : 'Failed to deactivate vehicle type.' })
     } finally {
-      setDeletingId(null)
+      setDeactivatingCode(null)
     }
   }
 
   const filtered = useMemo(
-    () => (statusFilter === 'all' ? capabilities : capabilities.filter((c) => c.status === statusFilter)),
-    [capabilities, statusFilter],
+    () =>
+      statusFilter === 'all'
+        ? vehicleTypes
+        : vehicleTypes.filter((v) => (statusFilter === 'ACTIVE' ? v.is_active : !v.is_active)),
+    [vehicleTypes, statusFilter],
   )
 
-  const activeCount = capabilities.filter((c) => c.status === 'ACTIVE').length
-  const inactiveCount = capabilities.length - activeCount
+  const activeCount = vehicleTypes.filter((v) => v.is_active).length
+  const inactiveCount = vehicleTypes.length - activeCount
 
   return (
     <div>
       <PageHeader
         action={
-          <SecondaryButton onClick={refresh}>
-            <RefreshCw className="h-4 w-4" /> Refresh
-          </SecondaryButton>
+          <div className="flex items-center gap-2">
+            <SecondaryButton onClick={refresh}>
+              <RefreshCw className="h-4 w-4" /> Refresh
+            </SecondaryButton>
+            <PrimaryButton onClick={openAddModal}>
+              <Plus className="h-4 w-4" /> Add Vehicle Type
+            </PrimaryButton>
+          </div>
         }
-        description="Define vehicle capability types (e.g. Bajaj Three Wheeler) the optimizer can plan around. These are not physical vehicles — registered vehicles will reference a type."
+        description="Manage the vehicle types (capacity, cost, cargo dimensions, availability) that NSGA-II optimizes against. This is the same catalog the optimizer reads from."
         title="Vehicle Types"
       />
 
@@ -133,34 +145,57 @@ export function VehicleTypesPage() {
       )}
 
       <div className="grid gap-4 md:grid-cols-3">
-        <MetricCard icon={Truck} label="Total Vehicle Types" tone="blue" value={formatNumber(capabilities.length)} />
+        <MetricCard icon={Truck} label="Total Vehicle Types" tone="blue" value={formatNumber(vehicleTypes.length)} />
         <MetricCard icon={CheckCircle2} label="Active" tone="green" value={formatNumber(activeCount)} />
         <MetricCard icon={XCircle} label="Inactive" tone="amber" value={formatNumber(inactiveCount)} />
       </div>
 
-      <div className="mt-5">
-        <Card title={editingId !== null ? 'Edit Vehicle Type' : 'Add Vehicle Type'}>
-          {formNotice && (
-            <div className="mb-4">
-              <InlineAlert tone={formNotice.tone}>{formNotice.text}</InlineAlert>
+      {isModalOpen && (
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/60 p-4"
+          onClick={cancelEdit}
+        >
+          <div
+            className="max-h-[90vh] w-full max-w-2xl overflow-auto rounded-2xl bg-white shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-fleet-line/80 px-5 py-4">
+              <h2 className="text-base font-extrabold text-fleet-ink">
+                {editingCode !== null ? 'Edit Vehicle Type' : 'Add Vehicle Type'}
+              </h2>
+              <button
+                aria-label="Close"
+                className="focus-ring rounded-lg p-2 text-fleet-muted transition hover:bg-slate-100 hover:text-fleet-ink"
+                onClick={cancelEdit}
+                type="button"
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
-          )}
-          <form className="space-y-4" onSubmit={handleSubmit}>
-            <VehicleCapabilityFieldsFieldset onChange={setDraft} value={draft} />
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-fleet-line/80 pt-4">
-              <span className="text-xs font-semibold text-fleet-muted">
-                Volume is calculated automatically from length × width × height.
-              </span>
-              <div className="flex items-center gap-2">
-                {editingId !== null && <SecondaryButton onClick={cancelEdit}>Cancel</SecondaryButton>}
-                <PrimaryButton loading={submitting} type="submit">
-                  <Plus className="h-4 w-4" /> {editingId !== null ? 'Update Vehicle Type' : 'Add Vehicle Type'}
-                </PrimaryButton>
-              </div>
+            <div className="p-5">
+              {formNotice && (
+                <div className="mb-4">
+                  <InlineAlert tone={formNotice.tone}>{formNotice.text}</InlineAlert>
+                </div>
+              )}
+              <form className="space-y-4" onSubmit={handleSubmit}>
+                <VehicleTypeFieldsFieldset onChange={setDraft} value={draft} />
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-fleet-line/80 pt-4">
+                  <span className="text-xs font-semibold text-fleet-muted">
+                    Volume, weight, and speed feed directly into NSGA-II's objectives and constraints.
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <SecondaryButton onClick={cancelEdit}>Cancel</SecondaryButton>
+                    <PrimaryButton loading={submitting} type="submit">
+                      <Plus className="h-4 w-4" /> {editingCode !== null ? 'Update Vehicle Type' : 'Add Vehicle Type'}
+                    </PrimaryButton>
+                  </div>
+                </div>
+              </form>
             </div>
-          </form>
-        </Card>
-      </div>
+          </div>
+        </div>
+      )}
 
       <div className="mt-5 rounded-2xl border border-fleet-line bg-white p-4 shadow-card">
         <div className="flex flex-wrap items-center gap-3">
@@ -174,7 +209,7 @@ export function VehicleTypesPage() {
             <option value="INACTIVE">Inactive</option>
           </select>
           <span className="ml-auto text-sm font-bold text-fleet-muted">
-            {filtered.length} of {capabilities.length} vehicle types shown
+            {filtered.length} of {vehicleTypes.length} vehicle types shown
           </span>
         </div>
       </div>
@@ -191,37 +226,36 @@ export function VehicleTypesPage() {
             title="No vehicle types match this filter"
           />
         ) : (
-          <DataTable headers={['Name', 'Category', 'Brand / Model', 'Max Weight', 'Dimensions (L×W×H)', 'Volume', 'Status', 'Actions']}>
-            {filtered.map((capability) => (
-              <tr className="transition hover:bg-blue-50/40" key={capability.id}>
-                <td className="px-5 py-4 font-black text-fleet-ink">{capability.name}</td>
-                <td className="px-5 py-4 text-fleet-muted">{capability.category}</td>
-                <td className="px-5 py-4 text-fleet-muted">
-                  {[capability.brand, capability.model].filter(Boolean).join(' ') || '—'}
+          <DataTable headers={['Code', 'Display Name', 'Category', 'Capacity', 'Cost', 'Status', 'Actions']}>
+            {filtered.map((vehicleType) => (
+              <tr className="transition hover:bg-blue-50/40" key={vehicleType.code}>
+                <td className="px-5 py-4 font-black text-fleet-ink">{vehicleType.code}</td>
+                <td className="px-5 py-4 text-fleet-muted">{vehicleType.display_name}</td>
+                <td className="px-5 py-4 text-fleet-muted">{vehicleType.category ?? '-'}</td>
+                <td className="px-5 py-4 font-semibold">
+                  {vehicleType.capacity_kg} kg / {vehicleType.capacity_m3} m³
                 </td>
-                <td className="px-5 py-4 font-semibold">{capability.max_weight_kg} kg</td>
                 <td className="px-5 py-4 text-fleet-muted">
-                  {capability.max_length_cm} × {capability.max_width_cm} × {capability.max_height_cm} cm
+                  {formatNumber(vehicleType.fixed_cost)} + {formatNumber(vehicleType.cost_per_km)}/km
                 </td>
-                <td className="px-5 py-4 font-semibold">{capability.max_volume_m3.toFixed(3)} m³</td>
                 <td className="px-5 py-4">
-                  <StatusBadge tone={capability.status === 'ACTIVE' ? 'green' : 'slate'}>{capability.status}</StatusBadge>
+                  <StatusBadge tone={vehicleType.is_active ? 'green' : 'slate'}>{vehicleType.is_active ? 'Active' : 'Inactive'}</StatusBadge>
                 </td>
                 <td className="px-5 py-4">
                   <div className="flex items-center gap-2">
                     <button
-                      aria-label={`Edit ${capability.name}`}
+                      aria-label={`Edit ${vehicleType.display_name}`}
                       className="focus-ring rounded-lg p-2 text-fleet-muted transition hover:bg-blue-50 hover:text-fleet-blue"
-                      onClick={() => startEdit(capability)}
+                      onClick={() => startEdit(vehicleType)}
                       type="button"
                     >
                       <Pencil className="h-4 w-4" />
                     </button>
                     <button
-                      aria-label={`Delete ${capability.name}`}
+                      aria-label={`Deactivate ${vehicleType.display_name}`}
                       className="focus-ring rounded-lg p-2 text-fleet-muted transition hover:bg-red-50 hover:text-red-600 disabled:pointer-events-none disabled:opacity-50"
-                      disabled={deletingId === capability.id}
-                      onClick={() => handleDelete(capability)}
+                      disabled={deactivatingCode === vehicleType.code || !vehicleType.is_active}
+                      onClick={() => handleDeactivate(vehicleType)}
                       type="button"
                     >
                       <Trash2 className="h-4 w-4" />

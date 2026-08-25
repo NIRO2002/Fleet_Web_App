@@ -1,6 +1,6 @@
 # Real dataset
 
-`parcels_sample_36000.csv` — the real parcel dataset the evaluation harness and
+`parcels_sample_36000.csv` - the real parcel dataset the evaluation harness and
 integration tests run against (Fix Pass 4 item S5). Supplied by the user 2026-08-18.
 
 ## Structure
@@ -12,7 +12,7 @@ Verified (`pandas`, this session):
   `(depot_id, delivery_date)` planning instances, **exactly 400 parcels each**.
 - No duplicate `parcel_id`s. No nulls in `weight_kg`/`length_cm`/`width_cm`/`height_cm`.
 - `hazardous`: 1,384 True / 34,616 False. `hazmat_class` is non-null in exactly those
-  1,384 rows where `hazardous` is True, and null everywhere `hazardous` is False — no
+  1,384 rows where `hazardous` is True, and null everywhere `hazardous` is False - no
   `'none'`-string sentinel (that was an artifact of an older 5,000-row sample; see
   `docs/DESIGN_DECISIONS.md` and the Fix Pass 4 report). `app/tests/test_data_service.py`
   (or wherever S5's real-data verification test lands) asserts this property so a future

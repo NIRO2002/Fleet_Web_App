@@ -74,7 +74,7 @@ def nearest_neighbor_tour(depot_lat, depot_lon, points):
     Returns `(order, total_distance_km)` where `order` is a list of indices
     into `points` in visiting order (1st stop first). This is a
     cost-*estimation* tour used by the optimizer (Phase 3 objective f2 and
-    the delivery/load sequencing in Phase 3.4/3.5) — not a routing engine.
+    the delivery/load sequencing in Phase 3.4/3.5) - not a routing engine.
     The downstream route-optimization module owns the real route.
     """
     if not points:
@@ -94,5 +94,5 @@ def nearest_neighbor_tour(depot_lat, depot_lon, points):
 
 def nearest_neighbor_distance_km(depot_lat, depot_lon, points):
     """Total tour distance only. Kept for existing callers (`app.routing.optimizer`)
-    that don't need the visiting order — delegates to `nearest_neighbor_tour`."""
+    that don't need the visiting order - delegates to `nearest_neighbor_tour`."""
     return nearest_neighbor_tour(depot_lat, depot_lon, points)[1]

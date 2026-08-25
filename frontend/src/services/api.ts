@@ -24,7 +24,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       const data = await response.json()
       if (typeof data?.detail === 'string') detail = data.detail
     } catch {
-      // response body wasn't JSON — keep the status text
+      // response body wasn't JSON - keep the status text
     }
     throw new ApiError(detail, response.status)
   }

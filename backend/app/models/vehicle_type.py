@@ -6,6 +6,7 @@ from app.utils_datetime import utcnow
 class VehicleTypeCatalog(Document):
     code: Indexed(str, unique=True)
     display_name: str
+    category: str | None = None
     capacity_kg: float
     capacity_m3: float
     cargo_length_cm: float

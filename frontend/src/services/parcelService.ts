@@ -1,46 +1,21 @@
 import { api } from './api'
-import type { ClusterPrediction, ClusterSummary, ClusteringTrainResult, CsvUploadResult, Parcel, ParcelInput } from '../types'
+import type { ClusterPrediction, ClusterSummary, ClusteringTrainResult, CsvUploadResult, Depot, PaginatedParcels, Parcel, ParcelInput } from '../types'
 
-// This frontend has no depot/planning-date selector, but the backend scopes
-// clustering (and load optimization, which requires every selected parcel to
-// share one non-null depot_id) to a single (depot_id, delivery_date) planning
-// instance and never falls back to the whole table. Every parcel this UI
-// creates, and every clustering call it makes, uses this one fixed instance
-// so the two sides actually line up.
-// This matches one real 400-parcel planning instance in the bundled dataset.
-export const DEMO_DEPOT_ID = 'D-CMB-001'
-export const demoDeliveryDate = () => '2026-01-05'
-
-const instanceQuery = () => `depot_id=${encodeURIComponent(DEMO_DEPOT_ID)}&delivery_date=${demoDeliveryDate()}`
+const scope = (depotId: string, deliveryDate: string) => `depot_id=${encodeURIComponent(depotId)}&delivery_date=${encodeURIComponent(deliveryDate)}`
 
 export const parcelService = {
-  list: () => api.get<Parcel[]>(`/parcels?${instanceQuery()}`),
-  listForInstance: (depotId: string, deliveryDate: string) =>
-    api.get<Parcel[]>(`/parcels?depot_id=${encodeURIComponent(depotId)}&delivery_date=${encodeURIComponent(deliveryDate)}`),
-  listForDataset: (datasetId: string) =>
-    api.get<Parcel[]>(`/parcels?dataset_id=${encodeURIComponent(datasetId)}`),
-  create: (payload: ParcelInput, datasetId?: string) =>
-    api.post<Parcel>('/parcels', {
-      ...payload,
-      dataset_id: datasetId,
-      depot_id: DEMO_DEPOT_ID,
-      delivery_date: demoDeliveryDate(),
-    }),
-
-  uploadCsv: (file: File) => {
-    const form = new FormData()
-    form.append('file', file)
-    return api.postForm<CsvUploadResult>(`/parcels/upload-csv?${instanceQuery()}`, form)
+  listForInstance: (depotId: string, deliveryDate: string) => api.get<Parcel[]>(`/parcels?${scope(depotId, deliveryDate)}`),
+  listPage: (depotId: string, deliveryDate: string, limit: number, offset: number) => api.get<PaginatedParcels>(`/parcels?${scope(depotId, deliveryDate)}&paginated=true&limit=${limit}&offset=${offset}`),
+  listForDataset: (datasetId: string) => api.get<Parcel[]>(`/parcels?dataset_id=${encodeURIComponent(datasetId)}`),
+  create: (payload: ParcelInput) => api.post<Parcel>('/parcels', payload),
+  uploadCsv: (file: File, depotId: string, deliveryDate: string) => {
+    const form = new FormData(); form.append('file', file)
+    return api.postForm<CsvUploadResult>(`/parcels/upload-csv?${scope(depotId, deliveryDate)}`, form)
   },
-
-  trainClustering: (datasetId?: string) => api.post<ClusteringTrainResult>(
-    `/parcels/clustering/train?${instanceQuery()}${datasetId ? `&dataset_id=${encodeURIComponent(datasetId)}` : ''}`,
-  ),
-  getClusterSummary: (datasetId?: string) => api.get<ClusterSummary>(
-    `/parcels/clustering?${instanceQuery()}${datasetId ? `&dataset_id=${encodeURIComponent(datasetId)}` : ''}`,
-  ),
-  predictCluster: (parcel: ParcelInput) =>
-    api.post<ClusterPrediction>(`/parcels/clustering/predict?${instanceQuery()}`, {
-      parcel: { ...parcel, depot_id: DEMO_DEPOT_ID, delivery_date: demoDeliveryDate() },
-    }),
+  trainClustering: (depotId: string, deliveryDate: string) => api.post<ClusteringTrainResult>(`/parcels/clustering/train?${scope(depotId, deliveryDate)}`),
+  getClusterSummary: (depotId: string, deliveryDate: string) => api.get<ClusterSummary>(`/parcels/clustering?${scope(depotId, deliveryDate)}`),
+  predictCluster: (parcel: ParcelInput) => api.post<ClusterPrediction>(`/parcels/clustering/predict?${scope(parcel.depot_id ?? '', parcel.delivery_date ?? '')}`, { parcel }),
+  listDepots: () => api.get<Depot[]>('/depots'),
+  priorityLevels: () => api.get<Record<string, number>>('/vocabularies/priority-levels'),
+  serviceTypes: () => api.get<string[]>('/vocabularies/service-types'),
 }

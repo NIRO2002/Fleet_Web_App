@@ -6,7 +6,7 @@ from app.db.database import init_database
 from app.api.v1 import (
     auth, vehicles, maintenance, predictions, demand, deliveries,
     routes, trips, alerts, reports, parcels, optimization,
-    virtual_vehicles, vehicle_capabilities, vehicle_types, health
+    virtual_vehicles, vehicle_types, vocabularies, depots, plans, health
 )
 
 @asynccontextmanager
@@ -27,8 +27,9 @@ for router in [
     auth.router, vehicles.router, maintenance.router, predictions.router,
     demand.router, deliveries.router, routes.router, trips.router,
     alerts.router, reports.router, parcels.router,
-    optimization.router, virtual_vehicles.router, vehicle_capabilities.router,
+    optimization.router, virtual_vehicles.router,
     vehicle_types.router,
+    vocabularies.router, depots.router, plans.router,
 ]:
     app.include_router(router, prefix="/api/v1")
 

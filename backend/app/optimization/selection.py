@@ -1,10 +1,10 @@
 """Solution selection from the NSGA-II Pareto front, and hypervolume
 (Phase 3.6/3.7).
 
-Satisfies FR04/SO4: the API always returns the *whole* front — this module
+Satisfies FR04/SO4: the API always returns the *whole* front - this module
 only picks the single solution that gets persisted as the plan's
 `VirtualVehicle` rows. A scalar score may exist *only* here, as an optional
-post-hoc tie-breaker among already non-dominated solutions — never inside
+post-hoc tie-breaker among already non-dominated solutions - never inside
 the optimizer's own objectives (see `assignment_problem.py`).
 """
 import numpy as np
@@ -35,7 +35,7 @@ def pareto_front(res) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
 def knee_point_index(F: np.ndarray) -> int:
     """Normalises every objective to [0,1] using the front's own ideal
     (min) and nadir (max) points, then returns the index of the solution
-    closest (Euclidean) to the ideal point — the default single-solution
+    closest (Euclidean) to the ideal point - the default single-solution
     pick (spec 3.6)."""
     ideal = F.min(axis=0)
     nadir = F.max(axis=0)
@@ -47,7 +47,7 @@ def knee_point_index(F: np.ndarray) -> int:
 
 def preference_weighted_index(F: np.ndarray, weights: list[float]) -> int:
     """Picks among an already non-dominated front by a caller-supplied
-    preference vector (planner-driven decision support) — this is applied
+    preference vector (planner-driven decision support) - this is applied
     only here, never as the optimizer's own objective."""
     if len(weights) != F.shape[1]:
         raise ValueError(f"preference_weights must have {F.shape[1]} entries, got {len(weights)}")
@@ -70,7 +70,7 @@ def select_solution(res, preference_weights: list[float] | None = None):
 def hypervolume(F: np.ndarray, reference_point: np.ndarray | None = None) -> float:
     """Hypervolume of the (minimised) front. The reference point is the
     worst value observed per objective *in this instance's own front*, with
-    a 5% margin — documented and instance-specific, so hypervolumes are
+    a 5% margin - documented and instance-specific, so hypervolumes are
     only compared across runs that used the same reference-point rule, not
     treated as universally comparable absolute numbers."""
     if F.shape[0] == 0:

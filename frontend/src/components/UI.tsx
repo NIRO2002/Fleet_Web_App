@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import clsx from 'clsx'
 import { AlertTriangle, CheckCircle2, Info, Loader2 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import type { ParcelDraft, VehicleCapabilityDraft } from '../types'
+import type { ParcelDraft, VehicleTypeCatalogDraft } from '../types'
 
 export function Card({
   title,
@@ -225,6 +225,24 @@ export function CapacityBar({ label, used, capacity, unit }: { label: string; us
   )
 }
 
+export function ProgressBar({ label, percent, detail }: { label: string; percent: number; detail?: string }) {
+  const pct = Math.min(100, Math.max(0, percent))
+  return (
+    <div aria-live="polite" role="status">
+      <div className="mb-1.5 flex items-center justify-between text-xs font-bold text-fleet-muted">
+        <span>{label}</span>
+        <span>{detail ?? `${Math.round(pct)}%`}</span>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+        <div
+          className="h-full rounded-full bg-fleet-blue transition-[width] duration-300 ease-out"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  )
+}
+
 export function EmptyState({
   icon: Icon,
   title,
@@ -310,64 +328,128 @@ export function LabeledSelect({
   )
 }
 
-/** Shared field grid for capturing a VehicleCapabilityInput via a VehicleCapabilityDraft
- * (used for the vehicle type intake + edit forms). */
-export function VehicleCapabilityFieldsFieldset({
+function FieldGroupLabel({ children }: { children: ReactNode }) {
+  return <h3 className="mb-2 text-xs font-black uppercase tracking-wide text-fleet-blue">{children}</h3>
+}
+
+/** Shared field grid for capturing a VehicleTypeCatalogInput via a
+ * VehicleTypeCatalogDraft (used for the Vehicle Types add/edit form). Every
+ * field the NSGA-II optimizer reads (see app/optimization/assignment_problem.py's
+ * VehicleTypeSpec) is directly editable in the main groups; rarely-touched
+ * provenance fields are tucked behind "Advanced" so the form stays usable. */
+export function VehicleTypeFieldsFieldset({
   value,
   onChange,
 }: {
-  value: VehicleCapabilityDraft
-  onChange: (next: VehicleCapabilityDraft) => void
+  value: VehicleTypeCatalogDraft
+  onChange: (next: VehicleTypeCatalogDraft) => void
 }) {
-  const set = <K extends keyof VehicleCapabilityDraft>(key: K, next: VehicleCapabilityDraft[K]) => onChange({ ...value, [key]: next })
+  const set = <K extends keyof VehicleTypeCatalogDraft>(key: K, next: VehicleTypeCatalogDraft[K]) => onChange({ ...value, [key]: next })
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
-      <LabeledInput label="Vehicle Name" onChange={(v) => set('name', v)} placeholder="Bajaj Three Wheeler" value={value.name} />
-      <LabeledInput label="Category" onChange={(v) => set('category', v)} placeholder="Three Wheeler" value={value.category} />
-      <LabeledInput label="Brand" onChange={(v) => set('brand', v)} placeholder="Bajaj" value={value.brand} />
-      <LabeledInput label="Model" onChange={(v) => set('model', v)} placeholder="RE" value={value.model} />
-      <LabeledInput
-        label="Maximum Weight (kg)"
-        onChange={(v) => set('max_weight_kg', v)}
-        placeholder="500"
-        step="0.1"
-        type="number"
-        value={value.max_weight_kg}
-      />
-      <LabeledSelect
-        label="Status"
-        onChange={(v) => set('status', v as VehicleCapabilityDraft['status'])}
-        options={[
-          { value: 'ACTIVE', label: 'Active' },
-          { value: 'INACTIVE', label: 'Inactive' },
-        ]}
-        value={value.status}
-      />
-      <LabeledInput
-        label="Maximum Length (cm)"
-        onChange={(v) => set('max_length_cm', v)}
-        placeholder="180"
-        step="0.1"
-        type="number"
-        value={value.max_length_cm}
-      />
-      <LabeledInput
-        label="Maximum Width (cm)"
-        onChange={(v) => set('max_width_cm', v)}
-        placeholder="140"
-        step="0.1"
-        type="number"
-        value={value.max_width_cm}
-      />
-      <LabeledInput
-        label="Maximum Height (cm)"
-        onChange={(v) => set('max_height_cm', v)}
-        placeholder="130"
-        step="0.1"
-        type="number"
-        value={value.max_height_cm}
-      />
+    <div className="space-y-5">
+      <div>
+        <FieldGroupLabel>Identity</FieldGroupLabel>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <LabeledInput label="Code" onChange={(v) => set('code', v)} placeholder="BAJAJ_RE" value={value.code} />
+          <LabeledInput label="Display Name" onChange={(v) => set('display_name', v)} placeholder="Bajaj Three Wheeler" value={value.display_name} />
+          <LabeledInput label="Category" onChange={(v) => set('category', v)} placeholder="Three Wheeler" value={value.category} />
+          <LabeledInput label="Model" onChange={(v) => set('model_name', v)} placeholder="Bajaj RE" value={value.model_name} />
+        </div>
+      </div>
+
+      <div>
+        <FieldGroupLabel>Capacity & Dimensions</FieldGroupLabel>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <LabeledInput label="Capacity (kg)" onChange={(v) => set('capacity_kg', v)} placeholder="500" step="0.1" type="number" value={value.capacity_kg} />
+          <LabeledInput label="Capacity (m³)" onChange={(v) => set('capacity_m3', v)} placeholder="3.4" step="0.01" type="number" value={value.capacity_m3} />
+          <LabeledInput label="Cargo Length (cm)" onChange={(v) => set('cargo_length_cm', v)} placeholder="180" step="0.1" type="number" value={value.cargo_length_cm} />
+          <LabeledInput label="Cargo Width (cm)" onChange={(v) => set('cargo_width_cm', v)} placeholder="140" step="0.1" type="number" value={value.cargo_width_cm} />
+          <LabeledInput label="Cargo Height (cm)" onChange={(v) => set('cargo_height_cm', v)} placeholder="130" step="0.1" type="number" value={value.cargo_height_cm} />
+          <LabeledInput label="Max Parcels" onChange={(v) => set('max_parcels', v)} placeholder="60" step="1" type="number" value={value.max_parcels} />
+          <LabeledInput label="Max Stack Layers" onChange={(v) => set('max_stack_layers', v)} placeholder="2" step="1" type="number" value={value.max_stack_layers} />
+          <LabeledInput
+            label="Max Stack Weight (kg)"
+            onChange={(v) => set('vehicle_max_stack_weight_kg', v)}
+            placeholder="200"
+            step="0.1"
+            type="number"
+            value={value.vehicle_max_stack_weight_kg}
+          />
+        </div>
+      </div>
+
+      <div>
+        <FieldGroupLabel>Cost & Speed</FieldGroupLabel>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <LabeledInput label="Fixed Cost" onChange={(v) => set('fixed_cost', v)} placeholder="400" step="0.01" type="number" value={value.fixed_cost} />
+          <LabeledInput label="Cost per km" onChange={(v) => set('cost_per_km', v)} placeholder="95" step="0.01" type="number" value={value.cost_per_km} />
+          <LabeledInput label="Average Speed (km/h)" onChange={(v) => set('avg_speed_kmh', v)} placeholder="35" step="0.1" type="number" value={value.avg_speed_kmh} />
+          <LabeledInput label="Max Speed (km/h)" onChange={(v) => set('max_speed_kmh', v)} placeholder="50" step="0.1" type="number" value={value.max_speed_kmh} />
+          <LabeledInput
+            label="Gross Vehicle Weight (kg)"
+            onChange={(v) => set('gross_vehicle_weight_kg', v)}
+            placeholder="975"
+            step="0.1"
+            type="number"
+            value={value.gross_vehicle_weight_kg}
+          />
+        </div>
+      </div>
+
+      <div>
+        <FieldGroupLabel>Operating Window</FieldGroupLabel>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <LabeledInput label="Available From" onChange={(v) => set('available_from', v)} type="time" value={value.available_from} />
+          <LabeledInput label="Available Until" onChange={(v) => set('available_until', v)} type="time" value={value.available_until} />
+        </div>
+      </div>
+
+      <div>
+        <FieldGroupLabel>Attributes</FieldGroupLabel>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="flex items-center gap-2 text-sm font-bold text-fleet-ink">
+            <input checked={value.is_refrigerated} onChange={(event) => set('is_refrigerated', event.target.checked)} type="checkbox" />
+            Refrigerated
+          </label>
+          <label className="flex items-center gap-2 text-sm font-bold text-fleet-ink">
+            <input checked={value.is_hazmat_certified} onChange={(event) => set('is_hazmat_certified', event.target.checked)} type="checkbox" />
+            Hazmat certified
+          </label>
+          <label className="flex items-center gap-2 text-sm font-bold text-fleet-ink">
+            <input checked={value.has_tail_lift} onChange={(event) => set('has_tail_lift', event.target.checked)} type="checkbox" />
+            Tail lift
+          </label>
+          <LabeledInput label="Min Road Width (m)" onChange={(v) => set('min_road_width_m', v)} placeholder="3" step="0.1" type="number" value={value.min_road_width_m} />
+          {value.is_refrigerated && (
+            <>
+              <LabeledInput label="Min Temp (°C)" onChange={(v) => set('temp_min_celsius', v)} step="0.1" type="number" value={value.temp_min_celsius} />
+              <LabeledInput label="Max Temp (°C)" onChange={(v) => set('temp_max_celsius', v)} step="0.1" type="number" value={value.temp_max_celsius} />
+            </>
+          )}
+        </div>
+      </div>
+
+      <details className="rounded-xl border border-fleet-line/80 p-3">
+        <summary className="cursor-pointer text-xs font-black uppercase tracking-wide text-fleet-muted">Advanced</summary>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <LabeledInput
+            label="Reference Trip Cost"
+            onChange={(v) => set('cost_per_trip_reference', v)}
+            placeholder="950"
+            step="0.01"
+            type="number"
+            value={value.cost_per_trip_reference}
+          />
+          <LabeledInput label="Source Reference" onChange={(v) => set('source_reference', v)} placeholder="Piaggio Lanka" value={value.source_reference} />
+          <LabeledInput label="Depot ID" onChange={(v) => set('depot_id', v)} placeholder="D-CMB-001" value={value.depot_id} />
+          <LabeledInput label="Source" onChange={(v) => set('source', v)} placeholder="field_data" value={value.source} />
+          <label className="flex items-center gap-2 text-sm font-bold text-fleet-ink">
+            <input checked={value.is_active} onChange={(event) => set('is_active', event.target.checked)} type="checkbox" />
+            Active (available to the optimizer)
+          </label>
+        </div>
+      </details>
     </div>
   )
 }

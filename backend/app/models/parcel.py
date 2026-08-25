@@ -3,8 +3,10 @@ from beanie import Document, Indexed
 from pydantic import Field, field_validator
 from pymongo import ASCENDING, IndexModel
 from app.utils_datetime import utcnow
+from app.db.bson import DATE_BSON_ENCODERS
 
 PRIORITY_LEVELS = {"standard", "next_day", "express", "same_day", "priority"}
+SERVICE_TYPES = {"door_to_door", "collection_point", "locker_drop", "standard"}
 
 class Parcel(Document):
     parcel_id: Indexed(str, unique=True)
@@ -54,6 +56,23 @@ class Parcel(Document):
             raise ValueError(f"priority_level must be one of {sorted(PRIORITY_LEVELS)}")
         return normalized
 
+    @field_validator("service_type")
+    @classmethod
+    def validate_service_type(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in SERVICE_TYPES:
+            raise ValueError(f"service_type must be one of {sorted(SERVICE_TYPES)}")
+        return normalized
+
     class Settings:
         name = "parcels"
-        indexes = [IndexModel([("depot_id", ASCENDING), ("delivery_date", ASCENDING)]), "dataset_id", "status"]
+        bson_encoders = DATE_BSON_ENCODERS
+        # Supersedes the old (depot_id, delivery_date)-only index: MongoDB
+        # compound indexes serve any query on a leading prefix of their
+        # fields, so this one covers both the plain planning-instance scope
+        # and the cluster_id-scoped lookup in api/v1/optimization.py without
+        # needing two separate indexes.
+        indexes = [
+            IndexModel([("depot_id", ASCENDING), ("delivery_date", ASCENDING), ("cluster_id", ASCENDING)]),
+            "dataset_id", "status",
+        ]

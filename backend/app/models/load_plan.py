@@ -3,6 +3,7 @@ from beanie import Document, Indexed
 from pydantic import Field
 from app.models.virtual_vehicle import VirtualVehicle
 from app.utils_datetime import utcnow
+from app.db.bson import DATE_BSON_ENCODERS
 
 class LoadPlan(Document):
     plan_id: Indexed(str, unique=True)
@@ -29,3 +30,4 @@ class LoadPlan(Document):
     created_at: datetime = Field(default_factory=utcnow)
     class Settings:
         name = "load_plans"
+        bson_encoders = DATE_BSON_ENCODERS

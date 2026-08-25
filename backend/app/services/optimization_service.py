@@ -1,11 +1,11 @@
-"""NSGA-II load assignment orchestration (Phase 3 — the core fix).
+"""NSGA-II load assignment orchestration (Phase 3 - the core fix).
 
 Satisfies SO3/SO4/FR04: replaces the old fixed n_var=1
 "pick-one-vehicle-type-for-a-fixed-parcel-list" scalarised heuristic (whose
-`minimize()` result was discarded entirely — see docs/DESIGN_DECISIONS.md)
+`minimize()` result was discarded entirely - see docs/DESIGN_DECISIONS.md)
 with `app.optimization.assignment_problem`'s genuine multi-objective
 parcel-to-vehicle-slot assignment. Vehicle data is loaded once per run from
-`vehicle_type_catalog` via `vehicle_catalog_service` — never a literal
+`vehicle_type_catalog` via `vehicle_catalog_service` - never a literal
 here. The *whole* Pareto front is always returned; the single solution that
 gets persisted as `VirtualVehicle`/`ParcelAssignment` rows is chosen by
 knee-point selection (or a caller preference) among already non-dominated
@@ -25,6 +25,7 @@ from pymongo import UpdateOne
 from starlette.concurrency import run_in_threadpool
 
 from app.core.reproducibility import run_manifest
+from app.db.bson import to_bson_safe
 from app.models.load_plan import LoadPlan
 from app.models.parcel import Parcel
 from app.models.parcel_assignment import ParcelAssignment
@@ -73,7 +74,7 @@ async def _optimize_load(
     `LoadPlan` with one `VirtualVehicle` + a set of `ParcelAssignment` rows
     per used vehicle slot. Returns `(result_dict, load_plan)`.
 
-    `depot_id` is required (not inferred) — the vehicle catalog and the
+    `depot_id` is required (not inferred) - the vehicle catalog and the
     plan's (depot_id, delivery_date) key both depend on it.
     """
     if not parcels:
@@ -231,12 +232,31 @@ async def _optimize_load(
     await Parcel.get_motor_collection().bulk_write([
         UpdateOne(
             {"parcel_id": p.parcel_id},
-            {"$set": {
+            {"$set": to_bson_safe({
                 "status": "PLANNED",
                 "plan_id": plan_id,
                 "delivery_date": p.delivery_date,
                 "carried_over_from_date": getattr(p, "carried_over_from_date", None),
-            }},
+                # Cleared, not left stale, in the same write that plans the
+                # parcel: cluster_id/cluster_probability/is_noise describe a
+                # transient clustering *input*, not a durable fact about a
+                # planned parcel. HDBSCAN restarts label numbering at 0 on
+                # every retrain of this (depot_id, delivery_date) instance
+                # (see docs/DESIGN_DECISIONS.md), so a stale, un-cleared
+                # cluster_id here would collide with a *different*, later
+                # PENDING cluster that happens to reuse the same number --
+                # any reader that queries by cluster_id without also
+                # filtering by status (e.g. cluster_summary) would then
+                # silently mix an old, already-planned group in with a
+                # fresh one under one label. The plan's own record of which
+                # cluster a vehicle came from is unaffected: VirtualVehicle.
+                # cluster_id (see _single_cluster_id above) is captured
+                # before this write, from the in-memory parcel objects, not
+                # re-read from the database afterward.
+                "cluster_id": None,
+                "cluster_probability": None,
+                "is_noise": False,
+            })},
         )
         for p in parcels
     ])
@@ -279,8 +299,8 @@ def optimize_load(*args, **kwargs):
 
 
 async def try_insert(plan: LoadPlan, virtual_vehicle: VirtualVehicle, parcel):
-    """Weight/volume-only fit check. Deliberately left as-is (Phase 5 —
-    `insertion_service.py` — replaces this wholesale with the full
+    """Weight/volume-only fit check. Deliberately left as-is (Phase 5 -
+    `insertion_service.py` - replaces this wholesale with the full
     constraint set: dimensions, hazmat/refrigeration, actual re-run
     placement, schedule feasibility, detour bound)."""
     if virtual_vehicle.used_weight_kg + parcel.weight_kg > virtual_vehicle.capacity_kg:

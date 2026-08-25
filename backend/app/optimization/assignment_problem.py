@@ -11,7 +11,7 @@ feasible box among four literal options. Here, decision variables are:
 
 so which parcels share a vehicle, and what that vehicle is, are both
 searched. `T = len(catalog)` is read from `vehicle_type_catalog` at
-runtime — this module must never contain a vehicle capacity literal, and
+runtime - this module must never contain a vehicle capacity literal, and
 adding a 5th catalog row must not require a code change here.
 """
 import logging
@@ -49,7 +49,7 @@ logger = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class VehicleTypeSpec:
     """Immutable per-run snapshot of one `vehicle_type_catalog` row. The GA's
-    inner loop reads only this — never the database — for the run's
+    inner loop reads only this - never the database - for the run's
     duration (a single round trip per run, not per evaluation)."""
 
     code: str
@@ -87,7 +87,7 @@ async def _load_catalog_snapshot(
     if not rows:
         raise ValueError(
             f"No active vehicle types available for depot_id={depot_id!r}. "
-            "The optimizer never falls back to a built-in default catalog — "
+            "The optimizer never falls back to a built-in default catalog - "
             "seed or activate at least one row in vehicle_type_catalog."
         )
     return tuple(
@@ -136,7 +136,7 @@ class AssignmentConfig:
     two_person_lift_service_multiplier: float = 2.0
     # Clock time the vehicle leaves the depot. Time-window compliance
     # compares simulated *clock* time against each parcel's HH:MM window,
-    # so this baseline matters — starting the simulation at minute 0
+    # so this baseline matters - starting the simulation at minute 0
     # (midnight) would make every daytime window unreachable. Defaults from
     # `settings` so it is configurable without touching this dataclass.
     depot_departure_time: str = settings.depot_departure_time
@@ -150,7 +150,7 @@ class AssignmentConfig:
 def slot_budget(
     parcels: list, catalog: tuple[VehicleTypeSpec, ...], config: AssignmentConfig, n_warm_clusters: int = 0
 ) -> int:
-    """K, the number of vehicle slots *offered* to the GA — an upper bound
+    """K, the number of vehicle slots *offered* to the GA - an upper bound
     on distinct slots, never a floor: the GA can legally leave slots empty
     or put every parcel in one slot, so a tighter K only means less wasted
     search space to consolidate out of, not a change to what's reachable.
@@ -159,9 +159,9 @@ def slot_budget(
     range, replacing the old flat `n_parcels / min_parcels_per_vehicle`
     estimate (which didn't know the catalog even existed):
 
-    - `k_min`: the fewest vehicles physically possible at all — total
+    - `k_min`: the fewest vehicles physically possible at all - total
       demand against the single *largest*-capacity catalog type.
-    - `k_est`: a realistic planning estimate — total demand against a
+    - `k_est`: a realistic planning estimate - total demand against a
       *typical* (median-capacity) catalog type, inflated by `slot_slack`
       to leave room for the GA to actually use smaller/mixed types instead
       of only the median one.
@@ -210,7 +210,7 @@ def decode(row, n: int, K: int) -> tuple[dict[int, list[int]], np.ndarray]:
 def _dimension_fits(parcel, vehicle: VehicleTypeSpec) -> bool:
     """Constraint 4: does the parcel fit the cargo bay in *some* axis
     permutation (unless `loading_orientation_fixed`, which forbids
-    rotation)? Missing dimensions fall back to a volume-derived cube — by
+    rotation)? Missing dimensions fall back to a volume-derived cube - by
     the time parcels reach here Phase 1's importer should have already
     imputed real ones. Whenever the dimensions are imputed (flagged by the
     importer via `dimensions_imputed`, or imputed here because the object
@@ -243,12 +243,12 @@ def schedule_time_window_compliance(
     vehicle's actual nearest-neighbour tour, accumulating travel time from
     `avg_speed_kmh` plus a per-stop service time (doubled for
     `two_person_lift` parcels), and counts a parcel compliant only if the
-    vehicle's simulated arrival falls inside its own time window — i.e.
+    vehicle's simulated arrival falls inside its own time window - i.e.
     whether the delivery will actually be on time, not just whether two
     parcels' windows could theoretically coexist.
 
     A vehicle that arrives *before* a window opens waits for it rather than
-    failing compliance — real vehicles do this. Waiting consumes shift time,
+    failing compliance - real vehicles do this. Waiting consumes shift time,
     so it pushes the clock forward (an early stop can still cause a later
     stop to run late) and the total is returned for the metrics layer, even
     though it is not itself an objective.
@@ -294,7 +294,7 @@ def schedule_time_window_compliance(
 
 def vehicle_metrics(parcel_objs: list, vehicle: VehicleTypeSpec, config: AssignmentConfig) -> dict:
     """Aggregate metrics for one candidate (parcel set, vehicle type) pairing
-    — the building block for both the NSGA-II objectives and the persisted
+    - the building block for both the NSGA-II objectives and the persisted
     `VirtualVehicle`/`LoadPlan` summaries."""
     weight = sum(p.weight_kg for p in parcel_objs)
     volume = sum(p.volume_m3 for p in parcel_objs)
@@ -319,7 +319,7 @@ def vehicle_metrics(parcel_objs: list, vehicle: VehicleTypeSpec, config: Assignm
         "cost": cost,
         "util_weight": util_weight,
         "util_volume": util_volume,
-        # A van full of pillows is fully utilized — utilization is the
+        # A van full of pillows is fully utilized - utilization is the
         # binding resource, not weight alone (spec 3.2).
         "utilization": max(util_weight, util_volume),
         "ordered_parcels": ordered_parcels,
@@ -518,7 +518,7 @@ class AssignmentProblem(Problem):
             g_shift += max(0.0, m["return_time_minutes"] - minutes(vehicle.available_until))
 
         # Utilization is intentionally averaged per *vehicle*, not weighted
-        # by parcel count — it answers "how well-loaded is a typical
+        # by parcel count - it answers "how well-loaded is a typical
         # vehicle", not "how well-loaded is a typical parcel's vehicle".
         # Compliance below is weighted by parcel count instead, per the
         # spec's f3 definition (compliant parcels / total parcels); the two
@@ -548,7 +548,7 @@ class AssignmentProblem(Problem):
 
 class WarmStartSampling(Sampling):
     """Seeds a few individuals from the capacity-aware repaired clusters
-    (Phase 2) instead of leaving the whole initial population random —
+    (Phase 2) instead of leaving the whole initial population random -
     gives NSGA-II a feasible starting region to search from (spec 3.3)."""
 
     def __init__(self, warm_start_rows: list[np.ndarray] | None = None, n_warm_start: int = 5):
@@ -973,7 +973,7 @@ def run_nsga2(
     warm_start_clusters: dict[int, list] | None = None,
 ):
     """Runs NSGA-II and returns `(problem, res)` with `res.F`/`res.X`/`res.G`
-    intact — never discarded, unlike the defect this replaces. `seed` is
+    intact - never discarded, unlike the defect this replaces. `seed` is
     always threaded from the caller; nothing in this module hardcodes one."""
     if not parcels:
         raise ValueError("No parcels to assign.")

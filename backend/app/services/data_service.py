@@ -3,7 +3,7 @@
 Satisfies FR01 (ingestion) and FR02 (constraint-aware preprocessing). Every
 row is validated field-by-field and every failure is collected into a
 structured report instead of being swallowed by a bare `except Exception`
-(the defect this replaces) — the caller can see exactly which rows were
+(the defect this replaces) - the caller can see exactly which rows were
 skipped and why, and which rows were accepted with a caveat.
 """
 import csv
@@ -13,16 +13,15 @@ from datetime import date
 from typing import Optional
 
 from pydantic import ValidationError
-from beanie.odm.utils.encoder import Encoder
-
 from app.core.config import settings
+from app.db.bson import encode_mongo_document
 from app.models.parcel import Parcel
-from app.schemas.parcel import ParcelIn
+from app.schemas.parcel import ParcelCreate, ParcelIn
 
 logger = logging.getLogger(__name__)
 
 def _mongo_update_fields(parcel: Parcel) -> dict:
-    data = Encoder().encode(parcel)
+    data = encode_mongo_document(parcel)
     data.pop("_id", None)
     data.pop("revision_id", None)
     return data
@@ -270,10 +269,17 @@ async def _upsert_parcel(payload: ParcelIn) -> Parcel:
     await obj.save()
     return obj
 
+async def _create_parcel(payload: ParcelCreate) -> Parcel | None:
+    if await Parcel.find_one(Parcel.parcel_id == payload.parcel_id) is not None:
+        return None
+    obj = Parcel(**payload.model_dump())
+    await obj.insert()
+    return obj
+
 
 async def _bulk_upsert_parcels(payloads: list[ParcelIn]) -> tuple[int, int]:
     """Bulk insert/update path used by `import_csv` (F10). `upsert_parcel`
-    ran one SELECT and one COMMIT per row — 36,000 of each on the project's
+    ran one SELECT and one COMMIT per row - 36,000 of each on the project's
     real dataset, making the importer unusable at that scale. This instead
     preloads every existing `parcel_id` in one (chunked) query, partitions
     the payloads into inserts and updates in memory, and applies them with
@@ -321,7 +327,7 @@ async def _import_csv(
 ) -> dict:
     """Import the minimal 8-column format or the full upstream dataset
     (rich column names are mapped via COLUMN_ALIASES). Never raises on a
-    per-row problem — every failure is collected and returned so the caller
+    per-row problem - every failure is collected and returned so the caller
     can see exactly what happened, instead of a bare except swallowing it."""
     if bounds is None:
         bounds = _default_bounds()
@@ -378,6 +384,11 @@ def upsert_parcel(*args, **kwargs):
     if args and hasattr(args[0], "run"):
         return args[0].run(_upsert_parcel(*args[1:], **kwargs))
     return _upsert_parcel(*args, **kwargs)
+
+def create_parcel(*args, **kwargs):
+    if args and hasattr(args[0], "run"):
+        return args[0].run(_create_parcel(*args[1:], **kwargs))
+    return _create_parcel(*args, **kwargs)
 
 def import_csv(*args, **kwargs):
     if args and hasattr(args[0], "run"):

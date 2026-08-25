@@ -34,6 +34,7 @@ FIELD_DATA_VEHICLE_TYPES = [
     VehicleTypeCatalogIn(
         code="BIKE",
         display_name="Delivery Scooter/Bike",
+        category="Motorcycle/Scooter",
         model_name="Honda Dio / TVS HLX",
         capacity_kg=25.0,
         capacity_m3=0.07,
@@ -60,6 +61,7 @@ FIELD_DATA_VEHICLE_TYPES = [
     VehicleTypeCatalogIn(
         code="APE_CARGO",
         display_name="Piaggio Ape Cargo",
+        category="Three Wheeler",
         model_name="Piaggio Ape Xtra LDX",
         capacity_kg=496.0,
         capacity_m3=2.90,
@@ -86,6 +88,7 @@ FIELD_DATA_VEHICLE_TYPES = [
     VehicleTypeCatalogIn(
         code="TVS_KING",
         display_name="TVS King Kargo",
+        category="Three Wheeler",
         model_name="TVS King Kargo HD",
         capacity_kg=450.0,
         capacity_m3=3.40,
@@ -112,6 +115,7 @@ FIELD_DATA_VEHICLE_TYPES = [
     VehicleTypeCatalogIn(
         code="MICRO_VAN",
         display_name="Micro/Small Van",
+        category="Van",
         model_name="Suzuki Every (DA17V)",
         capacity_kg=350.0,
         capacity_m3=2.98,
@@ -138,6 +142,7 @@ FIELD_DATA_VEHICLE_TYPES = [
     VehicleTypeCatalogIn(
         code="VAN_MED",
         display_name="Medium Commercial Van",
+        category="Van",
         model_name="Toyota HiAce / Nissan KDH",
         capacity_kg=1100.0,
         capacity_m3=6.00,
@@ -170,6 +175,7 @@ FIELD_DATA_VEHICLE_TYPES = [
     VehicleTypeCatalogIn(
         code="TRUCK_2T",
         display_name="Light Commercial Truck (2T)",
+        category="Truck",
         model_name="Isuzu Elf (NKR/NPR)",
         capacity_kg=2500.0,
         capacity_m3=12.48,
@@ -196,6 +202,7 @@ FIELD_DATA_VEHICLE_TYPES = [
     VehicleTypeCatalogIn(
         code="TRUCK_4T",
         display_name="Medium Duty Truck (4T)",
+        category="Truck",
         model_name="Isuzu Forward / Hino 300",
         capacity_kg=4500.0,
         capacity_m3=24.02,

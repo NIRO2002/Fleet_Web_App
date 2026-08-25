@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 class VehicleTypeCatalogIn(BaseModel):
     code: str = Field(min_length=1, max_length=32)
     display_name: str = Field(min_length=1, max_length=128)
+    category: Optional[str] = Field(default=None, max_length=64)
 
     capacity_kg: float = Field(gt=0)
     capacity_m3: float = Field(gt=0)
@@ -48,6 +49,14 @@ class VehicleTypeCatalogIn(BaseModel):
     @classmethod
     def uppercase_code(cls, value: str) -> str:
         return value.strip().upper()
+
+    @field_validator("category")
+    @classmethod
+    def strip_optional_category(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return value
+        value = value.strip()
+        return value or None
 
     @field_validator("available_from", "available_until")
     @classmethod

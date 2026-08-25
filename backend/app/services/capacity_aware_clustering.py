@@ -11,14 +11,14 @@ so its marginal contribution can be ablated in the evaluation harness
 Two operations, applied in this order: recursively split clusters that
 don't fit any catalog vehicle, then greedily merge clusters that are small
 enough to share one vehicle and close enough in space and time. This is
-split-and-merge, not split-merge-peel — a third "peel" operation (grouping
+split-and-merge, not split-merge-peel - a third "peel" operation (grouping
 hazmat/refrigerated parcels into their own clusters before splitting) was
 dropped in Fix Pass 3 G1 when hazmat/refrigeration vehicle-eligibility
 constraints were descoped from NSGA-II (out of scope for commercial
 last-mile delivery; see docs/DESIGN_DECISIONS.md). Merge still keeps
 clusters with different handling classes apart (`_cluster_handling_key`)
 purely because merging, say, a hazardous cluster into a non-hazardous one
-would misrepresent the resulting cluster's contents — an independent reason
+would misrepresent the resulting cluster's contents - an independent reason
 that doesn't depend on peel existing.
 """
 from dataclasses import dataclass, field, replace
