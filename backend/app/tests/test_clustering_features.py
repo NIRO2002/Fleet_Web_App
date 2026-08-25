@@ -22,6 +22,8 @@ def parcels(n=12):
         length_cm=20 + i, width_cm=15 + i, height_cm=10 + i,
         time_window_start="08:00", time_window_end="12:00",
         fragile=bool(i % 2), stackable=not bool(i % 3),
+        loading_orientation_fixed=False, do_not_tilt=False,
+        max_stack_weight_kg=0.0, two_person_lift=False,
     ) for i in range(n)]
 
 
@@ -109,10 +111,33 @@ def test_clustering_and_capacity_repair_are_deterministic_and_conservative():
         parcel.parcel_id for members in first.clusters.values() for parcel in members
     }
     assert len(assignment_a) == len({parcel_id for parcel_id, _ in assignment_a})
-    assert all(_fits_some_vehicle(members, FIELD_DATA_VEHICLE_TYPES) for members in first.clusters.values())
-    assert all(cluster_id >= 0 for cluster_id in first.clusters)
-    assert first.excluded_infeasible_count == 0
-    assert all(row == {"feasible": True, "reason": None} for row in first.cluster_status.values())
+    assert all(
+        _fits_some_vehicle(members, FIELD_DATA_VEHICLE_TYPES)
+        for cluster_id, members in first.clusters.items() if cluster_id >= 0
+    )
+    if -1 in first.clusters:
+        assert first.cluster_status[-1] == {"feasible": False, "reason": "hdbscan_noise"}
+        assert all(parcel.cluster_id == -1 for parcel in first.clusters[-1])
+    assert first.excluded_infeasible_count == int(-1 in first.clusters)
+    assert all(
+        row == {"feasible": True, "reason": None}
+        for cluster_id, row in first.cluster_status.items() if cluster_id >= 0
+    )
+
+
+def test_capacity_repair_never_mints_clusters_from_noise():
+    rows = parcels(4)
+    rows[0].cluster_id = rows[1].cluster_id = 3
+    rows[2].cluster_id = rows[3].cluster_id = -1
+
+    grouped = group_by_cluster(rows)
+    assert grouped[-1] == rows[2:]
+
+    repaired = repair_clusters(grouped, FIELD_DATA_VEHICLE_TYPES, seed=0)
+    assert repaired.clusters[-1] == rows[2:]
+    assert repaired.cluster_status[-1] == {"feasible": False, "reason": "hdbscan_noise"}
+    assert all(parcel.cluster_id == -1 for parcel in rows[2:])
+    assert all(parcel not in repaired.clusters.get(0, []) for parcel in rows[2:])
 
 
 def test_real_priority_is_valid_and_unknown_priority_is_rejected():

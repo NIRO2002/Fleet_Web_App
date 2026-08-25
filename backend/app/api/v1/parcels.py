@@ -165,11 +165,9 @@ async def train_clustering(
                     n_merged += repaired.n_merged
                     excluded_infeasible_count += repaired.excluded_infeasible_count
                 n_clusters_post_repair += _distinct_cluster_count(instance_parcels)
-        # Final, post-repair count of parcels left genuinely unassignable
-        # (cluster_id still -1) -- smaller than noise_count, which is
-        # HDBSCAN's raw pre-reassignment noise, since repair gets a second,
-        # capacity-aware chance to merge noise-origin parcels into a real
-        # cluster (see repair_planning_instance). Surfaced so the UI can
+        # Final count of parcels left genuinely unassignable (cluster_id
+        # still -1). Repair operates only on real HDBSCAN clusters and never
+        # launders noise into a positive cluster. Surfaced so the UI can
         # show it; these parcels are never auto-optimized (see
         # GET /parcels/clustering/unassigned).
         unassigned_count = sum(1 for p in parcels if p.cluster_id == -1)

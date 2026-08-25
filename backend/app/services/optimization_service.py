@@ -187,6 +187,7 @@ async def _optimize_load(
                 "load_volume_m3": m["volume"],
                 "utilization_weight": m["util_weight"],
                 "utilization_volume": m["util_volume"],
+                "cost_per_parcel": m["cost"] / m["count"],
                 "estimated_distance_km": m["distance"],
                 "time_window_compliance": m["compliance"],
                 "fleet_cost": m["cost"],
@@ -224,6 +225,7 @@ async def _optimize_load(
         total_distance_km=sum(distances),
         mean_time_window_compliance=sum(compliances) / len(compliances) if compliances else 0.0,
         total_fleet_cost=sum(costs),
+        cost_per_parcel=sum(costs) / len(parcels),
         hypervolume=front_hypervolume,
         runtime_seconds=time.perf_counter() - started,
         vehicles=virtual_vehicles,
@@ -275,11 +277,17 @@ async def _optimize_load(
         "pareto_solutions": [
             {
                 "utilization": -row[0],
+                "cost_per_parcel": row[3] / len(parcels),
                 "estimated_distance_km": row[1],
                 "time_window_compliance": -row[2],
                 "fleet_cost": row[3],
+                "n_vehicles": sum(
+                    bool(members)
+                    for members in decode(X[solution_idx], problem.n, problem.K)[0].values()
+                ),
+                "selected": solution_idx == idx,
             }
-            for row in F.tolist()
+            for solution_idx, row in enumerate(F.tolist())
         ],
         "hypervolume": front_hypervolume,
         "slot_budget": problem.K,

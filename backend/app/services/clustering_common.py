@@ -287,10 +287,8 @@ def handle_noise(
                 new_labels[i] = best_lbl
                 assigned = True
         if not assigned:
-            # Keep genuinely unassignable points as noise until capacity
-            # repair, where they are represented as marked singleton inputs
-            # and can be merged under the same feasibility rules as any
-            # other undersized cluster.
+            # Keep genuinely unassignable points as noise. Capacity repair
+            # never converts HDBSCAN noise into an ordinary cluster.
             new_labels[i] = -1
 
     return new_labels
