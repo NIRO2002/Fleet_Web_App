@@ -23,6 +23,7 @@ import {
 import { DEFAULT_DEPOT } from '../data/mockData'
 import { ParetoParallelCoordinates } from '../components/ParetoParallelCoordinates'
 import { optimizationService } from '../services/optimizationService'
+import { parcelService } from '../services/parcelService'
 import { vehicleTypeService } from '../services/vehicleTypeService'
 import type {
   ClusterSummary,
@@ -92,11 +93,14 @@ export function LoadOptimizationPage() {
   // navState (an explicit "Optimize" click from another page) always wins over
   // whatever was left in this page's own session from a previous visit.
   const [mode, setMode] = useState<'cluster' | 'parcels' | 'all'>(() => {
+    if (navState?.clusterId !== undefined) return 'cluster'
     if (navState?.clusterIds && navState.clusterIds.length > 0) return 'all'
     if (navState?.parcelIds && navState.parcelIds.length > 0) return 'parcels'
     return readSession('optimize.mode', 'cluster')
   })
-  const [clusterSummary] = useState<ClusterSummary | null>(null)
+  const [clusterSummary, setClusterSummary] = useState<ClusterSummary | null>(null)
+  const [clustersLoading, setClustersLoading] = useState(false)
+  const [clustersError, setClustersError] = useState('')
   const [selectedCluster, setSelectedCluster] = useState(() =>
     navState?.clusterId !== undefined ? String(navState.clusterId) : readSession('optimize.selectedCluster', ''),
   )
@@ -127,6 +131,26 @@ export function LoadOptimizationPage() {
   useEffect(() => {
     writeSession('optimize.result', result)
   }, [result])
+
+  useEffect(() => {
+    if (!navState?.depotId || !navState?.deliveryDate) {
+      setClusterSummary(null)
+      setClustersError('')
+      return
+    }
+    let active = true
+    setClustersLoading(true)
+    setClustersError('')
+    parcelService.getClusterSummary(navState.depotId, navState.deliveryDate)
+      .then((summary) => { if (active) setClusterSummary(summary) })
+      .catch((err) => {
+        if (!active) return
+        setClusterSummary(null)
+        setClustersError(err instanceof Error ? err.message : 'Failed to load clusters for this planning instance.')
+      })
+      .finally(() => { if (active) setClustersLoading(false) })
+    return () => { active = false }
+  }, [navState?.depotId, navState?.deliveryDate])
 
   useEffect(() => {
     if (!running) return
@@ -194,7 +218,7 @@ export function LoadOptimizationPage() {
   }, [clusterSummary])
 
   const batchClusterIds = useMemo(() => {
-    if (navState?.clusterIds && navState.clusterIds.length > 0) return navState.clusterIds
+    if (navState?.clusterIds && navState.clusterIds.length > 0) return navState.clusterIds.filter((id) => id >= 0)
     return clusterChoices.map((c) => c.id)
   }, [navState, clusterChoices])
 
@@ -419,7 +443,9 @@ export function LoadOptimizationPage() {
                     </option>
                   ))}
                 </select>
-                {clusterChoices.length === 0 && (
+                {clustersLoading && <p className="mt-1.5 text-xs font-medium text-fleet-muted">Loading clusters…</p>}
+                {clustersError && <p className="mt-1.5 text-xs font-bold text-red-600">{clustersError}</p>}
+                {!clustersLoading && !clustersError && clusterChoices.length === 0 && (
                   <p className="mt-1.5 text-xs font-medium text-fleet-muted">
                     No clusters yet - train HDBSCAN on the Parcel Consolidation page first.
                   </p>
