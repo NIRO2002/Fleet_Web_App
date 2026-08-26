@@ -733,3 +733,24 @@ clusters of size at most five `0/0/0/1/4`; share of all parcels in those
 small positive clusters `0%/0%/0%/0.6875%/2.25%`; and unassigned parcels
 `34/58.5/71/79/94`. E3 and F4 must be re-evaluated against this distribution,
 not the prior noise-laundered singleton tail.
+
+## Catalog-feasible staged rescue of HDBSCAN noise (2026-08-26)
+
+The earlier rule that every original HDBSCAN noise point must remain `-1`
+has been superseded by a deterministic, feasibility-gated rescue pipeline.
+Original provenance remains immutable as `is_noise=true`; assignment outcome
+is recorded separately. Noise first tries the nearest real cluster within the
+configured radius, considering candidates in `(distance, cluster_id)` order
+and accepting only a cluster that fits at least one catalog vehicle. Remaining
+points form deterministic, geographically local feasible rescue groups. A
+remaining parcel becomes a positive singleton only if it physically and
+temporally fits a catalog vehicle. Otherwise it stays `cluster_id=-1` with an
+explicit reason.
+
+All three rescue stages and capacity-aware repair call the same
+placement-aware feasibility module. The live training endpoint and evaluation
+harness call the same rescue function before the same repair function; K-Means
+is an explicit no-op because it produces no HDBSCAN noise. Split and merge
+rules for ordinary positive clusters are unchanged. `is_noise` therefore means
+“originally labelled noise”, while `noise_resolution` and
+`cluster_assignment_status` describe the current, auditable outcome.

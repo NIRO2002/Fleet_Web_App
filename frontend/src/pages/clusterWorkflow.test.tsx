@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 
 vi.mock('../services/parcelService', () => ({ parcelService: {
   getClusterSummary: vi.fn(), listDepots: vi.fn(), priorityLevels: vi.fn(), serviceTypes: vi.fn(),
-  listPage: vi.fn(), listForInstance: vi.fn(), trainClustering: vi.fn(), create: vi.fn(), uploadCsv: vi.fn(),
+  listPage: vi.fn(), listForInstance: vi.fn(), listUnassigned: vi.fn(), trainClustering: vi.fn(), create: vi.fn(), uploadCsv: vi.fn(),
 } }))
 vi.mock('../services/optimizationService', () => ({ optimizationService: {
   run: vi.fn(), listVirtualVehicles: vi.fn(), insertParcel: vi.fn(),

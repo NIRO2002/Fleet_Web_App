@@ -29,7 +29,8 @@ from sklearn.cluster import KMeans
 
 from app.core.config import settings
 from app.models.parcel import Parcel
-from app.optimization.placement import attempt_placement
+from app.services.cluster_feasibility import fits_some_vehicle as _shared_fits
+from app.services.cluster_feasibility import fits_some_vehicle_details as _shared_fits_details
 from app.services.clustering_common import project_to_metric
 from app.utils_time import minutes
 
@@ -72,57 +73,16 @@ def _fits_some_vehicle(
     parcels: list[Parcel], vehicle_catalog, config: RepairConfig | None = None,
     depot_lat: float = settings.depot_latitude, depot_lon: float = settings.depot_longitude,
 ) -> bool:
-    fits, _ = _fits_some_vehicle_details(
-        parcels, vehicle_catalog, config, depot_lat, depot_lon
-    )
-    return fits
+    return _shared_fits(parcels, vehicle_catalog, config or RepairConfig(), depot_lat, depot_lon)
 
 
 def _fits_some_vehicle_details(
     parcels: list[Parcel], vehicle_catalog, config: RepairConfig | None = None,
     depot_lat: float = settings.depot_latitude, depot_lon: float = settings.depot_longitude,
 ) -> tuple[bool, bool]:
-    """Return fit plus whether time rejected an otherwise eligible vehicle."""
-    config = config or RepairConfig()
-    if not vehicle_catalog:
-        return False, False
-    total_weight = sum(p.weight_kg for p in parcels)
-    total_volume = sum(p.volume_m3 for p in parcels)
-    longest_side = max(
-        (max(p.length_cm or 0.0, p.width_cm or 0.0, p.height_cm or 0.0) for p in parcels),
-        default=0.0,
-    )
-    temporal_diameter_km = 0.0
-    reachable_span = 0
-    temporal_rejected = False
-    if config.enforce_temporal_feasibility and len(parcels) > 1:
-        starts = [minutes(p.time_window_start) for p in parcels]
-        ends = [minutes(p.time_window_end) for p in parcels]
-        reachable_span = max(ends) - min(starts)
-        coords = project_to_metric(parcels, depot_lat, depot_lon)
-        # Two-sweep farthest-point lower bound: O(n), deterministic, and
-        # deliberately cheaper than the former O(n^2) distance matrix.
-        first = int(np.argmax(np.linalg.norm(coords - coords[0], axis=1)))
-        temporal_diameter_km = float(np.max(np.linalg.norm(coords - coords[first], axis=1)))
-    for vehicle in vehicle_catalog:
-        if total_weight > vehicle.capacity_kg or total_volume > vehicle.capacity_m3:
-            continue
-        if vehicle.max_parcels is not None and len(parcels) > vehicle.max_parcels:
-            continue
-        cargo_longest = max(vehicle.cargo_length_cm, vehicle.cargo_width_cm, vehicle.cargo_height_cm)
-        if longest_side > cargo_longest:
-            continue
-        if config.enforce_temporal_feasibility and len(parcels) > 1:
-            lower_bound_minutes = (
-                len(parcels) * config.service_time_minutes
-                + temporal_diameter_km / max(vehicle.avg_speed_kmh, 1e-6) * 60.0
-            )
-            if lower_bound_minutes > reachable_span:
-                temporal_rejected = True
-                continue
-        if attempt_placement(parcels, vehicle, collect_exceptions=False) is not None:
-            return True, temporal_rejected
-    return False, temporal_rejected
+    """Compatibility tuple wrapper over the shared feasibility source."""
+    result = _shared_fits_details(parcels, vehicle_catalog, config or RepairConfig(), depot_lat, depot_lon)
+    return result.feasible, result.temporal_rejected
 
 
 def _split_decision_inputs(parcels, vehicle_catalog) -> dict:

@@ -45,6 +45,9 @@ export interface Parcel extends ParcelInput {
   status: string
   dimensions_imputed: boolean
   is_noise: boolean
+  cluster_assignment_status: 'NORMAL_CLUSTER' | 'NOISE_RESCUED' | 'UNASSIGNED' | null
+  noise_resolution: 'NEAREST_FEASIBLE_CLUSTER' | 'RESCUE_GROUP' | 'SINGLETON' | 'UNRESOLVED' | null
+  unassigned_reason: string | null
 }
 
 /** String-valued mirror of ParcelInput used for controlled form fields. */
@@ -115,6 +118,14 @@ export interface ClusteringTrainResult {
    * infeasible cluster reassigned to -1/unassigned). */
   n_clusters_post_repair: number
   noise_count: number
+  noise_rescue: {
+    joined_existing_count: number
+    rescue_group_count: number
+    rescue_group_parcel_count: number
+    singleton_count: number
+    unresolved_count: number
+  }
+  unassigned_by_reason: Record<string, number>
   /** Final, post-repair count of parcels left genuinely unassignable
    * (cluster_id still -1) - smaller than noise_count, which is HDBSCAN's
    * raw pre-reassignment noise. See GET /parcels/clustering/unassigned. */

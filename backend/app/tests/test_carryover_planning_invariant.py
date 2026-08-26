@@ -83,6 +83,10 @@ def test_cluster_repair_and_optimization_resolve_the_same_carryover_set(monkeypa
         repaired = await clustering_service.repair_planning_instance(
             "D-CMB-001", clustered, depot_lat=6.9271, depot_lon=79.8612,
         )
+        repaired_unassigned = next(p for p in clustered if p.parcel_id == "UNASSIGNED")
+        assert repaired_unassigned.is_noise is False
+        assert repaired_unassigned.cluster_id == -1
+        assert repaired_unassigned.unassigned_reason == "NO_FITTING_VEHICLE"
 
         async def fake_get_depot(_depot_id):
             return SimpleNamespace(lat=6.9271, lng=79.8612, operating_hours_end="20:00", vehicle_capacity=20)
