@@ -45,14 +45,26 @@ async def run_once(worker_id: str):
     return True
 
 
+async def run_forever(worker_id: str):
+    """Claim/execute jobs until cancelled. Never raises: a bad iteration is
+    logged and retried after the poll interval instead of killing the loop
+    and silently leaving the queue unprocessed."""
+    while True:
+        try:
+            worked = await run_once(worker_id)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            worked = False
+        if not worked:
+            await asyncio.sleep(settings.optimization_worker_poll_seconds)
+
+
 async def main():
     client = await init_database()
     worker_id = f"{socket.gethostname()}-{uuid.uuid4().hex[:8]}"
     try:
-        while True:
-            worked = await run_once(worker_id)
-            if not worked:
-                await asyncio.sleep(settings.optimization_worker_poll_seconds)
+        await run_forever(worker_id)
     finally:
         client.close()
 

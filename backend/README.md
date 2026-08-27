@@ -85,15 +85,20 @@ The integration placeholders `GET /vehicles/status`, `/maintenance/status`, `/pr
 - Vehicle capacities and costs always come from `vehicle_type_catalog`; load plans retain a catalog snapshot for reproducibility.
 # Background optimization worker
 
-Optimization jobs are persisted in MongoDB and executed outside the API
-process. Run one worker by default from the `backend` directory:
+Optimization jobs are persisted in MongoDB and processed by a claim/execute
+loop. By default (`run_optimization_worker_inprocess=True`) the API process
+runs this loop itself as a background asyncio task, so a lone
+`uvicorn app.main:app --reload` is enough for jobs to actually get worked --
+restarting the API also restarts job processing, and `recover_stale_jobs`
+requeues anything a previous process abandoned mid-run.
+
+For horizontal scaling in production, set `run_optimization_worker_inprocess=False`
+and run one or more standalone workers instead:
 
 ```powershell
 python -m app.workers.optimization_worker
 ```
 
-Use separate terminals for the API (`uvicorn app.main:app --reload`), this
-worker, and the frontend (`npm run dev`). A stale RUNNING job is marked FAILED
-and its still-owned parcel reservations are released; it is not automatically
-retried because a crashed execution may already have partially persisted a
-plan.
+A stale RUNNING job is marked FAILED and its still-owned parcel reservations
+are released; it is not automatically retried because a crashed execution may
+already have partially persisted a plan.
