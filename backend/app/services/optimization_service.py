@@ -258,6 +258,7 @@ async def _optimize_load(
                 "cluster_id": None,
                 "cluster_probability": None,
                 "is_noise": False,
+                "optimization_job_id": None,
             })},
         )
         for p in parcels

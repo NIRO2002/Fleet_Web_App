@@ -48,6 +48,7 @@ export interface Parcel extends ParcelInput {
   cluster_assignment_status: 'NORMAL_CLUSTER' | 'NOISE_RESCUED' | 'UNASSIGNED' | null
   noise_resolution: 'NEAREST_FEASIBLE_CLUSTER' | 'RESCUE_GROUP' | 'SINGLETON' | 'UNRESOLVED' | null
   unassigned_reason: string | null
+  optimization_job_id?: string | null
 }
 
 /** String-valued mirror of ParcelInput used for controlled form fields. */
@@ -202,6 +203,34 @@ export interface OptimizationResult {
   virtual_vehicle_ids: string[]
   pareto_solutions: ParetoSolution[]
 }
+
+export type OptimizationJobStatus = 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED'
+
+export interface OptimizationJob {
+  job_id: string
+  status: OptimizationJobStatus
+  job_type: 'SINGLE_CLUSTER' | 'PARCEL_SET'
+  batch_id: string | null
+  cluster_id: number | null
+  depot_id: string
+  delivery_date: string
+  parcel_ids: string[]
+  progress_percent: number
+  stage: string
+  message: string
+  plan_id: string | null
+  virtual_vehicle_ids: string[]
+  result_summary: { n_parcels?: number; n_vehicles?: number; cluster_id?: number | null; partial_plan_ids?: string[] } | null
+  error_code: string | null
+  error_message: string | null
+  created_at: string
+  started_at: string | null
+  completed_at: string | null
+  updated_at: string
+  created?: boolean
+}
+
+export interface OptimizationBatchResult { batch_id: string; jobs: OptimizationJob[] }
 
 export interface ParetoSolution {
   utilization: number

@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     # didn't warrant a larger budget, this one does.
     nsga2_population: int = 100
     nsga2_generations: int = 200
+    optimization_job_lease_seconds: int = 120
+    optimization_worker_poll_seconds: float = 2.0
 
     # Clock time the vehicle leaves the depot, used to simulate time-window
     # compliance (Phase 3.2) - starting the simulation at midnight would

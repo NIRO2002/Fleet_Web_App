@@ -23,6 +23,7 @@ import {
 import { DEFAULT_DEPOT } from '../data/mockData'
 import { ParetoParallelCoordinates } from '../components/ParetoParallelCoordinates'
 import { optimizationService } from '../services/optimizationService'
+import { OPTIMIZATION_JOBS_CHANGED } from '../components/OptimizationJobTracker'
 import { parcelService } from '../services/parcelService'
 import { vehicleTypeService } from '../services/vehicleTypeService'
 import type {
@@ -152,20 +153,10 @@ export function LoadOptimizationPage() {
     return () => { active = false }
   }, [navState?.depotId, navState?.deliveryDate])
 
-  useEffect(() => {
-    if (!running) return
-    setRunProgress(8)
-    const timer = window.setInterval(() => {
-      // Eases toward 90% while the request is in flight; real completion snaps to 100.
-      setRunProgress((prev) => (prev >= 90 ? 90 : prev + (90 - prev) * 0.12))
-    }, 250)
-    return () => window.clearInterval(timer)
-  }, [running])
-
   const [batchRunning, setBatchRunning] = useState(false)
   const [batchIndex, setBatchIndex] = useState(-1)
   const [batchClusterProgress, setBatchClusterProgress] = useState(0)
-  const [batchResults, setBatchResults] = useState<BatchResult[]>(() => readSession('optimize.batchResults', []))
+  const [batchResults] = useState<BatchResult[]>(() => readSession('optimize.batchResults', []))
 
   useEffect(() => {
     writeSession('optimize.batchResults', batchResults)
@@ -257,14 +248,13 @@ export function LoadOptimizationPage() {
 
     setRunning(true)
     try {
-      const response = await optimizationService.run(payload)
-      setRunProgress(100)
-      setResult(response)
+      const job = await optimizationService.createJob(payload)
+      setRunProgress(job.progress_percent)
       setRunNotice({
         tone: 'success',
-        text: `Optimization created ${response.virtual_vehicle_ids.length} virtual vehicle${response.virtual_vehicle_ids.length === 1 ? '' : 's'}.`,
+        text: job.created === false ? `Optimization is already queued/running (${job.job_id}).` : `Optimization queued (${job.job_id}). You can safely navigate away.`,
       })
-      await refreshVehicles()
+      window.dispatchEvent(new Event(OPTIMIZATION_JOBS_CHANGED))
     } catch (err) {
       setRunProgress(0)
       setRunNotice({ tone: 'error', text: err instanceof Error ? err.message : 'Optimization run failed.' })
@@ -293,42 +283,16 @@ export function LoadOptimizationPage() {
     }
     const { depotId, deliveryDate } = navState
 
-    setBatchResults([])
     setBatchRunning(true)
-    for (let i = 0; i < batchClusterIds.length; i += 1) {
-      const clusterId = batchClusterIds[i]
-      setBatchIndex(i)
-      setBatchClusterProgress(8)
-      const timer = window.setInterval(() => {
-        setBatchClusterProgress((prev) => (prev >= 90 ? 90 : prev + (90 - prev) * 0.12))
-      }, 200)
-      try {
-        const response = await optimizationService.run({
-          cluster_id: clusterId,
-          depot_id: depotId,
-          delivery_date: deliveryDate,
-          depot_latitude: lat,
-          depot_longitude: lon,
-        })
-        setBatchClusterProgress(100)
-        setBatchResults((prev) => [...prev, { clusterId, status: 'success', result: response }])
-      } catch (err) {
-        setBatchClusterProgress(100)
-        setBatchResults((prev) => [
-          ...prev,
-          { clusterId, status: 'error', message: err instanceof Error ? err.message : 'Optimization failed.' },
-        ])
-      } finally {
-        window.clearInterval(timer)
-      }
+    try {
+      const response = await optimizationService.createBatch({ cluster_ids: batchClusterIds, depot_id: depotId, delivery_date: deliveryDate, depot_latitude: lat, depot_longitude: lon })
+      setRunNotice({ tone: 'success', text: `Queued ${response.jobs.length} cluster optimizations in ${response.batch_id}. You can safely navigate away.` })
+      window.dispatchEvent(new Event(OPTIMIZATION_JOBS_CHANGED))
+    } catch (err) {
+      setRunNotice({ tone: 'error', text: err instanceof Error ? err.message : 'Failed to queue optimization batch.' })
+    } finally {
+      setBatchRunning(false); setBatchIndex(-1); setBatchClusterProgress(0)
     }
-    setBatchRunning(false)
-    setBatchIndex(-1)
-    await refreshVehicles()
-    setRunNotice({
-      tone: 'success',
-      text: `Optimized ${batchClusterIds.length} cluster${batchClusterIds.length === 1 ? '' : 's'}.`,
-    })
   }
 
   const handleFormSubmit = async (event: FormEvent<HTMLFormElement>) => {

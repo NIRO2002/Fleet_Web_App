@@ -74,6 +74,7 @@ class ParcelResponse(ParcelIn):
     cluster_assignment_status: Optional[str] = None
     noise_resolution: Optional[str] = None
     unassigned_reason: Optional[str] = None
+    optimization_job_id: Optional[str] = None
     special_handling: bool = False
 
 class ClusterPredictionRequest(BaseModel):

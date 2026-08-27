@@ -23,6 +23,7 @@ class FakeParcel:
     cluster_id: int
     status: str = "PENDING"
     plan_id: str | None = None
+    optimization_job_id: str | None = None
 
 
 class FakeDepot:

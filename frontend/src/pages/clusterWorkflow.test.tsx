@@ -7,7 +7,7 @@ vi.mock('../services/parcelService', () => ({ parcelService: {
   listPage: vi.fn(), listForInstance: vi.fn(), listUnassigned: vi.fn(), trainClustering: vi.fn(), create: vi.fn(), uploadCsv: vi.fn(),
 } }))
 vi.mock('../services/optimizationService', () => ({ optimizationService: {
-  run: vi.fn(), listVirtualVehicles: vi.fn(), insertParcel: vi.fn(),
+  run: vi.fn(), createJob: vi.fn(), createBatch: vi.fn(), listJobs: vi.fn(), getJob: vi.fn(), listVirtualVehicles: vi.fn(), insertParcel: vi.fn(),
 } }))
 vi.mock('../services/vehicleTypeService', () => ({ vehicleTypeService: { list: vi.fn() } }))
 
@@ -32,6 +32,8 @@ beforeEach(() => {
   parcelMock.listPage.mockResolvedValue({ items: [], total: 105, limit: 50, offset: 0 })
   parcelMock.listForInstance.mockResolvedValue([])
   optimizationMock.listVirtualVehicles.mockResolvedValue([])
+  optimizationMock.listJobs.mockResolvedValue([])
+  optimizationMock.createJob.mockResolvedValue({ job_id: 'JOB-1', status: 'QUEUED', progress_percent: 0, created: true } as never)
   vehicleTypeMock.list.mockResolvedValue([])
 })
 
@@ -60,12 +62,11 @@ describe('cluster optimization workflow', () => {
   })
 
   it('sends the complete planning-instance scope for By Cluster optimization', async () => {
-    optimizationMock.run.mockImplementation(() => new Promise(() => {}))
     renderOptimization({ clusterId: 4, depotId: 'D-CMB-001', deliveryDate: '2026-01-05' })
     await screen.findByRole('option', { name: /Cluster 4/ })
     fireEvent.click(screen.getByRole('button', { name: /Run NSGA-II Optimization/ }))
-    await waitFor(() => expect(optimizationMock.run).toHaveBeenCalled())
-    expect(optimizationMock.run).toHaveBeenCalledWith(expect.objectContaining({
+    await waitFor(() => expect(optimizationMock.createJob).toHaveBeenCalled())
+    expect(optimizationMock.createJob).toHaveBeenCalledWith(expect.objectContaining({
       cluster_id: 4, depot_id: 'D-CMB-001', delivery_date: '2026-01-05',
       depot_latitude: expect.any(Number), depot_longitude: expect.any(Number),
     }))

@@ -44,6 +44,7 @@ class Parcel(Document):
     unassigned_reason: str | None = None
     status: str = "PENDING"
     plan_id: str | None = None
+    optimization_job_id: str | None = None
     carried_over_from_date: date | None = None
     created_at: datetime = Field(default_factory=utcnow)
 
