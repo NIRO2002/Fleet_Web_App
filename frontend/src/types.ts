@@ -204,7 +204,7 @@ export interface OptimizationResult {
   pareto_solutions: ParetoSolution[]
 }
 
-export type OptimizationJobStatus = 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED'
+export type OptimizationJobStatus = 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED'
 
 export interface OptimizationJob {
   job_id: string
@@ -223,6 +223,7 @@ export interface OptimizationJob {
   result_summary: { n_parcels?: number; n_vehicles?: number; cluster_id?: number | null; partial_plan_ids?: string[] } | null
   error_code: string | null
   error_message: string | null
+  cancel_requested: boolean
   created_at: string
   started_at: string | null
   completed_at: string | null

@@ -105,6 +105,72 @@ class _Awaitable:
         return get().__await__()
 
 
+def test_cancel_queued_job_is_immediate_and_releases_parcels(monkeypatch):
+    async def scenario():
+        client = await setup_db("jobs_cancel_queued", lambda: [parcel("Q1", 9)])
+        async def fake_depot(depot_id): return depot(depot_id)
+        monkeypatch.setattr(jobs, "get_depot_or_fail", fake_depot)
+        job, _ = await jobs.create_optimization_job(OptimizationRequest(
+            cluster_id=9, depot_id="D-CMB-001", delivery_date=TARGET,
+        ))
+        cancelled = await jobs.cancel_job(job.job_id)
+        assert cancelled.status == "CANCELLED"
+        assert (await Parcel.find_one(Parcel.parcel_id == "Q1")).optimization_job_id is None
+        with pytest.raises(HTTPException) as already_terminal:
+            await jobs.cancel_job(job.job_id)
+        assert already_terminal.value.status_code == 409
+        client.close()
+    asyncio.run(scenario())
+
+
+def test_cancel_running_job_flags_then_finalizes_as_cancelled(monkeypatch):
+    from app.optimization.assignment_problem import OptimizationCancelled
+
+    async def scenario():
+        client = await setup_db("jobs_cancel_running", lambda: [parcel("R1", 10)])
+        async def fake_depot(depot_id): return depot(depot_id)
+        monkeypatch.setattr(jobs, "get_depot_or_fail", fake_depot)
+        job, _ = await jobs.create_optimization_job(OptimizationRequest(
+            cluster_id=10, depot_id="D-CMB-001", delivery_date=TARGET,
+        ))
+        claimed = await jobs.claim_next_job("WORKER", 120)
+
+        flagged = await jobs.cancel_job(job.job_id)
+        assert flagged.status == "RUNNING" and flagged.cancel_requested is True
+
+        # Simulates assignment_problem._CancelCallback observing the flag
+        # mid-run and aborting the NSGA-II loop before anything persists.
+        async def cancelled_mid_run(*_args, **_kwargs):
+            raise OptimizationCancelled("stopped by test")
+        monkeypatch.setattr(jobs, "optimize_load", cancelled_mid_run)
+
+        await jobs.execute_claimed_job(claimed)
+        final = await OptimizationJob.find_one(OptimizationJob.job_id == job.job_id)
+        assert final.status == "CANCELLED"
+        assert (await Parcel.find_one(Parcel.parcel_id == "R1")).optimization_job_id is None
+        client.close()
+    asyncio.run(scenario())
+
+
+def test_delete_job_requires_terminal_status(monkeypatch):
+    async def scenario():
+        client = await setup_db("jobs_delete", lambda: [parcel("D1", 11)])
+        async def fake_depot(depot_id): return depot(depot_id)
+        monkeypatch.setattr(jobs, "get_depot_or_fail", fake_depot)
+        job, _ = await jobs.create_optimization_job(OptimizationRequest(
+            cluster_id=11, depot_id="D-CMB-001", delivery_date=TARGET,
+        ))
+        with pytest.raises(HTTPException) as active:
+            await jobs.delete_job(job.job_id)
+        assert active.value.status_code == 409
+
+        await jobs.cancel_job(job.job_id)
+        await jobs.delete_job(job.job_id)
+        assert await OptimizationJob.find_one(OptimizationJob.job_id == job.job_id) is None
+        client.close()
+    asyncio.run(scenario())
+
+
 def test_stale_running_job_fails_without_automatic_retry(monkeypatch):
     async def scenario():
         client = await setup_db("jobs_stale", lambda: [parcel("STALE", 8)])

@@ -12,7 +12,9 @@ from app.services.depot_service import get_depot_or_fail
 from app.optimization.assignment_problem import AssignmentConfig
 from app.services.export_service import load_plan_csv, load_plan_payload
 from app.models.optimization_job import OptimizationJob
-from app.services.optimization_job_service import create_optimization_job, resolve_optimization_request
+from app.services.optimization_job_service import (
+    cancel_job, create_optimization_job, delete_job, resolve_optimization_request,
+)
 
 router = APIRouter(prefix="/optimization", tags=["optimization"])
 
@@ -35,11 +37,20 @@ async def get_plan(plan_id: str):
 
 
 @router.get("/plans/{plan_id}/export.csv")
-async def export_plan_csv(plan_id: str):
+async def export_plan_csv(plan_id: str, virtual_vehicle_id: str | None = None):
+    filename = f"{plan_id}.csv"
+    if virtual_vehicle_id is not None:
+        plan = await LoadPlan.find_one(LoadPlan.plan_id == plan_id)
+        if plan is None:
+            raise HTTPException(404, "Load plan not found")
+        vehicle = next((v for v in plan.vehicles if v.virtual_vehicle_id == virtual_vehicle_id), None)
+        if vehicle is None:
+            raise HTTPException(404, "Virtual vehicle not found on this plan")
+        filename = f"{virtual_vehicle_id}_{vehicle.vehicle_type_code}.csv"
     return Response(
-        await load_plan_csv(plan_id),
+        await load_plan_csv(plan_id, virtual_vehicle_id),
         media_type="text/csv",
-        headers={"Content-Disposition": f'attachment; filename="{plan_id}.csv"'},
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 @router.post("/run")
@@ -120,6 +131,18 @@ async def get_job(job_id: str):
     if job is None:
         raise HTTPException(404, "Optimization job not found")
     return _job_payload(job)
+
+
+@router.post("/jobs/{job_id}/cancel")
+async def cancel_job_endpoint(job_id: str):
+    job = await cancel_job(job_id)
+    return _job_payload(job)
+
+
+@router.delete("/jobs/{job_id}", status_code=204)
+async def delete_job_endpoint(job_id: str):
+    await delete_job(job_id)
+    return Response(status_code=204)
 
 
 @router.get("/jobs")

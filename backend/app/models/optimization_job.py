@@ -33,6 +33,7 @@ class OptimizationJob(Document):
     worker_id: str | None = None
     heartbeat_at: datetime | None = None
     lease_expires_at: datetime | None = None
+    cancel_requested: bool = False
     created_at: datetime = Field(default_factory=utcnow)
     started_at: datetime | None = None
     completed_at: datetime | None = None

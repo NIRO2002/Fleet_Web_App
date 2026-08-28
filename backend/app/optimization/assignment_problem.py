@@ -21,6 +21,7 @@ from collections import OrderedDict
 from dataclasses import dataclass
 
 import numpy as np
+from pymoo.core.callback import Callback
 from pymoo.core.problem import Problem
 from pymoo.core.repair import Repair
 from pymoo.core.sampling import Sampling
@@ -42,6 +43,32 @@ from app.routing.distance_matrix import (
 )
 from app.services.vehicle_catalog_service import VehicleCatalogCache, list_available_types
 from app.utils_time import minutes
+
+
+class OptimizationCancelled(RuntimeError):
+    """Raised from inside the NSGA-II loop when a caller-supplied
+    `cancel_check` reports the job was cancelled -- lets a running job stop
+    before the solution is ever persisted, instead of only after the whole
+    run finishes."""
+
+
+class _CancelCallback(Callback):
+    """Polls `cancel_check` every `check_every` generations rather than
+    every one -- the run's own DB round-trip cost should stay negligible
+    next to a generation's evaluation cost."""
+
+    def __init__(self, cancel_check, check_every: int = 5):
+        super().__init__()
+        self._cancel_check = cancel_check
+        self._check_every = check_every
+
+    def notify(self, algorithm):
+        if self._cancel_check is None:
+            return
+        if algorithm.n_gen % self._check_every != 0:
+            return
+        if self._cancel_check():
+            raise OptimizationCancelled("Optimization cancelled by user")
 
 logger = logging.getLogger(__name__)
 
@@ -971,6 +998,7 @@ def run_nsga2(
     *,
     seed: int,
     warm_start_clusters: dict[int, list] | None = None,
+    cancel_check=None,
 ):
     """Runs NSGA-II and returns `(problem, res)` with `res.F`/`res.X`/`res.G`
     intact - never discarded, unlike the defect this replaces. `seed` is
@@ -1009,6 +1037,7 @@ def run_nsga2(
         termination=("n_gen", config.generations),
         seed=seed,
         verbose=False,
+        **({"callback": _CancelCallback(cancel_check)} if cancel_check is not None else {}),
     )
     logger.debug(
         "run_nsga2: slot-cache hit rate %.1f%% (%d hits / %d misses)",

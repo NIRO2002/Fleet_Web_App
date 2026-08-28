@@ -3,13 +3,15 @@ import hashlib
 import uuid
 from datetime import timedelta
 
+import pymongo
 from fastapi import HTTPException
 from pymongo import ReturnDocument, UpdateOne
 
+from app.core.config import settings
 from app.models.load_plan import LoadPlan
 from app.models.optimization_job import OptimizationJob
 from app.models.parcel import Parcel
-from app.optimization.assignment_problem import AssignmentConfig
+from app.optimization.assignment_problem import AssignmentConfig, OptimizationCancelled
 from app.schemas.optimization import OptimizationRequest
 from app.services.depot_service import get_depot_or_fail
 from app.services.optimization_service import optimize_load
@@ -17,6 +19,25 @@ from app.utils_datetime import utcnow
 
 ACTIVE = ("QUEUED", "RUNNING")
 ELIGIBLE = ("PENDING", "FAILED")
+
+_sync_client: pymongo.MongoClient | None = None
+
+
+def _cancel_flag_collection():
+    # A plain sync pymongo handle, not motor/beanie -- the NSGA-II run this
+    # polls from is itself inside a plain worker thread (run_in_threadpool),
+    # with no event loop available to `await` a motor query.
+    global _sync_client
+    if _sync_client is None:
+        _sync_client = pymongo.MongoClient(settings.mongodb_url)
+    return _sync_client[settings.mongodb_database]["optimization_jobs"]
+
+
+def make_cancel_check(job_id: str):
+    def check() -> bool:
+        doc = _cancel_flag_collection().find_one({"job_id": job_id}, {"cancel_requested": 1})
+        return bool(doc and doc.get("cancel_requested"))
+    return check
 
 
 def _scope_key(payload: OptimizationRequest) -> str:
@@ -146,6 +167,7 @@ async def execute_claimed_job(job: OptimizationJob):
                                     max_vehicle_slots=depot.vehicle_capacity),
             depot_operating_end=depot.operating_hours_end,
             depot_vehicle_capacity=depot.vehicle_capacity,
+            cancel_check=make_cancel_check(job.job_id),
         )
         await update_job(job.job_id, progress_percent=95, stage="VALIDATING", message="Validating persisted load plan")
         plan = await LoadPlan.find_one(LoadPlan.plan_id == result["plan_id"])
@@ -160,6 +182,18 @@ async def execute_claimed_job(job: OptimizationJob):
             completed_at=utcnow(), heartbeat_at=None, lease_expires_at=None,
         )
         return result
+    except OptimizationCancelled:
+        # Raised from inside the NSGA-II loop (assignment_problem._CancelCallback)
+        # before any plan/parcel persistence happens, so there's nothing to
+        # unwind beyond the reservation itself.
+        await Parcel.get_motor_collection().update_many(
+            {"optimization_job_id": job.job_id}, {"$set": {"optimization_job_id": None}}
+        )
+        await update_job(
+            job.job_id, status="CANCELLED", stage="CANCELLED", message="Cancelled by user",
+            completed_at=utcnow(), heartbeat_at=None, lease_expires_at=None,
+        )
+        return None
     except Exception as exc:
         # optimize_load clears reservations atomically with PLANNED. Only
         # still-owned reservations are released here; planned parcels are
@@ -194,3 +228,47 @@ async def recover_stale_jobs():
                          result_summary={"partial_plan_ids": partial_plan_ids} if partial_plan_ids else None,
                          completed_at=now, heartbeat_at=None, lease_expires_at=None)
     return len(stale)
+
+
+async def cancel_job(job_id: str) -> OptimizationJob:
+    job = await OptimizationJob.find_one(OptimizationJob.job_id == job_id)
+    if job is None:
+        raise HTTPException(404, "Optimization job not found")
+
+    if job.status == "QUEUED":
+        now = utcnow()
+        # Filtered on status=QUEUED so a worker that claims it in the same
+        # instant loses this race cleanly: the update matches nothing, and
+        # we fall through to the RUNNING branch below.
+        raw = await OptimizationJob.get_motor_collection().find_one_and_update(
+            {"job_id": job_id, "status": "QUEUED"},
+            {"$set": {"status": "CANCELLED", "stage": "CANCELLED",
+                      "message": "Cancelled before it started",
+                      "completed_at": now, "updated_at": now}},
+            return_document=ReturnDocument.AFTER,
+        )
+        if raw is not None:
+            await Parcel.get_motor_collection().update_many(
+                {"optimization_job_id": job_id}, {"$set": {"optimization_job_id": None}}
+            )
+            return OptimizationJob.model_validate(raw)
+        job = await OptimizationJob.find_one(OptimizationJob.job_id == job_id)
+
+    if job.status == "RUNNING":
+        # The run itself can only be interrupted cooperatively (see
+        # assignment_problem._CancelCallback) -- it'll stop within a few
+        # NSGA-II generations and finalize as CANCELLED from
+        # execute_claimed_job's except branch.
+        await update_job(job_id, cancel_requested=True, message="Cancellation requested; stopping soon")
+        return await OptimizationJob.find_one(OptimizationJob.job_id == job_id)
+
+    raise HTTPException(409, f"Cannot cancel a job in status {job.status}")
+
+
+async def delete_job(job_id: str) -> None:
+    job = await OptimizationJob.find_one(OptimizationJob.job_id == job_id)
+    if job is None:
+        raise HTTPException(404, "Optimization job not found")
+    if job.status in ACTIVE:
+        raise HTTPException(409, "Cancel the job before deleting it")
+    await job.delete()
