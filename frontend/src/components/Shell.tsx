@@ -19,6 +19,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import clsx from 'clsx'
 import { Brand } from './Brand'
 import { authService } from '../services/authService'
+import { OptimizationJobTracker } from './OptimizationJobTracker'
 
 interface NavItem {
   label: string
@@ -146,6 +147,7 @@ export function AppShell() {
               <input className="w-full bg-transparent outline-none" placeholder="Search parcel ID or cluster..." />
             </div>
             <div className="flex items-center gap-1.5 text-fleet-muted">
+              <OptimizationJobTracker />
               <IconButton icon={Bell} label="Notifications" />
               <IconButton icon={HelpCircle} label="Help" />
               <IconButton icon={Settings} label="Settings" />

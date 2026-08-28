@@ -21,6 +21,22 @@ class OptimizationRequest(BaseModel):
             raise ValueError("depot_id and delivery_date are required when cluster_id is used")
         return self
 
+
+class OptimizationBatchRequest(BaseModel):
+    cluster_ids: list[int]
+    depot_id: str
+    delivery_date: date_type
+    depot_latitude: Optional[float] = None
+    depot_longitude: Optional[float] = None
+
+    @model_validator(mode="after")
+    def validate_clusters(self):
+        if not self.cluster_ids or any(cluster_id < 0 for cluster_id in self.cluster_ids):
+            raise ValueError("cluster_ids must contain at least one non-negative cluster ID")
+        if len(set(self.cluster_ids)) != len(self.cluster_ids):
+            raise ValueError("cluster_ids must be unique")
+        return self
+
 class VehicleOption(BaseModel):
     vehicle_type: str
     capacity_kg: float

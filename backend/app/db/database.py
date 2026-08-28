@@ -6,8 +6,9 @@ from app.models.load_plan import LoadPlan
 from app.models.depot import Depot
 from app.models.parcel import Parcel
 from app.models.vehicle_type import VehicleTypeCatalog
+from app.models.optimization_job import OptimizationJob
 
-DOCUMENT_MODELS = [Parcel, VehicleTypeCatalog, LoadPlan, Depot]
+DOCUMENT_MODELS = [Parcel, VehicleTypeCatalog, LoadPlan, Depot, OptimizationJob]
 
 async def init_database(client=None):
     client = client or AsyncIOMotorClient(settings.mongodb_url)

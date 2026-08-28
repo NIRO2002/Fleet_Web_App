@@ -39,8 +39,12 @@ class Parcel(Document):
     is_noise: bool = False
     cluster_id: int | None = None
     cluster_probability: float | None = None
+    cluster_assignment_status: str | None = None
+    noise_resolution: str | None = None
+    unassigned_reason: str | None = None
     status: str = "PENDING"
     plan_id: str | None = None
+    optimization_job_id: str | None = None
     carried_over_from_date: date | None = None
     created_at: datetime = Field(default_factory=utcnow)
 

@@ -45,6 +45,10 @@ export interface Parcel extends ParcelInput {
   status: string
   dimensions_imputed: boolean
   is_noise: boolean
+  cluster_assignment_status: 'NORMAL_CLUSTER' | 'NOISE_RESCUED' | 'UNASSIGNED' | null
+  noise_resolution: 'NEAREST_FEASIBLE_CLUSTER' | 'RESCUE_GROUP' | 'SINGLETON' | 'UNRESOLVED' | null
+  unassigned_reason: string | null
+  optimization_job_id?: string | null
 }
 
 /** String-valued mirror of ParcelInput used for controlled form fields. */
@@ -115,6 +119,14 @@ export interface ClusteringTrainResult {
    * infeasible cluster reassigned to -1/unassigned). */
   n_clusters_post_repair: number
   noise_count: number
+  noise_rescue: {
+    joined_existing_count: number
+    rescue_group_count: number
+    rescue_group_parcel_count: number
+    singleton_count: number
+    unresolved_count: number
+  }
+  unassigned_by_reason: Record<string, number>
   /** Final, post-repair count of parcels left genuinely unassignable
    * (cluster_id still -1) - smaller than noise_count, which is HDBSCAN's
    * raw pre-reassignment noise. See GET /parcels/clustering/unassigned. */
@@ -191,6 +203,35 @@ export interface OptimizationResult {
   virtual_vehicle_ids: string[]
   pareto_solutions: ParetoSolution[]
 }
+
+export type OptimizationJobStatus = 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED'
+
+export interface OptimizationJob {
+  job_id: string
+  status: OptimizationJobStatus
+  job_type: 'SINGLE_CLUSTER' | 'PARCEL_SET'
+  batch_id: string | null
+  cluster_id: number | null
+  depot_id: string
+  delivery_date: string
+  parcel_ids: string[]
+  progress_percent: number
+  stage: string
+  message: string
+  plan_id: string | null
+  virtual_vehicle_ids: string[]
+  result_summary: { n_parcels?: number; n_vehicles?: number; cluster_id?: number | null; partial_plan_ids?: string[] } | null
+  error_code: string | null
+  error_message: string | null
+  cancel_requested: boolean
+  created_at: string
+  started_at: string | null
+  completed_at: string | null
+  updated_at: string
+  created?: boolean
+}
+
+export interface OptimizationBatchResult { batch_id: string; jobs: OptimizationJob[] }
 
 export interface ParetoSolution {
   utilization: number

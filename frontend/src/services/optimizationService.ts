@@ -1,13 +1,25 @@
 import { api } from './api'
-import type { InsertionResult, LoadPlan, OptimizationResult, OptimizationRunRequest, ParcelInput, PlanSummary, ReadyVehicle, VirtualVehicle } from '../types'
+import type { InsertionResult, LoadPlan, OptimizationBatchResult, OptimizationJob, OptimizationResult, OptimizationRunRequest, ParcelInput, PlanSummary, ReadyVehicle, VirtualVehicle } from '../types'
 
 export const optimizationService = {
   run: (payload: OptimizationRunRequest) => api.post<OptimizationResult>('/optimization/run', payload),
+  createJob: (payload: OptimizationRunRequest) => api.post<OptimizationJob>('/optimization/jobs', payload),
+  createBatch: (payload: { cluster_ids: number[]; depot_id: string; delivery_date: string; depot_latitude?: number; depot_longitude?: number }) =>
+    api.post<OptimizationBatchResult>('/optimization/jobs/batch', payload),
+  getJob: (jobId: string) => api.get<OptimizationJob>(`/optimization/jobs/${encodeURIComponent(jobId)}`),
+  cancelJob: (jobId: string) => api.post<OptimizationJob>(`/optimization/jobs/${encodeURIComponent(jobId)}/cancel`),
+  deleteJob: (jobId: string) => api.del<void>(`/optimization/jobs/${encodeURIComponent(jobId)}`),
+  listJobs: (params?: { status?: string; depot_id?: string; delivery_date?: string; batch_id?: string }) => {
+    const query = new URLSearchParams()
+    Object.entries(params ?? {}).forEach(([key, value]) => { if (value) query.set(key, value) })
+    return api.get<OptimizationJob[]>(`/optimization/jobs${query.size ? `?${query}` : ''}`)
+  },
   getPlan: (planId: string) => api.get<LoadPlan>(`/optimization/plans/${encodeURIComponent(planId)}`),
   /** Most recent plan for a (depot_id, delivery_date), or null if none exists yet. */
   findPlan: (depotId: string, deliveryDate: string) =>
     api.get<LoadPlan | null>(`/optimization/plans?depot_id=${encodeURIComponent(depotId)}&delivery_date=${encodeURIComponent(deliveryDate)}`),
-  planCsvUrl: (planId: string) => `/api/v1/optimization/plans/${encodeURIComponent(planId)}/export.csv`,
+  planCsvUrl: (planId: string, virtualVehicleId?: string) =>
+    `/api/v1/optimization/plans/${encodeURIComponent(planId)}/export.csv${virtualVehicleId ? `?virtual_vehicle_id=${encodeURIComponent(virtualVehicleId)}` : ''}`,
 
   listPlans: () => api.get<PlanSummary[]>('/plans'),
   listVirtualVehicles: (planId?: string, vehicleType?: string, status?: string) => {

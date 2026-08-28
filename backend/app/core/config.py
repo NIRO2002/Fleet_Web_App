@@ -32,6 +32,14 @@ class Settings(BaseSettings):
     # didn't warrant a larger budget, this one does.
     nsga2_population: int = 100
     nsga2_generations: int = 200
+    optimization_job_lease_seconds: int = 120
+    optimization_worker_poll_seconds: float = 2.0
+    # Dev convenience: the API process claims/executes its own queue by
+    # default so a lone `uvicorn app.main:app` never leaves jobs stuck
+    # QUEUED forever. Set False in deployments that run dedicated
+    # `python -m app.workers.optimization_worker` processes instead, to
+    # avoid the API competing with them for jobs.
+    run_optimization_worker_inprocess: bool = True
 
     # Clock time the vehicle leaves the depot, used to simulate time-window
     # compliance (Phase 3.2) - starting the simulation at midnight would

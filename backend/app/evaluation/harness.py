@@ -25,6 +25,7 @@ from app.services import baseline_clustering, clustering_service
 from app.services.capacity_aware_clustering import RepairConfig, group_by_cluster, repair_clusters
 from app.services.clustering_common import ClusteringConfig, get_planning_instance
 from app.services.depot_service import get_depot_or_fail
+from app.services.noise_rescue import assert_complete_cluster_assignment, rescue_noise
 from app.services.vehicle_catalog_service import VehicleCatalogCache, list_available_types
 
 
@@ -51,6 +52,24 @@ def _prepare_warm_clusters(clusters, catalog, capacity_aware, *, depot_lat, depo
         status = {cid: {"feasible": True, "reason": None} for cid in clusters}
         return clusters, {"enabled": False, "n_split": 0, "n_merged": 0, "cluster_status": status, "excluded_infeasible_count": 0}
     repaired = repair_clusters(clusters, catalog, RepairConfig(), depot_lat, depot_lon, seed=seed)
+    for cid, members in repaired.clusters.items():
+        status = repaired.cluster_status[cid]
+        for parcel in members:
+            # Some unit tests use opaque sentinels to exercise audit plumbing.
+            if not hasattr(parcel, "parcel_id"):
+                continue
+            if status["feasible"]:
+                parcel.cluster_id = cid
+                parcel.cluster_assignment_status = "NOISE_RESCUED" if parcel.is_noise else "NORMAL_CLUSTER"
+                parcel.unassigned_reason = None
+            else:
+                parcel.cluster_id = -1
+                parcel.cluster_assignment_status = "UNASSIGNED"
+                parcel.unassigned_reason = parcel.unassigned_reason or {
+                    "temporally_infeasible": "TEMPORALLY_INFEASIBLE",
+                    "split_depth_cap": "SPLIT_DEPTH_CAP",
+                    "no_fitting_vehicle": "NO_FITTING_VEHICLE",
+                }.get(status.get("reason"), "UNKNOWN")
     feasible = {cid: rows for cid, rows in repaired.clusters.items() if repaired.cluster_status[cid]["feasible"]}
     return feasible, {
         "enabled": True, "n_split": repaired.n_split, "n_merged": repaired.n_merged,
@@ -129,7 +148,13 @@ async def run_pipeline_one(cfg):
     cluster_fn = clustering_service.cluster if cfg.method == "hdbscan" else baseline_clustering.cluster
     started = time.perf_counter()
     clustered = cluster_fn(parcels, cfg.seed, cluster_config)
+    noise_rescue = None
+    if cfg.method == "hdbscan":
+        noise_rescue = rescue_noise(parcels, catalog, cluster_config, RepairConfig())
+        clustered.post_noise_cluster_count = len({p.cluster_id for p in parcels if p.cluster_id >= 0})
     warm, audit = _prepare_warm_clusters(group_by_cluster(parcels), catalog, cfg.capacity_aware, depot_lat=depot.lat, depot_lon=depot.lng, seed=cfg.seed)
+    if cfg.method == "hdbscan":
+        assert_complete_cluster_assignment(parcels)
     included_ids = {p.parcel_id for members in warm.values() for p in members}
     included = [p for p in parcels if p.parcel_id in included_ids]
     if not included:
@@ -159,6 +184,14 @@ async def run_pipeline_one(cfg):
         "raw_cluster_count": clustered.n_clusters, "post_noise_cluster_count": clustered.post_noise_cluster_count,
         "noise_count": clustered.noise_count,
         "noise_fraction": clustered.noise_count / len(parcels),
+        **({f"noise_rescue_{key}": value for key, value in noise_rescue.summary().items()}
+           if noise_rescue is not None else {
+               "noise_rescue_joined_existing_count": 0,
+               "noise_rescue_rescue_group_count": 0,
+               "noise_rescue_rescue_group_parcel_count": 0,
+               "noise_rescue_singleton_count": 0,
+               "noise_rescue_unresolved_count": 0,
+           }),
         **clustering_context,
         "mean_utilization": mean_util,
         "cost_per_parcel": total_fleet_cost / len(included),

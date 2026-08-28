@@ -23,6 +23,8 @@ import {
 import { DEFAULT_DEPOT } from '../data/mockData'
 import { ParetoParallelCoordinates } from '../components/ParetoParallelCoordinates'
 import { optimizationService } from '../services/optimizationService'
+import { OPTIMIZATION_JOBS_CHANGED } from '../components/OptimizationJobTracker'
+import { parcelService } from '../services/parcelService'
 import { vehicleTypeService } from '../services/vehicleTypeService'
 import type {
   ClusterSummary,
@@ -92,11 +94,14 @@ export function LoadOptimizationPage() {
   // navState (an explicit "Optimize" click from another page) always wins over
   // whatever was left in this page's own session from a previous visit.
   const [mode, setMode] = useState<'cluster' | 'parcels' | 'all'>(() => {
+    if (navState?.clusterId !== undefined) return 'cluster'
     if (navState?.clusterIds && navState.clusterIds.length > 0) return 'all'
     if (navState?.parcelIds && navState.parcelIds.length > 0) return 'parcels'
     return readSession('optimize.mode', 'cluster')
   })
-  const [clusterSummary] = useState<ClusterSummary | null>(null)
+  const [clusterSummary, setClusterSummary] = useState<ClusterSummary | null>(null)
+  const [clustersLoading, setClustersLoading] = useState(false)
+  const [clustersError, setClustersError] = useState('')
   const [selectedCluster, setSelectedCluster] = useState(() =>
     navState?.clusterId !== undefined ? String(navState.clusterId) : readSession('optimize.selectedCluster', ''),
   )
@@ -129,19 +134,29 @@ export function LoadOptimizationPage() {
   }, [result])
 
   useEffect(() => {
-    if (!running) return
-    setRunProgress(8)
-    const timer = window.setInterval(() => {
-      // Eases toward 90% while the request is in flight; real completion snaps to 100.
-      setRunProgress((prev) => (prev >= 90 ? 90 : prev + (90 - prev) * 0.12))
-    }, 250)
-    return () => window.clearInterval(timer)
-  }, [running])
+    if (!navState?.depotId || !navState?.deliveryDate) {
+      setClusterSummary(null)
+      setClustersError('')
+      return
+    }
+    let active = true
+    setClustersLoading(true)
+    setClustersError('')
+    parcelService.getClusterSummary(navState.depotId, navState.deliveryDate)
+      .then((summary) => { if (active) setClusterSummary(summary) })
+      .catch((err) => {
+        if (!active) return
+        setClusterSummary(null)
+        setClustersError(err instanceof Error ? err.message : 'Failed to load clusters for this planning instance.')
+      })
+      .finally(() => { if (active) setClustersLoading(false) })
+    return () => { active = false }
+  }, [navState?.depotId, navState?.deliveryDate])
 
   const [batchRunning, setBatchRunning] = useState(false)
   const [batchIndex, setBatchIndex] = useState(-1)
   const [batchClusterProgress, setBatchClusterProgress] = useState(0)
-  const [batchResults, setBatchResults] = useState<BatchResult[]>(() => readSession('optimize.batchResults', []))
+  const [batchResults] = useState<BatchResult[]>(() => readSession('optimize.batchResults', []))
 
   useEffect(() => {
     writeSession('optimize.batchResults', batchResults)
@@ -194,7 +209,7 @@ export function LoadOptimizationPage() {
   }, [clusterSummary])
 
   const batchClusterIds = useMemo(() => {
-    if (navState?.clusterIds && navState.clusterIds.length > 0) return navState.clusterIds
+    if (navState?.clusterIds && navState.clusterIds.length > 0) return navState.clusterIds.filter((id) => id >= 0)
     return clusterChoices.map((c) => c.id)
   }, [navState, clusterChoices])
 
@@ -233,14 +248,13 @@ export function LoadOptimizationPage() {
 
     setRunning(true)
     try {
-      const response = await optimizationService.run(payload)
-      setRunProgress(100)
-      setResult(response)
+      const job = await optimizationService.createJob(payload)
+      setRunProgress(job.progress_percent)
       setRunNotice({
         tone: 'success',
-        text: `Optimization created ${response.virtual_vehicle_ids.length} virtual vehicle${response.virtual_vehicle_ids.length === 1 ? '' : 's'}.`,
+        text: job.created === false ? `Optimization is already queued/running (${job.job_id}).` : `Optimization queued (${job.job_id}). You can safely navigate away.`,
       })
-      await refreshVehicles()
+      window.dispatchEvent(new Event(OPTIMIZATION_JOBS_CHANGED))
     } catch (err) {
       setRunProgress(0)
       setRunNotice({ tone: 'error', text: err instanceof Error ? err.message : 'Optimization run failed.' })
@@ -269,42 +283,16 @@ export function LoadOptimizationPage() {
     }
     const { depotId, deliveryDate } = navState
 
-    setBatchResults([])
     setBatchRunning(true)
-    for (let i = 0; i < batchClusterIds.length; i += 1) {
-      const clusterId = batchClusterIds[i]
-      setBatchIndex(i)
-      setBatchClusterProgress(8)
-      const timer = window.setInterval(() => {
-        setBatchClusterProgress((prev) => (prev >= 90 ? 90 : prev + (90 - prev) * 0.12))
-      }, 200)
-      try {
-        const response = await optimizationService.run({
-          cluster_id: clusterId,
-          depot_id: depotId,
-          delivery_date: deliveryDate,
-          depot_latitude: lat,
-          depot_longitude: lon,
-        })
-        setBatchClusterProgress(100)
-        setBatchResults((prev) => [...prev, { clusterId, status: 'success', result: response }])
-      } catch (err) {
-        setBatchClusterProgress(100)
-        setBatchResults((prev) => [
-          ...prev,
-          { clusterId, status: 'error', message: err instanceof Error ? err.message : 'Optimization failed.' },
-        ])
-      } finally {
-        window.clearInterval(timer)
-      }
+    try {
+      const response = await optimizationService.createBatch({ cluster_ids: batchClusterIds, depot_id: depotId, delivery_date: deliveryDate, depot_latitude: lat, depot_longitude: lon })
+      setRunNotice({ tone: 'success', text: `Queued ${response.jobs.length} cluster optimizations in ${response.batch_id}. You can safely navigate away.` })
+      window.dispatchEvent(new Event(OPTIMIZATION_JOBS_CHANGED))
+    } catch (err) {
+      setRunNotice({ tone: 'error', text: err instanceof Error ? err.message : 'Failed to queue optimization batch.' })
+    } finally {
+      setBatchRunning(false); setBatchIndex(-1); setBatchClusterProgress(0)
     }
-    setBatchRunning(false)
-    setBatchIndex(-1)
-    await refreshVehicles()
-    setRunNotice({
-      tone: 'success',
-      text: `Optimized ${batchClusterIds.length} cluster${batchClusterIds.length === 1 ? '' : 's'}.`,
-    })
   }
 
   const handleFormSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -419,7 +407,9 @@ export function LoadOptimizationPage() {
                     </option>
                   ))}
                 </select>
-                {clusterChoices.length === 0 && (
+                {clustersLoading && <p className="mt-1.5 text-xs font-medium text-fleet-muted">Loading clusters…</p>}
+                {clustersError && <p className="mt-1.5 text-xs font-bold text-red-600">{clustersError}</p>}
+                {!clustersLoading && !clustersError && clusterChoices.length === 0 && (
                   <p className="mt-1.5 text-xs font-medium text-fleet-muted">
                     No clusters yet - train HDBSCAN on the Parcel Consolidation page first.
                   </p>

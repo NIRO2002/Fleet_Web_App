@@ -13,6 +13,7 @@ from pathlib import Path
 
 import hdbscan
 import joblib
+from beanie.exceptions import CollectionWasNotInitialized
 from pymongo import UpdateOne
 
 from app.core.config import settings
@@ -28,6 +29,7 @@ from app.services.clustering_common import (
     transform_with_scaler,
 )
 from app.services.vehicle_catalog_service import list_available_types
+from app.services.noise_rescue import rescue_noise, assert_complete_cluster_assignment
 
 
 def _planning_persistence_fields(parcel, fields: dict) -> dict:
@@ -77,6 +79,9 @@ def cluster(parcels: list[Parcel], seed: int, config: ClusteringConfig | None = 
         # -1.0 is the documented sentinel for a point HDBSCAN originally
         # labelled noise, including points geographically reassigned later.
         parcel.cluster_probability = -1.0 if parcel.is_noise else float(probability)
+        parcel.cluster_assignment_status = "UNASSIGNED" if parcel.is_noise else "NORMAL_CLUSTER"
+        parcel.noise_resolution = "UNRESOLVED" if parcel.is_noise else None
+        parcel.unassigned_reason = "HDBSCAN_NOISE_UNRESOLVED" if parcel.is_noise else None
 
     runtime = time.perf_counter() - t0
     return ClusterResult(
@@ -120,6 +125,17 @@ async def train_hdbscan(
     )
     config = config or ClusteringConfig()
     result = cluster(parcels, seed, config)
+    try:
+        catalog = await list_available_types(depot_id, delivery_date)
+    except CollectionWasNotInitialized:
+        # Keeps the pure Parcel-only test/application bootstrap usable. The
+        # normal app startup initializes this collection; an empty catalog
+        # honestly leaves original noise unresolved.
+        catalog = []
+    rescue = rescue_noise(parcels, catalog, config, RepairConfig())
+    result.metadata["noise_rescue"] = rescue
+    result.post_noise_cluster_count = len({p.cluster_id for p in parcels if p.cluster_id >= 0})
+    assert_complete_cluster_assignment(parcels)
     if parcels:
         await Parcel.get_motor_collection().bulk_write([
             UpdateOne(
@@ -128,6 +144,9 @@ async def train_hdbscan(
                     "cluster_id": p.cluster_id,
                     "cluster_probability": p.cluster_probability,
                     "is_noise": p.is_noise,
+                    "cluster_assignment_status": p.cluster_assignment_status,
+                    "noise_resolution": p.noise_resolution,
+                    "unassigned_reason": p.unassigned_reason,
                 })},
             )
             for p in parcels
@@ -159,7 +178,8 @@ async def repair_planning_instance(
     `RepairConfig`/`group_by_cluster` rather than a forked copy, now wired
     into the live training path instead of only the offline harness.
 
-    Noise remains cluster_id=-1 and bypasses repair entirely. Persists the
+    Unresolved noise remains cluster_id=-1 and bypasses repair. Rescued noise
+    participates in repair like any other positive cluster. Persists the
     repaired cluster_id back to Parcel. A real cluster repair marks
     infeasible (no catalog vehicle can carry it, even split/merged) is
     persisted as cluster_id=-1, not as an ordinary optimizable cluster --
@@ -182,15 +202,35 @@ async def repair_planning_instance(
     for cluster_id, members in repaired.clusters.items():
         feasible = repaired.cluster_status[cluster_id]["feasible"]
         persisted_id = cluster_id if feasible else -1
+        repair_reason = repaired.cluster_status[cluster_id].get("reason")
         for parcel in members:
             parcel.cluster_id = persisted_id
+            if feasible:
+                parcel.cluster_assignment_status = "NOISE_RESCUED" if parcel.is_noise else "NORMAL_CLUSTER"
+                parcel.unassigned_reason = None
+            else:
+                parcel.cluster_assignment_status = "UNASSIGNED"
+                if not parcel.is_noise or not parcel.unassigned_reason:
+                    parcel.unassigned_reason = {
+                        "temporally_infeasible": "TEMPORALLY_INFEASIBLE",
+                        "split_depth_cap": "SPLIT_DEPTH_CAP",
+                        "no_fitting_vehicle": "NO_FITTING_VEHICLE",
+                        "hdbscan_noise": "HDBSCAN_NOISE_UNRESOLVED",
+                    }.get(repair_reason, "UNKNOWN")
             updates.append(UpdateOne(
                 {"parcel_id": parcel.parcel_id},
-                {"$set": _planning_persistence_fields(parcel, {"cluster_id": persisted_id})},
+                {"$set": _planning_persistence_fields(parcel, {
+                    "cluster_id": persisted_id,
+                    "is_noise": parcel.is_noise,
+                    "cluster_assignment_status": parcel.cluster_assignment_status,
+                    "noise_resolution": parcel.noise_resolution,
+                    "unassigned_reason": parcel.unassigned_reason,
+                })},
             ))
     if updates:
         await Parcel.get_motor_collection().bulk_write(updates)
 
+    assert_complete_cluster_assignment(parcels)
     return repaired
 
 

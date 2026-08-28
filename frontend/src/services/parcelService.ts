@@ -14,6 +14,7 @@ export const parcelService = {
   },
   trainClustering: (depotId: string, deliveryDate: string) => api.post<ClusteringTrainResult>(`/parcels/clustering/train?${scope(depotId, deliveryDate)}`),
   getClusterSummary: (depotId: string, deliveryDate: string) => api.get<ClusterSummary>(`/parcels/clustering?${scope(depotId, deliveryDate)}`),
+  listUnassigned: (depotId: string, deliveryDate: string) => api.get<Parcel[]>(`/parcels/clustering/unassigned?${scope(depotId, deliveryDate)}`),
   predictCluster: (parcel: ParcelInput) => api.post<ClusterPrediction>(`/parcels/clustering/predict?${scope(parcel.depot_id ?? '', parcel.delivery_date ?? '')}`, { parcel }),
   listDepots: () => api.get<Depot[]>('/depots'),
   priorityLevels: () => api.get<Record<string, number>>('/vocabularies/priority-levels'),

@@ -17,6 +17,22 @@ router = APIRouter(prefix="/parcels", tags=["parcels"])
 # but this pass deliberately does not alter feasibility or persistence.
 MIN_VIABLE_CLUSTER_PARCELS = 6
 
+NOISE_RESCUE_KEYS = (
+    "joined_existing_count", "rescue_group_count", "rescue_group_parcel_count",
+    "singleton_count", "unresolved_count",
+)
+
+
+def _noise_rescue_summary(result) -> dict[str, int]:
+    rescue = getattr(result, "metadata", {}).get("noise_rescue")
+    summary = rescue.summary() if rescue is not None else {}
+    return {key: int(summary.get(key, 0)) for key in NOISE_RESCUE_KEYS}
+
+
+def _add_noise_rescue(total: dict[str, int], result) -> None:
+    for key, value in _noise_rescue_summary(result).items():
+        total[key] += value
+
 
 def _distinct_cluster_count(parcels) -> int:
     """Real (non-negative) cluster ids currently on these parcels -- used
@@ -104,6 +120,7 @@ async def train_clustering(
     try:
         repair_applied = False
         n_split = n_merged = excluded_infeasible_count = 0
+        noise_rescue = {key: 0 for key in NOISE_RESCUE_KEYS}
         if dataset_id is None:
             depot = await get_depot_or_fail(depot_id)
             result, parcels = await train_hdbscan(
@@ -115,6 +132,7 @@ async def train_clustering(
             n_clusters_pre_repair = result.n_clusters
             noise_count = result.noise_count
             runtime_seconds = result.runtime_seconds
+            _add_noise_rescue(noise_rescue, result)
             repaired = await repair_planning_instance(
                 depot_id, parcels, depot_lat=depot.lat, depot_lon=depot.lng, seed=seed,
             )
@@ -156,6 +174,7 @@ async def train_clustering(
                 n_clusters_pre_repair += instance_result.n_clusters
                 noise_count += instance_result.noise_count
                 runtime_seconds += instance_result.runtime_seconds
+                _add_noise_rescue(noise_rescue, instance_result)
                 repaired = await repair_planning_instance(
                     instance_depot, instance_parcels, depot_lat=depot.lat, depot_lon=depot.lng, seed=seed,
                 )
@@ -171,6 +190,11 @@ async def train_clustering(
         # show it; these parcels are never auto-optimized (see
         # GET /parcels/clustering/unassigned).
         unassigned_count = sum(1 for p in parcels if p.cluster_id == -1)
+        unassigned_by_reason: dict[str, int] = {}
+        for parcel in parcels:
+            if parcel.cluster_id == -1:
+                reason = getattr(parcel, "unassigned_reason", None) or "UNKNOWN"
+                unassigned_by_reason[reason] = unassigned_by_reason.get(reason, 0) + 1
         n_singleton_clusters, n_clusters_below_viability = _small_cluster_counts(parcels)
         return {
             "status": "trained",
@@ -185,6 +209,8 @@ async def train_clustering(
             "n_clusters_post_repair": n_clusters_post_repair,
             "noise_count": noise_count,
             "unassigned_count": unassigned_count,
+            "noise_rescue": noise_rescue,
+            "unassigned_by_reason": unassigned_by_reason,
             "n_singleton_clusters": n_singleton_clusters,
             "n_clusters_below_viability": n_clusters_below_viability,
             "runtime_seconds": runtime_seconds,
@@ -212,8 +238,7 @@ async def list_unassigned_parcels(
     depot_id: str = Query(...),
     delivery_date: date = Query(...),
 ):
-    """Parcels HDBSCAN could not cluster and neither handle_noise
-    (app/services/clustering_common.py) nor capacity-aware repair could
+    """Parcels HDBSCAN could not cluster and the staged noise rescue and repair could not
     place into a real, feasible cluster -- left honestly at cluster_id=-1
     rather than silently dropped. Never auto-optimized; surfaced so a human
     can decide what to do with them (retry with different params, manual

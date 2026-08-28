@@ -69,6 +69,7 @@ async def _optimize_load(
     depot_operating_end: str | None = None,
     depot_vehicle_capacity: int | None = None,
     repair_cluster_status: dict[int, dict] | None = None,
+    cancel_check=None,
 ):
     """Runs NSGA-II over `parcels` and persists the selected solution as a
     `LoadPlan` with one `VirtualVehicle` + a set of `ParcelAssignment` rows
@@ -95,7 +96,8 @@ async def _optimize_load(
     }
 
     problem, res = await run_in_threadpool(
-        lambda: run_nsga2(parcels, catalog, config, seed=seed, warm_start_clusters=warm_start_clusters)
+        lambda: run_nsga2(parcels, catalog, config, seed=seed, warm_start_clusters=warm_start_clusters,
+                          cancel_check=cancel_check)
     )
     idx, F, X, G = select_solution(res, preference_weights)
     front_hypervolume = hypervolume(F)
@@ -258,6 +260,7 @@ async def _optimize_load(
                 "cluster_id": None,
                 "cluster_probability": None,
                 "is_noise": False,
+                "optimization_job_id": None,
             })},
         )
         for p in parcels

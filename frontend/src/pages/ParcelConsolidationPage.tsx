@@ -6,7 +6,7 @@ import { Card, DataTable, EmptyState, InlineAlert, LoadingState, MetricCard, Pag
 import { CSV_TEMPLATE_COLUMNS } from '../data/mockData'
 import { ApiError } from '../services/api'
 import { parcelService } from '../services/parcelService'
-import type { ClusterSummary, Depot, Parcel, ParcelDraft } from '../types'
+import type { ClusterSummary, ClusteringTrainResult, Depot, Parcel, ParcelDraft } from '../types'
 import { clusterColor, clusterLabel, emptyParcelDraft, formatKg, formatM3, formatNumber, nextParcelId, normalizePositions, parcelDraftToInput, parseClusterKey } from '../utils/format'
 
 type Notice = { tone: 'success' | 'error' | 'info'; text: string } | null
@@ -34,6 +34,9 @@ export function ParcelConsolidationPage() {
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState('')
   const [idError, setIdError] = useState('')
+  const [noiseDiagnostics, setNoiseDiagnostics] = useState<ClusteringTrainResult['noise_rescue'] | null>(null)
+  const [originalNoise, setOriginalNoise] = useState(0)
+  const [unassigned, setUnassigned] = useState<Parcel[] | null>(null)
 
   const loadPage = useCallback(async () => {
     if (!selectedDepot || !selectedDate) { setParcels([]); setTotal(0); setLoading(false); return }
@@ -47,6 +50,14 @@ export function ParcelConsolidationPage() {
       if (Object.keys(clusters).length) {
         const all = await parcelService.listForInstance(selectedDepot, selectedDate)
         setClusterMetrics(all.reduce<Record<string, {weight:number;volume:number}>>((out,p)=>{const key=String(p.cluster_id);const row=out[key]??{weight:0,volume:0};row.weight+=p.weight_kg;row.volume+=p.volume_m3;out[key]=row;return out},{}))
+        setOriginalNoise(all.filter((p)=>p.is_noise).length)
+        setNoiseDiagnostics({
+          joined_existing_count: all.filter((p)=>p.noise_resolution==='NEAREST_FEASIBLE_CLUSTER').length,
+          rescue_group_count: new Set(all.filter((p)=>p.noise_resolution==='RESCUE_GROUP').map((p)=>p.cluster_id)).size,
+          rescue_group_parcel_count: all.filter((p)=>p.noise_resolution==='RESCUE_GROUP').length,
+          singleton_count: all.filter((p)=>p.noise_resolution==='SINGLETON').length,
+          unresolved_count: all.filter((p)=>p.noise_resolution==='UNRESOLVED').length,
+        })
       } else setClusterMetrics({})
     } catch (err) { setNotice({ tone: 'error', text: err instanceof Error ? err.message : 'Failed to load parcels.' }) }
     finally { setLoading(false) }
@@ -85,7 +96,7 @@ export function ParcelConsolidationPage() {
   const runClustering = async () => {
     if (!selectedDepot || !selectedDate || total === 0) return
     setTraining(true); setNotice({ tone: 'info', text: `Running HDBSCAN on ${total} parcels for ${selectedDepot} on ${selectedDate}...` })
-    try { const result = await parcelService.trainClustering(selectedDepot, selectedDate); setNotice({ tone: 'success', text: `Clustered ${result.parcel_count} parcels into ${result.n_clusters_pre_repair} clusters (HDBSCAN), ${result.n_clusters_post_repair} after capacity-aware repair. ${result.n_singleton_clusters} singleton cluster${result.n_singleton_clusters === 1 ? '' : 's'}; ${result.n_clusters_below_viability} cluster${result.n_clusters_below_viability === 1 ? '' : 's'} below viability (<6 parcels); ${result.unassigned_count} parcel${result.unassigned_count === 1 ? '' : 's'} unassigned.` }); await loadPage() }
+    try { const result = await parcelService.trainClustering(selectedDepot, selectedDate); setOriginalNoise(result.noise_count); setNoiseDiagnostics(result.noise_rescue); setUnassigned(null); setNotice({ tone: 'success', text: `Clustered ${result.parcel_count} parcels into ${result.n_clusters_pre_repair} clusters (HDBSCAN), ${result.n_clusters_post_repair} after repair. Of ${result.noise_count} original noise parcels: ${result.noise_rescue.joined_existing_count} joined a feasible cluster, ${result.noise_rescue.rescue_group_parcel_count} formed rescue groups, ${result.noise_rescue.singleton_count} became feasible singletons, and ${result.noise_rescue.unresolved_count} remain unresolved.` }); await loadPage() }
     catch (err) { setNotice({ tone: 'error', text: err instanceof Error ? err.message : 'Clustering failed.' }) }
     finally { setTraining(false) }
   }
@@ -103,7 +114,8 @@ export function ParcelConsolidationPage() {
       <label className="text-sm font-bold">Depot<select className="mt-1 block w-full rounded-xl border border-fleet-line px-3 py-2.5" value={selectedDepot} onChange={(e)=>{setSelectedDepot(e.target.value);setOffset(0);setClusterSummary({})}}><option value="">Select depot</option>{depots.map((d)=><option key={d.depot_id} value={d.depot_id}>{d.depot_id} — {d.depot_name}</option>)}</select></label>
       <label className="text-sm font-bold">Delivery Date<input className="mt-1 block w-full rounded-xl border border-fleet-line px-3 py-2.5" type="date" value={selectedDate} onChange={(e)=>{setSelectedDate(e.target.value);setOffset(0);setClusterSummary({})}} /></label>
     </div></Card>
-    <div className="mb-5 grid gap-4 sm:grid-cols-3"><MetricCard icon={Boxes} label="Total Parcels" tone="blue" value={formatNumber(total)} /><MetricCard icon={Sparkles} label="Clustered" tone="green" value={formatNumber(clustered)} /><MetricCard icon={Boxes} label="Noise" tone="amber" value={formatNumber(noise)} /></div>
+    <div className="mb-5 grid gap-4 sm:grid-cols-3"><MetricCard icon={Boxes} label="Total Parcels" tone="blue" value={formatNumber(total)} /><MetricCard icon={Sparkles} label="Clustered" tone="green" value={formatNumber(clustered)} /><MetricCard icon={Boxes} label="Original HDBSCAN Noise" tone="amber" value={formatNumber(originalNoise)} /></div>
+    {noiseDiagnostics && <Card className="mb-5" title="Noise resolution diagnostics"><div className="grid gap-3 text-sm sm:grid-cols-4"><span><b>{noiseDiagnostics.joined_existing_count}</b> joined existing</span><span><b>{noiseDiagnostics.rescue_group_parcel_count}</b> in {noiseDiagnostics.rescue_group_count} rescue groups</span><span><b>{noiseDiagnostics.singleton_count}</b> feasible singletons</span><span><b>{noiseDiagnostics.unresolved_count}</b> unresolved</span></div>{noiseDiagnostics.unresolved_count>0&&<div className="mt-3"><SecondaryButton onClick={async()=>setUnassigned(await parcelService.listUnassigned(selectedDepot,selectedDate))}>View Unassigned Parcels</SecondaryButton>{unassigned&&<p className="mt-2 text-sm text-fleet-muted">{unassigned.map((p)=>`${p.parcel_id} (${p.unassigned_reason??'UNKNOWN'})`).join(', ')||'No unresolved parcels.'}</p>}</div>}</Card>}
     <div className="grid gap-5 xl:grid-cols-[1.6fr_0.9fr]">
       <Card title="Parcel Intake" action={<PrimaryButton onClick={openModal}><PackagePlus className="h-4 w-4" /> Add Parcel</PrimaryButton>}>
         <h3 className="mb-1 text-sm font-extrabold">Bulk import via CSV</h3><p className="mb-3 text-xs text-fleet-muted">Columns: {CSV_TEMPLATE_COLUMNS.join(', ')}</p>
@@ -113,7 +125,7 @@ export function ParcelConsolidationPage() {
         <div className="map-grid relative mb-4 h-48 overflow-hidden rounded-2xl border border-slate-300">{positions.map((pos,i)=><span className="absolute h-2.5 w-2.5 rounded-full ring-2 ring-white" key={parcels[i].parcel_id} style={{left:`${pos.left}%`,top:`${pos.top}%`,background:clusterColor(parcels[i].cluster_id)}} title={`${parcels[i].parcel_id} · ${clusterLabel(parcels[i].cluster_id)}`} />)}</div>
         <PrimaryButton disabled={!selectedDepot || !selectedDate || total===0} loading={training} onClick={runClustering}><Sparkles className="h-4 w-4" /> Run HDBSCAN Clustering</PrimaryButton><span className="ml-3 text-xs font-bold text-fleet-muted">{total} parcels in scope</span>
         {total===0 && <p className="mt-3 text-sm text-amber-700">No parcels match this depot and date.</p>}
-        <div className="mt-4 space-y-2">{clusterRows.map((r)=><div className="flex justify-between gap-3 text-sm" key={String(r.id)}><span>{clusterLabel(r.id)}</span><span><b>{r.count}</b> · {formatKg(clusterMetrics[String(r.id)]?.weight??0)} · {formatM3(clusterMetrics[String(r.id)]?.volume??0)}</span></div>)}</div>
+        <div className="mt-4 space-y-2">{clusterRows.map((r)=><div className="flex items-center justify-between gap-3 text-sm" key={String(r.id)}><span>{clusterLabel(r.id)}</span><span className="ml-auto"><b>{r.count}</b> · {formatKg(clusterMetrics[String(r.id)]?.weight??0)} · {formatM3(clusterMetrics[String(r.id)]?.volume??0)}</span>{r.id!==null&&r.id>=0&&<SecondaryButton onClick={()=>navigate('/load-optimization',{state:{clusterId:r.id,depotId:selectedDepot,deliveryDate:selectedDate}})}>Optimize</SecondaryButton>}</div>)}</div>
         {clustered>0 && <div className="mt-4"><PrimaryButton onClick={()=>navigate('/load-optimization',{state:{clusterIds:clusterRows.filter((r)=>r.id!==null&&r.id>=0).map((r)=>r.id),depotId:selectedDepot,deliveryDate:selectedDate,unassignedCount:noise}})} >Continue to Optimization <ArrowRight className="h-4 w-4" /></PrimaryButton></div>}
       </Card>
     </div>

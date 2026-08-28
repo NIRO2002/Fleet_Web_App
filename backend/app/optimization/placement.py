@@ -9,13 +9,11 @@ does not claim optimality; the spec is explicit that examiners should read
 it as such.
 
 Coordinate convention: `x` (load_position_x) is measured from the cargo
-doors (x=0) toward the front/deepest wall (x=cargo_length_cm). Parcels are
-processed in *load order* - the reverse of delivery order, so the
-last-delivered parcel is loaded first and ends up deepest (large x), and
-each subsequently-loaded parcel (which will be delivered earlier) lands
-nearer the doors (small x): unloading from the doors then naturally visits
-parcels in delivery order. `y` runs across the cargo width, `z` is stack
-height. `layer` counts stacked tiers from the floor (0-based).
+doors (x=0) toward the front/deepest wall (x=cargo_length_cm); `y` runs
+across cargo width and `z` is height. Packing order is only a geometry
+heuristic. Final `load_sequence` comes from hard insertion-accessibility and
+stack-support precedence, with reverse delivery order as its deterministic
+LIFO tie-breaker. `layer` counts stacked tiers from the floor (0-based).
 
 A vehicle with `has_tail_lift = False` carrying `two_person_lift` parcels
 should attract a cost/feasibility penalty upstream (assignment_problem.py) -
@@ -47,6 +45,7 @@ and non-stackable parcels may be placed on a compatible support, but close
 that column and can never support another parcel.
 """
 from dataclasses import dataclass, field
+import heapq
 from math import cbrt
 
 from app.core.config import settings
@@ -61,7 +60,7 @@ class Placement:
     y: float
     z: float
     layer: int
-    load_sequence: int  # 1-based; 1 = loaded first = deepest
+    load_sequence: int  # 1-based; assigned by physical precedence
     placed_length_cm: float
     placed_width_cm: float
     placed_height_cm: float
@@ -71,6 +70,9 @@ class Placement:
 class PlacementResult:
     placements: dict[str, Placement]
     load_order_exceptions: list[dict] = field(default_factory=list)
+    loading_precedence: list[dict] = field(default_factory=list)
+    support_by_parcel: dict[str, str] = field(default_factory=dict)
+    physical_load_order_valid: bool = True
 
 
 @dataclass
@@ -83,6 +85,14 @@ class _Column:
     layers: int = 0
     top_weight_kg: float = 0.0
     open_for_stacking: bool = True
+    top_parcel_id: str | None = None
+
+
+@dataclass
+class _PlacementCandidate:
+    column: _Column
+    length: float
+    width: float
 
 
 @dataclass
@@ -168,7 +178,7 @@ def _fits_bay_at_all(parcel, vehicle, footprint_cache: dict | None = None) -> bo
 def _try_stack(
     parcel, weight: float, height: float, columns: list[_Column], vehicle, stack_state: _VehicleStackState,
     footprint_cache: dict | None = None, *, enforce_weight_order: bool = True,
-) -> _Column | None:
+) -> _PlacementCandidate | None:
     """Best compatible open column for stacking.
 
     The incoming parcel must be no heavier than the current top within
@@ -197,7 +207,7 @@ def _try_stack(
             continue
         for l, w in _orientations(parcel, length, width):
             if l <= column.footprint_length and w <= column.footprint_width:
-                return column
+                return _PlacementCandidate(column=column, length=l, width=w)
     return None
 
 
@@ -247,7 +257,7 @@ def _placement_order(
     return stack_eligible + blocked
 
 
-def _place_in_open_rows(parcel, rows: list[_Row], vehicle, footprint_cache: dict | None = None) -> _Column | None:
+def _place_in_open_rows(parcel, rows: list[_Row], vehicle, footprint_cache: dict | None = None) -> _PlacementCandidate | None:
     """Tries every row opened so far - not just the most recent one - before
     the caller falls back to opening a new one, so leftover width in an
     earlier row is reused instead of abandoned."""
@@ -257,13 +267,13 @@ def _place_in_open_rows(parcel, rows: list[_Row], vehicle, footprint_cache: dict
             if l <= row.depth + 1e-9 and row.y_used + w <= vehicle.cargo_width_cm + 1e-9:
                 column = _Column(x_start=row.x_start, footprint_length=l, footprint_width=w, y_start=row.y_used)
                 row.y_used += w
-                return column
+                return _PlacementCandidate(column=column, length=l, width=w)
     return None
 
 
 def _open_new_row(
     parcel, rows: list[_Row], vehicle, next_x_start: float, footprint_cache: dict | None = None
-) -> tuple[_Column | None, float]:
+) -> tuple[_PlacementCandidate | None, float]:
     """Opens a fresh row one step nearer the doors. Only called once no
     already-open row has width to spare for this parcel (see
     `_place_in_open_rows`) - a new row is never opened merely because a
@@ -280,7 +290,7 @@ def _open_new_row(
             continue
         rows.append(_Row(x_start=new_x_start, depth=l, y_used=w))
         column = _Column(x_start=new_x_start, footprint_length=l, footprint_width=w, y_start=0.0)
-        return column, new_x_start
+        return _PlacementCandidate(column=column, length=l, width=w), new_x_start
     return None, next_x_start
 
 
@@ -314,6 +324,138 @@ def _lifo_exceptions(parcels_in_delivery_order: list, placements: dict[str, Plac
     return exceptions
 
 
+GEOMETRY_TOLERANCE_CM = 1e-7
+
+
+def _intervals_overlap(a0: float, a1: float, b0: float, b1: float, tolerance: float = GEOMETRY_TOLERANCE_CM) -> bool:
+    """Strict interval overlap; touching faces are not collisions/blockers."""
+    return min(a1, b1) - max(a0, b0) > tolerance
+
+
+def _aabb_overlap(a: Placement, b: Placement, tolerance: float = GEOMETRY_TOLERANCE_CM) -> bool:
+    return (
+        _intervals_overlap(a.x, a.x + a.placed_length_cm, b.x, b.x + b.placed_length_cm, tolerance)
+        and _intervals_overlap(a.y, a.y + a.placed_width_cm, b.y, b.y + b.placed_width_cm, tolerance)
+        and _intervals_overlap(a.z, a.z + a.placed_height_cm, b.z, b.z + b.placed_height_cm, tolerance)
+    )
+
+
+def _insertion_path_blocked(target: Placement, blocker: Placement, tolerance: float = GEOMETRY_TOLERANCE_CM) -> bool:
+    """Whether ``blocker`` intersects the target's straight +x swept corridor.
+
+    The parcel translates from the door at x=0 without rotating or changing
+    y/z. Only an already-loaded parcel whose door-side edge is before the
+    target and whose y and z envelopes overlap can obstruct that motion.
+    """
+    return (
+        blocker.x < target.x - tolerance
+        and _intervals_overlap(
+            target.y, target.y + target.placed_width_cm,
+            blocker.y, blocker.y + blocker.placed_width_cm, tolerance,
+        )
+        and _intervals_overlap(
+            target.z, target.z + target.placed_height_cm,
+            blocker.z, blocker.z + blocker.placed_height_cm, tolerance,
+        )
+    )
+
+
+def _is_reachable_from_door(target: Placement, loaded: list[Placement]) -> bool:
+    return not any(_insertion_path_blocked(target, blocker) for blocker in loaded)
+
+
+def _physical_precedence(
+    placements: dict[str, Placement], support_by_parcel: dict[str, str]
+) -> tuple[dict[str, set[str]], list[dict]]:
+    """Build hard accessibility and direct stack-support precedence edges."""
+    successors = {parcel_id: set() for parcel_id in placements}
+    diagnostics: list[dict] = []
+    values = list(placements.values())
+    for deep in values:
+        for near in values:
+            if deep.parcel_id == near.parcel_id or not _insertion_path_blocked(deep, near):
+                continue
+            if near.parcel_id not in successors[deep.parcel_id]:
+                successors[deep.parcel_id].add(near.parcel_id)
+                diagnostics.append({
+                    "before": deep.parcel_id, "after": near.parcel_id,
+                    "reason": "accessibility",
+                    "detail": f"{near.parcel_id} blocks {deep.parcel_id}'s rear-door insertion corridor.",
+                })
+    for top_id, base_id in support_by_parcel.items():
+        if top_id not in placements or base_id not in placements:
+            continue
+        if top_id not in successors[base_id]:
+            successors[base_id].add(top_id)
+            diagnostics.append({
+                "before": base_id, "after": top_id, "reason": "stack_support",
+                "detail": f"{base_id} must be loaded before supported parcel {top_id}.",
+            })
+    return successors, diagnostics
+
+
+def _assign_physical_load_sequence(
+    parcels_in_delivery_order: list, placements: dict[str, Placement], support_by_parcel: dict[str, str]
+) -> list[dict] | None:
+    successors, diagnostics = _physical_precedence(placements, support_by_parcel)
+    indegree = {parcel_id: 0 for parcel_id in placements}
+    for after_ids in successors.values():
+        for after_id in after_ids:
+            indegree[after_id] += 1
+    lifo_rank = {
+        parcel.parcel_id: rank
+        for rank, parcel in enumerate(reversed(parcels_in_delivery_order))
+    }
+    eligible = [(lifo_rank[parcel_id], parcel_id) for parcel_id, degree in indegree.items() if degree == 0]
+    heapq.heapify(eligible)
+    ordered: list[str] = []
+    while eligible:
+        _rank, parcel_id = heapq.heappop(eligible)
+        ordered.append(parcel_id)
+        for after_id in sorted(successors[parcel_id]):
+            indegree[after_id] -= 1
+            if indegree[after_id] == 0:
+                heapq.heappush(eligible, (lifo_rank[after_id], after_id))
+    if len(ordered) != len(placements):
+        return None
+    for sequence, parcel_id in enumerate(ordered, start=1):
+        placements[parcel_id].load_sequence = sequence
+    return diagnostics
+
+
+def validate_loading_sequence(parcels, vehicle, result: PlacementResult) -> bool:
+    """Validate bounds, collision, support, reachability, and 1..N sequence."""
+    placements = result.placements
+    if set(placements) != {p.parcel_id for p in parcels}:
+        return False
+    ordered = sorted(placements.values(), key=lambda p: p.load_sequence)
+    if [p.load_sequence for p in ordered] != list(range(1, len(ordered) + 1)):
+        return False
+    for placement in ordered:
+        if min(placement.x, placement.y, placement.z) < -GEOMETRY_TOLERANCE_CM:
+            return False
+        if placement.x + placement.placed_length_cm > vehicle.cargo_length_cm + GEOMETRY_TOLERANCE_CM:
+            return False
+        if placement.y + placement.placed_width_cm > vehicle.cargo_width_cm + GEOMETRY_TOLERANCE_CM:
+            return False
+        if placement.z + placement.placed_height_cm > vehicle.cargo_height_cm + GEOMETRY_TOLERANCE_CM:
+            return False
+    for index, placement in enumerate(ordered):
+        if any(_aabb_overlap(placement, other) for other in ordered[index + 1:]):
+            return False
+    loaded: list[Placement] = []
+    loaded_ids: set[str] = set()
+    for placement in ordered:
+        support_id = result.support_by_parcel.get(placement.parcel_id)
+        if support_id is not None and support_id not in loaded_ids:
+            return False
+        if not _is_reachable_from_door(placement, loaded):
+            return False
+        loaded.append(placement)
+        loaded_ids.add(placement.parcel_id)
+    return True
+
+
 def attempt_placement(
     parcels_in_delivery_order: list, vehicle, *, collect_exceptions: bool = True,
     enforce_weight_order: bool = settings.enforce_weight_order,
@@ -343,51 +485,77 @@ def attempt_placement(
             return None
 
     load_order = list(range(n - 1, -1, -1))  # last-delivered first
-    placement_order = _placement_order(parcels_in_delivery_order, load_order, vehicle, footprint_cache)
+    preferred_order = _placement_order(parcels_in_delivery_order, load_order, vehicle, footprint_cache)
 
-    columns: list[_Column] = []
-    rows: list[_Row] = []
-    next_x_start = vehicle.cargo_length_cm
-    placements: dict[str, Placement] = {}
-    stack_state = _VehicleStackState()
+    def pack(placement_order: list[int]) -> PlacementResult | None:
+        columns: list[_Column] = []
+        rows: list[_Row] = []
+        next_x_start = vehicle.cargo_length_cm
+        placements: dict[str, Placement] = {}
+        support_by_parcel: dict[str, str] = {}
+        stack_state = _VehicleStackState()
 
-    for load_sequence, idx in enumerate(placement_order, start=1):
-        parcel = parcels_in_delivery_order[idx]
-        weight = parcel.weight_kg
-        _length, _width, height = _get_footprint(parcel, footprint_cache)
+        for idx in placement_order:
+            parcel = parcels_in_delivery_order[idx]
+            weight = parcel.weight_kg
+            _length, _width, height = _get_footprint(parcel, footprint_cache)
 
-        column = _try_stack(
-            parcel, weight, height, columns, vehicle, stack_state, footprint_cache,
-            enforce_weight_order=enforce_weight_order,
+            candidate = _try_stack(
+                parcel, weight, height, columns, vehicle, stack_state, footprint_cache,
+                enforce_weight_order=enforce_weight_order,
+            )
+            if candidate is None:
+                candidate = _place_in_open_rows(parcel, rows, vehicle, footprint_cache)
+                if candidate is None:
+                    candidate, next_x_start = _open_new_row(
+                        parcel, rows, vehicle, next_x_start, footprint_cache
+                    )
+                if candidate is None:
+                    return None
+                columns.append(candidate.column)
+                z, layer = 0.0, 0
+            else:
+                z, layer = candidate.column.z_top, candidate.column.layers
+                if candidate.column.top_parcel_id is None:
+                    return None
+                support_by_parcel[parcel.parcel_id] = candidate.column.top_parcel_id
+                stack_state.cumulative_above_floor_kg += weight
+
+            column = candidate.column
+            column.z_top = z + height
+            column.layers = layer + 1
+            column.top_weight_kg = weight
+            column.top_parcel_id = parcel.parcel_id
+            stackable = parcel.stackable if parcel.stackable is not None else True
+            column.open_for_stacking = stackable and not bool(parcel.fragile)
+
+            placements[parcel.parcel_id] = Placement(
+                parcel_id=parcel.parcel_id, x=column.x_start, y=column.y_start, z=z, layer=layer,
+                load_sequence=0, placed_length_cm=candidate.length,
+                placed_width_cm=candidate.width, placed_height_cm=height,
+            )
+
+        precedence = _assign_physical_load_sequence(
+            parcels_in_delivery_order, placements, support_by_parcel
         )
-        if column is None:
-            column = _place_in_open_rows(parcel, rows, vehicle, footprint_cache)
-            if column is None:
-                column, next_x_start = _open_new_row(parcel, rows, vehicle, next_x_start, footprint_cache)
-            if column is None:
-                return None
-            columns.append(column)
-            z, layer = 0.0, 0
-        else:
-            z, layer = column.z_top, column.layers
-            # This parcel landed above layer 0 -- counts toward the
-            # vehicle-level cumulative stack-weight cap (A.5).
-            stack_state.cumulative_above_floor_kg += weight
-
-        column.z_top = z + height
-        column.layers = layer + 1
-        column.top_weight_kg = weight
-        # A fragile or non-stackable parcel must be the top of its column
-        # from here on; a normal parcel remains available as support.
-        stackable = parcel.stackable if parcel.stackable is not None else True
-        fragile = bool(parcel.fragile)
-        column.open_for_stacking = stackable and not fragile
-
-        placements[parcel.parcel_id] = Placement(
-            parcel_id=parcel.parcel_id, x=column.x_start, y=column.y_start, z=z, layer=layer,
-            load_sequence=load_sequence, placed_length_cm=column.footprint_length,
-            placed_width_cm=column.footprint_width, placed_height_cm=height,
+        if precedence is None:
+            return None
+        result = PlacementResult(
+            placements=placements,
+            loading_precedence=precedence if collect_exceptions else [],
+            support_by_parcel=support_by_parcel,
         )
+        if not validate_loading_sequence(parcels_in_delivery_order, vehicle, result):
+            return None
+        result.load_order_exceptions = (
+            _lifo_exceptions(parcels_in_delivery_order, placements) if collect_exceptions else []
+        )
+        return result
 
-    exceptions = _lifo_exceptions(parcels_in_delivery_order, placements) if collect_exceptions else []
-    return PlacementResult(placements=placements, load_order_exceptions=exceptions)
+    result = pack(preferred_order)
+    if result is None and preferred_order != load_order:
+        # Deterministic repair: retry packing in pure reverse-delivery order.
+        # If its completed precedence graph is also cyclic/unreachable, the
+        # assignment is physically infeasible and must not enter a plan.
+        result = pack(load_order)
+    return result

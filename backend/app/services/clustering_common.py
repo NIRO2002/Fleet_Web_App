@@ -49,6 +49,7 @@ class ClusteringConfig:
 
     noise_strategy: Literal["nearest_cluster", "singleton"] = "nearest_cluster"
     noise_max_assign_km: float = 0.75
+    noise_group_max_km: float = 0.75
 
     # Required only by the K-Means baseline's k-selection (SO5). Left
     # unset here deliberately - app/services/ must never contain a vehicle
@@ -257,38 +258,15 @@ def handle_noise(
     labels: np.ndarray,
     config: ClusteringConfig,
 ) -> np.ndarray:
-    """HDBSCAN's -1 label must never become a pseudo-cluster of unrelated
-    outliers. Reassigns each noise point to its nearest real-cluster
-    centroid if within `noise_max_assign_km`, else gives it its own
-    singleton cluster. Records the *original* label on `Parcel.is_noise` so
-    the noise rate can be reported honestly even after reassignment."""
+    """Record raw HDBSCAN noise without resolving it.
+
+    Catalog-aware rescue happens later in ``noise_rescue.py``. Keeping this
+    primitive catalog-free avoids duplicating feasibility or creating a
+    clustering_common <-> capacity_repair import cycle.
+    """
     labels = np.asarray(labels, dtype=int)
     noise_mask = labels == -1
     for parcel, was_noise in zip(parcels, noise_mask):
         parcel.is_noise = bool(was_noise)
 
-    if not noise_mask.any():
-        return labels
-
-    coords = project_to_metric(parcels, config.depot_lat, config.depot_lon)
-    real_ids = sorted(set(labels[~noise_mask].tolist()))
-    new_labels = labels.copy()
-    centroids = {lbl: coords[labels == lbl].mean(axis=0) for lbl in real_ids}
-
-    for i in np.where(noise_mask)[0]:
-        assigned = False
-        if config.noise_strategy == "nearest_cluster" and centroids:
-            best_lbl, best_dist = None, float("inf")
-            for lbl, centroid in centroids.items():
-                dist = float(np.linalg.norm(coords[i] - centroid))
-                if dist < best_dist:
-                    best_dist, best_lbl = dist, lbl
-            if best_dist <= config.noise_max_assign_km:
-                new_labels[i] = best_lbl
-                assigned = True
-        if not assigned:
-            # Keep genuinely unassignable points as noise. Capacity repair
-            # never converts HDBSCAN noise into an ordinary cluster.
-            new_labels[i] = -1
-
-    return new_labels
+    return labels.copy()

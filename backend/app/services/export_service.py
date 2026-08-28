@@ -47,12 +47,17 @@ async def load_plan_payload(plan_id):
                 "parcels": [_parcel_payload(a, parcels[a.parcel_id]) for a in v.assignments]}
                 for v in plan.vehicles]}
 
-async def load_plan_csv(plan_id):
+async def load_plan_csv(plan_id, virtual_vehicle_id=None):
     plan, parcels = await _rows(plan_id)
+    vehicles = plan.vehicles
+    if virtual_vehicle_id is not None:
+        vehicles = [v for v in vehicles if v.virtual_vehicle_id == virtual_vehicle_id]
+        if not vehicles:
+            raise HTTPException(status_code=404, detail="Virtual vehicle not found on this plan")
     output = io.StringIO(newline="")
     writer = csv.DictWriter(output, fieldnames=CSV_FIELDS)
     writer.writeheader()
-    for v in plan.vehicles:
+    for v in vehicles:
         for a in v.assignments:
             writer.writerow({"plan_id": plan_id, "virtual_vehicle_id": v.virtual_vehicle_id,
                              "vehicle_type": v.vehicle_type_code, **_parcel_payload(a, parcels[a.parcel_id])})

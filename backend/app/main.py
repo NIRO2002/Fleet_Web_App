@@ -1,7 +1,11 @@
+import asyncio
+import socket
+import uuid
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from app.core.config import settings
 from app.db.database import init_database
+from app.workers.optimization_worker import run_forever
 
 from app.api.v1 import (
     auth, vehicles, maintenance, predictions, demand, deliveries,
@@ -12,7 +16,17 @@ from app.api.v1 import (
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     client = await init_database()
+    worker_task = None
+    if settings.run_optimization_worker_inprocess:
+        worker_id = f"api-{socket.gethostname()}-{uuid.uuid4().hex[:8]}"
+        worker_task = asyncio.create_task(run_forever(worker_id))
     yield
+    if worker_task is not None:
+        worker_task.cancel()
+        try:
+            await worker_task
+        except asyncio.CancelledError:
+            pass
     client.close()
 
 app = FastAPI(
